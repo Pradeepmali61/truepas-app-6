@@ -7,7 +7,6 @@ import { Provider } from 'react-redux';
 
 import { SessionExpiredError, setOnSessionExpired } from '@/api/client';
 import { FieldLabelStyleProvider, ToastProvider } from '@/components/composite';
-import { DevFloatingButton } from '@/components/layout/DevFloatingButton';
 import { sessionEnded } from '@/features/auth/slice';
 import { clearAllProfileImages } from '@/services/profileImageStore';
 import { store } from '@/store';
@@ -65,7 +64,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style="dark" />
       {children}
     </>
   );
@@ -80,9 +79,10 @@ function RootStack() {
       screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
-        contentStyle: { backgroundColor: theme.colors.background },
+        // Premium showcase canvas
+
+        contentStyle: { backgroundColor: '#F6F8FA' },
       }}>
-      <Stack.Screen name="dev" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(onboarding)" />
       <Stack.Screen name="(tabs)" />
@@ -100,8 +100,6 @@ export default function RootLayout() {
               <ToastProvider>
                 <RootShell>
                   <RootStack />
-                  {/* Dev-only overlay — absent from preview/production builds */}
-                  <DevFloatingButton />
                 </RootShell>
               </ToastProvider>
             </FieldLabelStyleProvider>

@@ -1,153 +1,36 @@
-import { useRouter } from 'expo-router';
-import { Lock } from 'lucide-react-native';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { AtSign, Camera, Lock, MapPin, Phone, User } from 'lucide-react-native';
+import { View } from 'react-native';
 
-import { toApiError } from '@/api/errors';
-import { DatePicker, FormField, ScreenHeader, Section } from '@/components/composite';
-import { Button, Input, Textarea, Typography } from '@/components/ui';
-import { useUpdateProfile } from '@/features/auth/mutations';
-import { useKeyboardScrollPad } from '@/hooks/useKeyboardScrollPad';
-import { useToast } from '@/hooks/useToast';
-import { useAppSelector } from '@/store';
-import { useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { USER } from '@/premium/data';
+import { C } from '@/premium/theme';
+import { Avatar, Button, Field, Row, Screen, TextLink, TopBar, Txt } from '@/premium/ui';
 
-function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/**
- * Edit profile — PUT /user/me only accepts { fullName, dateOfBirth, address }.
- * Email & phone are server-locked (409 until re-verification), so they render
- * read-only with a lock affordance.
- */
-export default function EditProfileScreen() {
-  const router = useRouter();
-  const theme = useThemeTokens();
-  const insets = useSafeAreaInsets();
-  const kbd = useKeyboardScrollPad();
-  const toast = useToast();
-  const user = useAppSelector((state) => state.auth.user);
-  const updateProfile = useUpdateProfile();
-
-  const [fullName, setFullName] = useState(user?.fullName ?? '');
-  // Registration stores DOB as MM/DD/YYYY while the picker speaks ISO —
-  // normalize on the way in so an existing value renders instead of "Invalid Date".
-  const [dateOfBirth, setDateOfBirth] = useState(() => {
-    const raw = user?.dateOfBirth ?? '';
-    return /^\d{2}\/\d{2}\/\d{4}$/.test(raw)
-      ? `${raw.slice(6)}-${raw.slice(0, 2)}-${raw.slice(3, 5)}`
-      : raw;
-  });
-  const [address, setAddress] = useState(user?.address ?? '');
-
-  const handleSave = async () => {
-    try {
-      await updateProfile.mutateAsync({
-        fullName: fullName.trim(),
-        dateOfBirth: dateOfBirth || undefined,
-        address: address.trim() || undefined,
-      });
-      toast.show('success', 'Profile updated');
-      router.back();
-    } catch (err: any) {
-      const apiErr = toApiError(err);
-      // A 409 here means a locked field (email/phone) was rejected — the shared
-      // mapper's fallback ("account already exists") is written for register.
-      toast.show(
-        'error',
-        apiErr.code === 'CONFLICT'
-          ? 'Email and phone are locked to your account — contact support to change them.'
-          : apiErr.message || 'Could not save changes. Please try again.',
-      );
-    }
-  };
-
+/** Edit profile — verified fields are locked, contact fields editable. */
+export default function EditProfile() {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScreenHeader title="Edit profile" onBack={router.back} />
-        <ScrollView
-          {...kbd.scrollProps}
-          contentContainerStyle={{
-            padding: theme.spacing[4],
-            paddingTop: theme.spacing[4],
-            gap: theme.spacing[6],
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <Section>
-            <FormField label="Full name" required>
-              <Input
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="Your full name"
-                autoCapitalize="words"
-                maxLength={100}
-              />
-            </FormField>
-
-            <FormField label="Date of birth">
-              <DatePicker
-                value={dateOfBirth}
-                onValueChange={setDateOfBirth}
-                placeholder="Date of birth"
-                maxDate={todayIso()}
-                accessibilityLabel="Date of birth"
-              />
-            </FormField>
-
-            <FormField label="Address" helperText="Optional — used for venue pre-fill.">
-              <Textarea
-                value={address}
-                onChangeText={setAddress}
-                placeholder="1 Example Street, Orlando, FL"
-                maxLength={1000}
-                rows={2}
-              />
-            </FormField>
-
-            <FormField label="Email">
-              <Input
-                value={user?.email ?? ''}
-                editable={false}
-                iconRight={<Lock size={iconSize.sm} color={theme.colors.textMuted} />}
-              />
-            </FormField>
-
-            <FormField label="Phone">
-              <Input
-                value={user?.phone ?? ''}
-                editable={false}
-                iconRight={<Lock size={iconSize.sm} color={theme.colors.textMuted} />}
-              />
-            </FormField>
-          </Section>
-          <Typography variant="caption" color="muted">
-            Contact support to change your email or phone.
-          </Typography>
-        </ScrollView>
-
-        <View
-          {...kbd.footerProps}
-          style={{
-            paddingHorizontal: theme.spacing[4],
-            paddingTop: theme.spacing[6],
-            paddingBottom: theme.spacing[4] + insets.bottom,
-            gap: theme.spacing[2],
-          }}>
-          <Button
-            label="Save changes"
-            size="lg"
-            loading={updateProfile.isPending}
-            disabled={!fullName.trim()}
-            onPress={() => void handleSave()}
-          />
+    <Screen header={<TopBar title="Edit profile" right={<TextLink label="Save" />} />} contentStyle={{ paddingTop: 8 }} footer={<Button label="Save changes" />}>
+      <View style={{ alignItems: 'center', gap: 10 }}>
+        <View>
+          <Avatar src="user" size={100} ring />
+          <View style={{ position: 'absolute', right: 0, bottom: 2, width: 34, height: 34, borderRadius: 17, backgroundColor: C.ink, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: C.canvas }}>
+            <Camera size={15} color={C.white} />
+          </View>
         </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        <TextLink label="Change photo" />
+      </View>
+      <View style={{ gap: 18 }}>
+        <Field label="Full name" icon={User} value={USER.name} right={<Lock size={16} color={C.ink4} />} hint="Verified from your passport — can't be edited." />
+        <Field label="Email" icon={AtSign} value={USER.email} focused />
+        <Field label="Mobile" icon={Phone} value="+91 98765 43210" />
+        <Field label="City" icon={MapPin} value={USER.city} />
+      </View>
+      <Row gap={8} style={{ justifyContent: 'center' }}>
+        <Lock size={13} color={C.ink4} />
+        <Txt v="small" color={C.ink4}>
+          Changes to contact details need a quick OTP
+        </Txt>
+      </Row>
+    </Screen>
   );
 }

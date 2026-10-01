@@ -1,143 +1,52 @@
 /** @jsxImportSource react */
-/**
- * FamilyScreen — pushed route (Home → See all). FamilyCard per member;
- * empty state pushes the add-member flow.
- * Ported 1:1 from UI-design-repo `src/app/screens/main/FamilyScreen.tsx`.
- */
-import { useRouter } from 'expo-router';
-import { Plus, UserPlus, Users } from 'lucide-react-native';
-import { Pressable, RefreshControl, ScrollView, Text } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ShieldCheck, UserPlus } from 'lucide-react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { AsyncBlock, ScreenHeader, Section, SkeletonRows } from '@/components/composite';
-import { EmptyState } from '@/components/composite/states';
-import { FamilyCard } from '@/components/truepas';
-import { FadeUp, NeuBox, SoftIconButton } from '@/components/ui';
-import { Button } from '@/components/ui/Button';
-import { useFamily } from '@/features/family/hooks';
-import { makeStyles, useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { FAMILY } from '@/premium/data';
+import { IMG } from '@/premium/images';
+import { C, F, R, SH } from '@/premium/theme';
+import { Badge, Button, Card, go, Heading, Press, Row, Screen, Tile, TopBar, Txt } from '@/premium/ui';
 
-export default function FamilyScreen() {
-    const styles = useStyles();
-    const t = useThemeTokens();
-    const insets = useSafeAreaInsets();
-    const router = useRouter();
-    const members = useFamily();
+/** Family — portrait cards (Disney "party" feel), one tap to each member. */
+export default function Family() {
+  return (
+    <Screen header={<TopBar title="Family" />} contentStyle={{ paddingTop: 4 }} footer={<Button label="Add a family member" icon={UserPlus} onPress={go('/family/add')} />}>
+      <Heading title="Travel" accent="together." sub="Everyone in your circle checks in with their own face — kids included, under your supervision." />
 
-    return (
-        <SafeAreaView edges={['top']} style={styles.screen}>
-            <ScreenHeader
-                title="Family"
-                onBack={() => router.back()}
-                actions={
-                    <SoftIconButton
-                        icon={Plus}
-                        size={44}
-                        accessibilityLabel="Add family member"
-                        onPress={() => router.push('/family/add' as never)}
-                    />
-                }
-            />
-            <ScrollView
-                style={styles.flex}
-                contentContainerStyle={[styles.body, { paddingBottom: t.spacing[8] + insets.bottom }]}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={members.isRefetching}
-                        onRefresh={() => void members.refetch()}
-                        tintColor={t.colors.actionPrimary}
-                    />
-                }>
-                <AsyncBlock
-                    state={{
-                        data: members.data,
-                        isPending: members.isPending,
-                        isError: members.isError,
-                        error: members.error,
-                        refetch: () => void members.refetch(),
-                    }}
-                    skeleton={<SkeletonRows />}>
-                    {(list) =>
-                        list.length === 0 ? (
-                            <EmptyState
-                                title="No family members"
-                                description="Add family to check them in with you at venues."
-                                icon={<Users size={iconSize.lg} color={t.colors.textMuted} />}
-                                action={
-                                    <Button
-                                        iconLeft={<UserPlus size={iconSize.sm} color={t.colors.onActionPrimary} />}
-                                        onPress={() => router.push('/family/add' as never)}>
-                                        Add your first member
-                                    </Button>
-                                }
-                            />
-                        ) : (
-                            <Section>
-                                {list.map((m, i) => (
-                                    <FadeUp key={m.id} delay={Math.min(i, 8) * 60}>
-                                        <Pressable
-                                            accessibilityRole="button"
-                                            accessibilityLabel={m.name}
-                                            onPress={() => router.push(`/family/${m.id}` as never)}
-                                            style={({ pressed }) => pressed && styles.pressed}>
-                                            <FamilyCard
-                                                member={{
-                                                    name: m.name,
-                                                    relationship: m.relationship,
-                                                    age: m.age,
-                                                    ageBand: m.ageBand,
-                                                    verification: m.verification,
-                                                    faceEnrolled: m.faceEnrolled,
-                                                    faceCaptureMode: m.faceCaptureMode,
-                                                    allowedCameras: m.allowedCameras,
-                                                }}
-                                            />
-                                        </Pressable>
-                                    </FadeUp>
-                                ))}
-                                <FadeUp delay={Math.min(list.length, 8) * 60}>
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Add family member"
-                                        onPress={() => router.push('/family/add' as never)}
-                                        style={({ pressed }) => pressed && styles.pressed}>
-                                        <NeuBox variant="raised" depth={3} style={styles.addRow}>
-                                            <UserPlus size={iconSize.md} color={t.colors.actionPrimary} />
-                                            <Text style={styles.addRowText}>Add family member</Text>
-                                        </NeuBox>
-                                    </Pressable>
-                                </FadeUp>
-                            </Section>
-                        )
-                    }
-                </AsyncBlock>
-            </ScrollView>
-        </SafeAreaView>
-    );
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        {FAMILY.map((m) => (
+          <Press key={m.id} onPress={go(`/family/${m.id}`)} style={[{ width: '48%', flexGrow: 1, borderRadius: R.xl }, SH.md]}>
+            <View style={{ height: 228, borderRadius: R.xl, overflow: 'hidden', padding: 14, justifyContent: 'space-between' }}>
+              <Image source={IMG[m.image]} style={StyleSheet.absoluteFill} contentFit="cover" />
+              <LinearGradient colors={['rgba(1,27,39,0)', 'rgba(1,27,39,0.85)']} locations={[0.45, 1]} style={StyleSheet.absoluteFill} />
+              <View style={{ alignSelf: 'flex-end' }}>
+                {m.status === 'verified' ? <Badge label="Verified" tone="green" dot /> : <Badge label="Face pending" tone="amber" dot />}
+              </View>
+              <View>
+                <Text style={{ fontFamily: F.bold, fontSize: 17, color: C.white }}>{m.name.split(' ')[0]}</Text>
+                <Text style={{ fontFamily: F.medium, fontSize: 12.5, color: 'rgba(255,255,255,0.72)' }}>
+                  {m.relation} · {m.age} yrs
+                </Text>
+              </View>
+            </View>
+          </Press>
+        ))}
+      </View>
+
+      <Card style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+        <Tile icon={ShieldCheck} tone="sky" size={46} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt v="bodyStrong">Guardian controls on</Txt>
+          <Txt v="small">Kiara (7) can only check in alongside an adult.</Txt>
+        </View>
+      </Card>
+      <Row gap={6} style={{ justifyContent: 'center' }}>
+        <Txt v="small" color={C.ink4}>
+          Up to 8 members per family plan
+        </Txt>
+      </Row>
+    </Screen>
+  );
 }
-
-const useStyles = makeStyles((t) => ({
-    screen: { flex: 1, backgroundColor: t.colors.background },
-    flex: { flex: 1 },
-    body: {
-        paddingHorizontal: t.spacing[4],
-        paddingTop: t.spacing[4],
-        gap: t.spacing[6],
-        flexGrow: 1,
-    },
-    pressed: { opacity: t.opacity.pressed },
-    addRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: t.spacing[2],
-        paddingVertical: t.spacing[3],
-    },
-    addRowText: {
-        fontSize: t.fontSize.base,
-        fontWeight: t.fontWeight.medium,
-        color: t.colors.actionPrimary,
-    },
-}));

@@ -1,74 +1,26 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { TriangleAlert } from 'lucide-react-native';
-import { View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { Glasses, RotateCcw, ScanFace, Sun, UserRound } from 'lucide-react-native';
 
-import { Alert, ScreenHeader } from '@/components/composite';
-import { CoreButton, PopIn, RowIcon, Typography } from '@/components/ui';
-import { useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { Button, go, Group, ListRow } from '@/premium/ui';
+import { ResultView } from '@/premium/views';
 
-/** Update face — retry error. Never marks success on failure (PRD).
- *  `retry` param (when set) routes Retry back to the flow that failed —
- *  registration passes '/(onboarding)/face-scan', the default is the
- *  face-update camera. */
-export default function FaceUpdateErrorScreen() {
-  const theme = useThemeTokens();
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const { message, retry } = useLocalSearchParams<{ message?: string; retry?: string }>();
-
+/** Couldn't match — friendly, specific tips. */
+export default function FaceError() {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Face Update" />
-      <View
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: theme.spacing[5],
-          gap: theme.spacing[4],
-        }}>
-        <PopIn>
-          <RowIcon
-            tone="error"
-            icon={<TriangleAlert size={iconSize.xl} color={theme.colors.onErrorSubtle} />}
-          />
-        </PopIn>
-        <View style={{ alignItems: 'center', gap: theme.spacing[2] }}>
-          <Typography variant="h3" center>
-            Registration Failed
-          </Typography>
-          <Typography variant="body" color="secondary" center style={{ maxWidth: 280 }}>
-            {message ?? "We couldn't complete your face update. Please try again later."}
-          </Typography>
-        </View>
-        <Alert variant="error" style={{ alignSelf: 'stretch' }}>
-          Your face has NOT been marked as updated. Please retry.
-        </Alert>
-      </View>
-      <View
-        style={{
-          paddingHorizontal: theme.spacing[4],
-          paddingTop: theme.spacing[4],
-          paddingBottom: theme.spacing[4] + insets.bottom,
-          gap: theme.spacing[2],
-        }}>
-        <CoreButton
-          fullWidth
-          size="lg"
-          accessibilityLabel="Retry now"
-          onPress={() => router.replace((retry as any) ?? '/face-update/camera')}>
-          Retry Now
-        </CoreButton>
-        <CoreButton
-          fullWidth
-          variant="ghost"
-          accessibilityLabel="Try again later"
-          onPress={() => router.dismissTo('/(tabs)')}>
-          Try Again Later
-        </CoreButton>
-      </View>
-    </SafeAreaView>
+    <ResultView
+      icon={ScanFace}
+      tone="amber"
+      over="Let's try that again"
+      title="We couldn't"
+      accent="see you."
+      sub="Nothing's wrong with your account — the camera just needs a clearer view."
+      primary={<Button label="Try again" icon={RotateCcw} onPress={go('/face-update/camera')} />}
+      secondary={<Button label="Use PIN instead" tone="ghost" onPress={go('/face-update/pin')} />}>
+      <Group title="Quick tips">
+        <ListRow icon={Sun} tone="amber" title="Find even light" sub="Avoid bright light behind you" chevron={false} />
+        <ListRow icon={Glasses} tone="amber" title="Remove sunglasses or mask" chevron={false} />
+        <ListRow icon={UserRound} tone="amber" title="Hold the phone at eye level" chevron={false} />
+      </Group>
+    </ResultView>
   );
 }

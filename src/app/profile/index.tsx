@@ -1,83 +1,53 @@
-/**
- * ProfileScreen — profile tab. Account card plus the shared ProfileMenu
- * (settings, sign out).
- * Ported 1:1 from UI-design-repo `src/app/screens/main/ProfileScreen.tsx`.
- */
-import { useRouter } from 'expo-router';
-import { Mail, Phone } from 'lucide-react-native';
-import { ScrollView, Text, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { Bell, CircleHelp, FileText, Info, LogOut, QrCode, Settings, ShieldCheck, Users } from 'lucide-react-native';
+import { Text, View } from 'react-native';
 
-import { LoadingState, ProfileMenu, ScreenHeader } from '@/components/composite';
-import { Avatar, NeuBox, StatusChip, Typography } from '@/components/ui';
-import { useProfilePicture } from '@/features/profile/hooks';
-import { useAppSelector } from '@/store';
-import { makeStyles, useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { USER } from '@/premium/data';
+import { C, F } from '@/premium/theme';
+import { Avatar, Badge, Button, Card, go, Group, IconCircle, ListRow, Row, Screen, TopBar, Txt } from '@/premium/ui';
 
-export default function ProfileScreen() {
-  const styles = useStyles();
-  const theme = useThemeTokens();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const user = useAppSelector((state) => state.auth.user);
-  const { url: profilePictureUrl } = useProfilePicture();
-
-  if (!user) {
-    return (
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <ScreenHeader title="Profile" />
-        <LoadingState fullPage />
-      </SafeAreaView>
-    );
-  }
-
+/** Profile — person first, then everything else in calm groups. */
+export default function Profile() {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Profile" onBack={() => router.back()} />
-      <ScrollView
-        contentContainerStyle={{
-          padding: theme.spacing[4],
-          gap: theme.spacing[6],
-          paddingBottom: theme.spacing[8] + insets.bottom,
-        }}
-        showsVerticalScrollIndicator={false}>
-        {/* ---------- account card ---------- */}
-        <NeuBox variant="raised" style={styles.card}>
-          <View style={styles.headRow}>
-            <Avatar name={user.fullName} uri={profilePictureUrl ?? undefined} size="lg" />
-            <View style={styles.flex}>
-              <Typography variant="h4" numberOfLines={1}>
-                {user.fullName}
-              </Typography>
-              <StatusChip status={user.faceEnrolled ? 'verified' : 'missing'} />
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <Mail size={iconSize.sm} color={theme.colors.textMuted} />
-            <Text style={styles.info} numberOfLines={1}>
-              {user.email}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Phone size={iconSize.sm} color={theme.colors.textMuted} />
-            <Text style={styles.info} numberOfLines={1}>
-              {user.phone}
-            </Text>
-          </View>
-        </NeuBox>
+    <Screen header={<TopBar title="Profile" right={<IconCircle icon={QrCode} label="Show pass" onPress={go('/identity')} />} />} contentStyle={{ paddingTop: 4 }}>
+      <View style={{ alignItems: 'center', gap: 12 }}>
+        <Avatar src="user" size={108} ring status="verified" />
+        <View style={{ alignItems: 'center', gap: 4 }}>
+          <Text style={{ fontFamily: F.extrabold, fontSize: 28, letterSpacing: -0.8, color: C.ink }}>{USER.name}</Text>
+          <Txt v="small">{USER.email}</Txt>
+        </View>
+        <Row gap={8}>
+          <Badge label="Identity verified" tone="green" icon={ShieldCheck} />
+          <Badge label={USER.id} tone="neutral" />
+        </Row>
+        <Button label="Edit profile" tone="white" size="sm" full={false} onPress={go('/profile/edit')} />
+      </View>
 
-        {/* ---------- menu ---------- */}
-        <ProfileMenu />
-      </ScrollView>
-    </SafeAreaView>
+      <Card pad={18} style={{ flexDirection: 'row' }}>
+        {[
+          { v: '24', k: 'Check-ins' },
+          { v: '4', k: 'Family' },
+          { v: '3', k: 'Documents' },
+        ].map((s, i) => (
+          <View key={s.k} style={{ flex: 1, alignItems: 'center', gap: 2, borderLeftWidth: i ? 1 : 0, borderLeftColor: C.lineSoft }}>
+            <Text style={{ fontFamily: F.extrabold, fontSize: 24, letterSpacing: -0.6, color: C.ink }}>{s.v}</Text>
+            <Txt v="small">{s.k}</Txt>
+          </View>
+        ))}
+      </Card>
+
+      <Group title="Account">
+        <ListRow icon={Users} tone="sky" title="Family" sub="4 members" onPress={go('/family')} />
+        <ListRow icon={ShieldCheck} tone="sky" title="Security" sub="Face, PIN & password" onPress={go('/security')} />
+        <ListRow icon={Bell} tone="sky" title="Notifications" onPress={go('/notification')} />
+        <ListRow icon={Settings} tone="sky" title="Settings" onPress={go('/settings')} />
+      </Group>
+      <Group title="Support">
+        <ListRow icon={CircleHelp} title="Help centre" onPress={go('/help')} />
+        <ListRow icon={FileText} title="Privacy & data" onPress={go('/legal/data-privacy')} />
+        <ListRow icon={Info} title="About Truepas" value="v3.0" onPress={go('/about')} />
+      </Group>
+      <ListRow icon={LogOut} danger title="Sign out" chevron={false} onPress={go('/(auth)/welcome')} />
+    </Screen>
   );
 }
-
-const useStyles = makeStyles((t) => ({
-  flex: { flex: 1 },
-  card: { padding: t.spacing[4], gap: t.spacing[3] },
-  headRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing[3] },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing[2] },
-  info: { flex: 1, fontSize: t.fontSize.base, color: t.colors.textSecondary },
-}));

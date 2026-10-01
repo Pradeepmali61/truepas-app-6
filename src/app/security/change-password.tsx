@@ -1,158 +1,48 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import { Lock } from 'lucide-react-native';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { Check, Eye, Lock } from 'lucide-react-native';
+import { View } from 'react-native';
 
-import { toApiError } from '@/api/errors';
-import { FormField, Alert as InlineAlert, ScreenHeader, Section } from '@/components/composite';
-import { Button, Input } from '@/components/ui';
-import { useChangePassword } from '@/features/auth/mutations';
-import { newPasswordSchema } from '@/features/auth/schemas';
-import { sessionEnded } from '@/features/auth/slice';
-import { useKeyboardScrollPad } from '@/hooks/useKeyboardScrollPad';
-import { useToast } from '@/hooks/useToast';
-import { useAppDispatch } from '@/store';
-import { useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { C } from '@/premium/theme';
+import { Button, Card, Field, Heading, Row, Screen, TopBar, Txt } from '@/premium/ui';
 
-/**
- * Change password — POST /auth/change-password { currentPassword, newPassword }.
- * Success revokes refresh sessions and the current access token, so local
- * state is cleared and the user is returned to login.
- * Ported 1:1 from UI-design-repo screens/settings/ChangePasswordScreen.tsx —
- * keeps our stricter newPasswordSchema as the field-level error.
- */
-export default function ChangePasswordScreen() {
-  const router = useRouter();
-  const dispatch = useAppDispatch();
-  const queryClient = useQueryClient();
-  const theme = useThemeTokens();
-  const insets = useSafeAreaInsets();
-  const kbd = useKeyboardScrollPad();
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const changePassword = useChangePassword();
-  const toast = useToast();
-
-  const passwordCheck = newPasswordSchema.safeParse(newPassword);
-  // BUG008 — product rule: the new password must differ from the current one.
-  const sameAsCurrent = newPassword.length > 0 && newPassword === currentPassword;
-  const nextError = sameAsCurrent
-    ? 'New password must be different from your current password.'
-    : newPassword.length > 0 && !passwordCheck.success
-      ? passwordCheck.error.issues[0].message
-      : undefined;
-  const confirmError =
-    confirmPassword.length > 0 && confirmPassword !== newPassword
-      ? "Passwords don't match."
-      : undefined;
-  const canSubmit =
-    currentPassword.length > 0 &&
-    passwordCheck.success &&
-    !sameAsCurrent &&
-    confirmPassword === newPassword;
-
-  const handleChange = async () => {
-    if (!canSubmit || changePassword.isPending) return;
-    try {
-      await changePassword.mutateAsync({ currentPassword, newPassword });
-      // Contract: success revokes refresh sessions and the current access
-      // token — clear local state and send the user back to login.
-      queryClient.clear();
-      dispatch(sessionEnded());
-      toast.show('success', 'Password updated — sign in again.');
-      router.replace('/(auth)/login');
-    } catch (err: any) {
-      toast.show('error', toApiError(err).message || 'Could not update password. Please try again.');
-    }
-  };
-
-  const lockIcon = <Lock size={iconSize.md} color={theme.colors.actionPrimary} />;
-
+/** Change password — with live strength checklist. */
+export default function ChangePassword() {
+  const rules = [
+    { t: 'At least 10 characters', ok: true },
+    { t: 'One uppercase letter', ok: true },
+    { t: 'One number', ok: true },
+    { t: 'One symbol', ok: false },
+  ];
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScreenHeader title="Change password" onBack={router.back} />
-        <ScrollView
-          {...kbd.scrollProps}
-          contentContainerStyle={{
-            padding: theme.spacing[4],
-            paddingTop: theme.spacing[4],
-            gap: theme.spacing[6],
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <Section>
-            <FormField label="Current password" required>
-              <Input
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
-                placeholder="Current password"
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                iconLeft={lockIcon}
-              />
-            </FormField>
-
-            <FormField
-              label="New password"
-              required
-              error={nextError}
-              helperText={
-                nextError == null
-                  ? '8+ characters with uppercase, lowercase, number & symbol.'
-                  : undefined
-              }>
-              <Input
-                value={newPassword}
-                onChangeText={setNewPassword}
-                placeholder="New password"
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                iconLeft={lockIcon}
-              />
-            </FormField>
-
-            <FormField label="Confirm new password" required error={confirmError}>
-              <Input
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Repeat password"
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                iconLeft={lockIcon}
-              />
-            </FormField>
-          </Section>
-
-          <InlineAlert variant="warning" title="You'll be signed out">
-            All sessions end when the password changes. Sign in again afterwards.
-          </InlineAlert>
-        </ScrollView>
-
-        <View
-          {...kbd.footerProps}
-          style={{
-            paddingHorizontal: theme.spacing[4],
-            paddingTop: theme.spacing[6],
-            paddingBottom: theme.spacing[4] + insets.bottom,
-            gap: theme.spacing[2],
-          }}>
-          <Button
-            label="Update password"
-            size="lg"
-            loading={changePassword.isPending}
-            disabled={!canSubmit}
-            onPress={() => void handleChange()}
-          />
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <Screen header={<TopBar title="Password" />} contentStyle={{ paddingTop: 8 }} footer={<Button label="Update password" />}>
+      <Heading title="A new" accent="password." sub="Choose something you don't use anywhere else." />
+      <View style={{ gap: 18 }}>
+        <Field label="Current password" icon={Lock} value="oldpassword1" secure />
+        <Field label="New password" icon={Lock} value="Truepas2026" secure focused right={<Eye size={19} color={C.ink3} />} />
+      </View>
+      <Card style={{ gap: 12 }}>
+        <Row between>
+          <Txt v="smallStrong">Strength</Txt>
+          <Txt v="smallStrong" color={C.green}>
+            Strong
+          </Txt>
+        </Row>
+        <Row gap={6}>
+          {[0, 1, 2, 3].map((i) => (
+            <View key={i} style={{ flex: 1, height: 5, borderRadius: 3, backgroundColor: i < 3 ? C.green : C.line }} />
+          ))}
+        </Row>
+        {rules.map((r) => (
+          <Row key={r.t} gap={10}>
+            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: r.ok ? C.greenWash : C.sunken, alignItems: 'center', justifyContent: 'center' }}>
+              {r.ok && <Check size={12} color={C.greenInk} strokeWidth={3} />}
+            </View>
+            <Txt v="body" color={r.ok ? C.ink : C.ink3}>
+              {r.t}
+            </Txt>
+          </Row>
+        ))}
+      </Card>
+    </Screen>
   );
 }

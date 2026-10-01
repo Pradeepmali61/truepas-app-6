@@ -1,26 +1,13 @@
-import { Redirect, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 
-import { useAppSelector } from '@/store';
-import { useThemeTokens } from '@/theme';
-
-/** Mandatory face-enrollment gate — no skip path (PRD requirement). */
-export default function OnboardingLayout() {
-  const { status, faceEnrolled } = useAppSelector((state) => state.auth);
-  const t = useThemeTokens();
-
-  if (status !== 'authenticated') {
-    return <Redirect href="/(auth)/welcome" />;
-  }
-  if (faceEnrolled) {
-    return <Redirect href="/(tabs)" />;
-  }
-
+/** Showcase build — no auth gating, every screen is reachable. */
+export default function GroupLayout() {
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        gestureEnabled: false,
-        contentStyle: { backgroundColor: t.colors.background },
+        animation: 'slide_from_right',
+        contentStyle: { backgroundColor: '#F6F8FA' },
       }}
     />
   );

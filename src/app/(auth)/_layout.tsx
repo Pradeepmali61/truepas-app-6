@@ -1,22 +1,13 @@
-import { Redirect, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 
-import { useAppSelector } from '@/store';
-import { useThemeTokens } from '@/theme';
-
-export default function AuthLayout() {
-  const { status, faceEnrolled } = useAppSelector((state) => state.auth);
-  const t = useThemeTokens();
-
-  if (status === 'authenticated') {
-    return <Redirect href={faceEnrolled ? '/(tabs)' : '/(onboarding)/consent'} />;
-  }
-
+/** Showcase build — no auth gating, every screen is reachable. */
+export default function GroupLayout() {
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: 'fade',
-        contentStyle: { backgroundColor: t.colors.background },
+        animation: 'slide_from_right',
+        contentStyle: { backgroundColor: '#F6F8FA' },
       }}
     />
   );

@@ -1,159 +1,101 @@
-/**
- * Welcome — brand hero + the two entry points (register / login).
- * Concentric soft-UI badge with a breathing pulse, staggered entrances.
- * No back button: this is the root of the signed-out stack.
- * Ported 1:1 from UI-design-repo src/app/screens/auth/WelcomeScreen.tsx.
- */
-import { useRouter } from 'expo-router';
-import { IdCard, ScanFace, ShieldCheck, Users, type LucideIcon } from 'lucide-react-native';
-import { ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ArrowRight, BedDouble } from 'lucide-react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { TruepasIcon } from '@/components/app/TruepasIcon';
-import { CoreButton, FadeUp, Link, NeuBox, NeuWell, PopIn, Pulse, ScanFrame, ScanLine, Typography } from '@/components/ui';
-import { alpha, makeStyles, useThemeTokens } from '@/theme';
+import { Wordmark } from '@/premium/blocks';
+import { IMG } from '@/premium/images';
+import { C, F, R, SH } from '@/premium/theme';
+import { Button, go, Row, Serif, VerifiedTick } from '@/premium/ui';
 
-const FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
-  { icon: ScanFace, title: 'Face check-in', body: 'A glance is all it takes to get in.' },
-  { icon: Users, title: 'Family profiles', body: 'Add your kids and manage entry together.' },
-  { icon: IdCard, title: 'Verified documents', body: 'Your IDs, checked once and ready anywhere.' },
-];
-
-export default function WelcomeScreen() {
-  const styles = useStyles();
-  const t = useThemeTokens();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-
+/** Cinematic welcome — full-bleed travel photography with a live verification moment. */
+export default function Welcome() {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: t.colors.background }}>
-      <ScrollView
-        contentContainerStyle={{
-          padding: t.spacing[4],
-          paddingTop: t.spacing[4],
-          gap: t.spacing[6],
-          flexGrow: 1,
-        }}
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <ScanFrame padding={12} style={styles.heroFrame}>
-            <PopIn ms={420}>
-              <NeuWell radius={t.radii.full} style={styles.halo}>
-                <Pulse to={1.05} ms={1400}>
-                  <NeuBox variant="raised" radius={t.radii.full} depth={8} style={styles.ring}>
-                    <View style={styles.disc}>
-                      <ScanLine color={alpha(t.colors.onActionPrimary, 0.8)} />
-                      <TruepasIcon size={t.iconSize.lg} color={t.colors.onActionPrimary} />
-                    </View>
-                  </NeuBox>
-                </Pulse>
-              </NeuWell>
-            </PopIn>
-          </ScanFrame>
-          <FadeUp delay={140}>
-            <Typography variant="display" center>
-              Truepas
-            </Typography>
-          </FadeUp>
-          <FadeUp delay={220}>
-            <Typography variant="body-lg" color="secondary" center>
-              Your face is your ticket — contactless check-in for you and your family.
-            </Typography>
-          </FadeUp>
+    <View style={{ flex: 1, backgroundColor: C.navyNight }}>
+      <Image source={IMG.hotelNight} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <LinearGradient
+        colors={['rgba(1,27,39,0.6)', 'rgba(1,27,39,0)', 'rgba(1,27,39,0.3)', 'rgba(1,27,39,0.95)', C.navyNight]}
+        locations={[0, 0.2, 0.4, 0.66, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <SafeAreaView style={{ flex: 1, paddingHorizontal: 24 }}>
+        <Row between style={{ paddingTop: 10 }}>
+          <Pressable onLongPress={go('/showcase')} delayLongPress={600}>
+            <Wordmark light size={22} />
+          </Pressable>
+          <Text style={{ fontFamily: F.semibold, fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>EN</Text>
+        </Row>
+
+        {/* floating live-verification moment */}
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'flex-end', paddingTop: 30 }}>
+          <View style={[styles.glassCard, SH.lg]}>
+            <View style={{ padding: 2, borderRadius: 18, borderWidth: 2, borderColor: C.sky }}>
+              <Image source={IMG.user} style={{ width: 46, height: 46, borderRadius: 14 }} contentFit="cover" />
+            </View>
+            <View style={{ gap: 2 }}>
+              <Row gap={6}>
+                <Text style={styles.glassTitle}>Face verified</Text>
+                <VerifiedTick size={16} />
+              </Row>
+              <Text style={styles.glassSub}>Matched in 0.8 seconds</Text>
+            </View>
+          </View>
+          <View style={[styles.glassCard, { marginTop: 12, marginRight: 38 }, SH.lg]}>
+            <View style={styles.glassIcon}>
+              <BedDouble size={22} color={C.white} />
+            </View>
+            <View style={{ gap: 2 }}>
+              <Text style={styles.glassTitle}>Checked in · Room 1208</Text>
+              <Text style={styles.glassSub}>Marine Bay Grand, Mumbai</Text>
+            </View>
+          </View>
         </View>
 
-        <FadeUp delay={330}>
-          <NeuBox variant="raised" style={styles.featureCard}>
-            {FEATURES.map((f, i) => (
-              <View key={f.title} style={[styles.featureRow, i > 0 && styles.featureDivider]}>
-                <View style={styles.featureIcon}>
-                  <f.icon size={t.iconSize.md} color={t.colors.actionPrimary} />
-                </View>
-                <View style={styles.featureText}>
-                  <Typography variant="body" style={styles.featureTitle}>
-                    {f.title}
-                  </Typography>
-                  <Typography variant="body-sm" color="muted">
-                    {f.body}
-                  </Typography>
-                </View>
-              </View>
-            ))}
-          </NeuBox>
-        </FadeUp>
-      </ScrollView>
-
-      <View
-        style={{
-          paddingHorizontal: t.spacing[4],
-          paddingTop: t.spacing[4],
-          paddingBottom: t.spacing[4] + insets.bottom,
-          gap: t.spacing[2],
-        }}>
-        <CoreButton
-          fullWidth
-          size="lg"
-          iconLeft={<ShieldCheck size={t.iconSize.md} color={t.colors.onActionPrimary} />}
-          onPress={() => router.push('/(auth)/register')}>
-          Create account
-        </CoreButton>
-        <Typography variant="body-sm" color="muted" center>
-          Already have an account? <Link onPress={() => router.push('/(auth)/login')}>Sign in</Link>
-        </Typography>
-      </View>
-    </SafeAreaView>
+        <View style={{ gap: 14, paddingBottom: 8 }}>
+          <Text style={styles.over}>YOUR FACE IS YOUR PASS</Text>
+          <Text style={styles.headline}>
+            One face.{'\n'}Every <Serif size={54} color={C.skyLight}>check-in.</Serif>
+          </Text>
+          <Text style={styles.sub}>Hotels, flights, theme parks and cruises — verified in a glance. No queues, no paperwork.</Text>
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, marginBottom: 14 }}>
+            <View style={[styles.dot, { width: 22, backgroundColor: C.sky }]} />
+            <View style={styles.dot} />
+            <View style={styles.dot} />
+          </View>
+          <Button label="Create your Truepas" iconRight={ArrowRight} onPress={go('/(auth)/register')} />
+          <Button label="I already have an account" tone="glass" onPress={go("/(auth)/login")} />
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
-const useStyles = makeStyles((t) => ({
-  hero: {
-    alignItems: 'center',
-    gap: t.spacing[3],
-    paddingTop: t.spacing[8],
-    paddingBottom: t.spacing[4],
-  },
-  heroFrame: { marginBottom: t.spacing[3] },
-  halo: {
-    width: 156,
-    height: 156,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ring: {
-    width: 116,
-    height: 116,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  disc: {
-    width: 68,
-    height: 68,
-    borderRadius: t.radii.full,
-    backgroundColor: t.colors.actionPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    ...t.shadows.lg,
-  },
-  featureCard: { padding: t.spacing[2], marginTop: t.spacing[4] },
-  featureRow: {
+const styles = StyleSheet.create({
+  glassCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: t.spacing[3],
-    padding: t.spacing[3],
+    gap: 12,
+    padding: 10,
+    paddingRight: 18,
+    borderRadius: R.lg + 4,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
   },
-  featureDivider: {
-    borderTopWidth: t.sizes.fieldBorderWidth,
-    borderTopColor: t.colors.borderSubtle,
-  },
-  featureIcon: {
-    width: t.sizes.touchTarget,
-    height: t.sizes.touchTarget,
-    borderRadius: t.radii.full,
-    backgroundColor: t.colors.actionPrimarySubtle,
+  glassIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: 'rgba(8,182,252,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  featureText: { flex: 1, gap: t.spacing[0.5] },
-  featureTitle: { fontWeight: t.fontWeight.semibold },
-}));
+  glassTitle: { fontFamily: F.bold, fontSize: 14.5, color: C.white },
+  glassSub: { fontFamily: F.medium, fontSize: 12.5, color: 'rgba(255,255,255,0.72)' },
+  over: { fontFamily: F.bold, fontSize: 11.5, letterSpacing: 1.6, color: C.skyLight },
+  headline: { fontFamily: F.extrabold, fontSize: 46, lineHeight: 52, letterSpacing: -1.6, color: C.white },
+  sub: { fontFamily: F.regular, fontSize: 16, lineHeight: 24, color: 'rgba(255,255,255,0.74)', maxWidth: 330 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
+});

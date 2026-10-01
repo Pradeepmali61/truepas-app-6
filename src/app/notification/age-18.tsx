@@ -1,74 +1,39 @@
-import { useRouter } from 'expo-router';
-import { Cake, Clock, Plus } from 'lucide-react-native';
-import { ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { Cake, Send } from 'lucide-react-native';
+import { View } from 'react-native';
 
-import { Alert, ScreenHeader } from '@/components/composite';
-import { CoreButton, NeuBox, PopIn, RowIcon, Typography } from '@/components/ui';
-import { useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { C } from '@/premium/theme';
+import { Avatar, Button, Card, Divider, Row, Txt } from '@/premium/ui';
+import { ResultView } from '@/premium/views';
 
-/** Age-18 transition notification — dependent is eligible for own Truepas account. */
-export default function Age18NotificationScreen() {
-  const theme = useThemeTokens();
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-
+/** A family member turns 18 — warm milestone + hand-over of their identity. */
+export default function Age18() {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Notification" />
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: theme.spacing[4], gap: theme.spacing[4] }}
-        showsVerticalScrollIndicator={false}>
-        <View style={{ alignItems: 'center', paddingVertical: theme.spacing[4] }}>
-          <PopIn>
-            <RowIcon
-              tone="primary"
-              icon={<Cake size={iconSize.xl} color={theme.colors.actionPrimary} />}
-            />
-          </PopIn>
-        </View>
-        <NeuBox variant="raised" depth={6} color={theme.colors.surface} style={{ padding: theme.spacing[4] }}>
-          <View style={{ alignItems: 'center', gap: theme.spacing[3] }}>
-            <Typography variant="h3" center>
-              You&apos;re eligible for a new Truepas account
-            </Typography>
-            <Typography variant="body" color="secondary" center>
-              Max Kim has turned 18 and can now create an independent Truepas account to manage
-              their own identity verification.
-            </Typography>
-            <View style={{ alignSelf: 'stretch', gap: theme.spacing[2] }}>
-              <Alert variant="success">Eligible to create own account</Alert>
-              <Alert variant="warning">Data retained for 30 days after removal</Alert>
-            </View>
+    <ResultView
+      icon={Cake}
+      tone="sky"
+      over="A milestone"
+      title="Meera is now"
+      accent="18."
+      sub="She can now own her Truepas. Send her an invite to take over her verified identity — her history comes with her."
+      primary={<Button label="Send invite to Meera" icon={Send} />}
+      secondary={<Button label="Remind me later" tone="ghost" />}>
+      <Card style={{ gap: 14 }}>
+        <Row gap={14}>
+          <Avatar src="sister" size={56} status="verified" />
+          <View style={{ flex: 1 }}>
+            <Txt v="h3">Meera Mali</Txt>
+            <Txt v="small">Verified since Jun 2025 · 14 check-ins</Txt>
           </View>
-        </NeuBox>
-      </ScrollView>
-      <View
-        style={{
-          paddingHorizontal: theme.spacing[4],
-          paddingTop: theme.spacing[4],
-          paddingBottom: theme.spacing[4] + insets.bottom,
-          gap: theme.spacing[2],
-        }}>
-        <CoreButton
-          fullWidth
-          size="lg"
-          accessibilityLabel="Create their own account"
-          iconLeft={<Plus size={iconSize.sm} color={theme.colors.onActionPrimary} />}
-          onPress={() => router.dismissTo('/(tabs)')}>
-          Create their account
-        </CoreButton>
-        <CoreButton
-          fullWidth
-          variant="outline"
-          accessibilityLabel="Remind later"
-          iconLeft={<Clock size={iconSize.sm} color={theme.colors.actionPrimary} />}
-          onPress={() => router.back()}>
-          Remind me later
-        </CoreButton>
-      </View>
-    </SafeAreaView>
+        </Row>
+        <Divider />
+        {['Her face & documents move to her own account', 'You stay connected as family', 'Guardian controls switch off automatically'].map((t) => (
+          <Row key={t} gap={10}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.sky }} />
+            <Txt v="body">{t}</Txt>
+          </Row>
+        ))}
+      </Card>
+    </ResultView>
   );
 }

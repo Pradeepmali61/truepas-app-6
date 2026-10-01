@@ -1,180 +1,35 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import { Pencil, User, UserRound } from 'lucide-react-native';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { ArrowRight, CalendarDays, User } from 'lucide-react-native';
+import { View } from 'react-native';
 
-import { api } from '@/api';
-import { ActionSheet, Alert, DatePicker, FormField, ScreenHeader } from '@/components/composite';
-import { CoreButton, Input, Select, type SelectOption } from '@/components/ui';
-import { ageBandFromAge, ageFromDob, familyKeys, findMatchingMember } from '@/features/family/hooks';
-import { useKeyboardScrollPad } from '@/hooks/useKeyboardScrollPad';
-import { useThemeTokens } from '@/theme';
-import type { FamilyMember } from '@/types/domain';
+import { C } from '@/premium/theme';
+import { Button, Chip, Field, go, Heading, Row, Screen, Steps, TopBar, Txt } from '@/premium/ui';
 
-const RELATIONSHIPS: SelectOption[] = [
-  { value: 'Child', label: 'Child' },
-  { value: 'Spouse', label: 'Spouse' },
-  { value: 'Parent', label: 'Parent' },
-  { value: 'Guardian', label: 'Guardian' },
-  { value: 'Sibling', label: 'Sibling' },
-  { value: 'Other', label: 'Other' },
-];
-
-function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** Add family — step 1: member basics (POST /cb/family). Any age is accepted;
- *  the flow branches on computed age: 0-4 photo, 5-9 liveness (any camera),
- *  10+ front-camera liveness. */
-export default function AddFamilyScreen() {
-  const theme = useThemeTokens();
-  const insets = useSafeAreaInsets();
-  const kbd = useKeyboardScrollPad();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-
-  const [fullName, setFullName] = useState('');
-  const [dob, setDob] = useState('');
-  const [relationship, setRelationship] = useState('Child');
-  const [errors, setErrors] = useState<{ name?: string; dob?: string; relationship?: string }>({});
-  const [checking, setChecking] = useState(false);
-  const [existing, setExisting] = useState<FamilyMember | null>(null);
-
-  const submit = async () => {
-    const trimmed = fullName.trim();
-    const next: typeof errors = {};
-    if (trimmed.length < 2) next.name = 'Name is required';
-    else if (trimmed.length > 100) next.name = 'Name is too long';
-    if (!dob) next.dob = 'Pick a date of birth';
-    else {
-      const age = ageFromDob(dob);
-      if (!Number.isFinite(age)) next.dob = 'Enter a valid date';
-      else if (age < 0) next.dob = 'Date of birth must be in the past';
-    }
-    if (!relationship) next.relationship = 'Choose a relationship';
-    setErrors(next);
-    if (Object.keys(next).length > 0) return;
-
-    // Catch a duplicate HERE, before the user spends a document scan on it —
-    // the backend rejects the same name + DOB at the end of the flow.
-    setChecking(true);
-    try {
-      const list = await queryClient.fetchQuery({
-        queryKey: familyKeys.all,
-        queryFn: api.getFamily,
-        staleTime: 30_000,
-      });
-      const match = findMatchingMember(list, trimmed, dob);
-      if (match) {
-        setExisting(match);
-        return;
-      }
-    } catch {
-      // List unavailable — let the flow continue; processing handles the
-      // backend's duplicate rejection.
-    } finally {
-      setChecking(false);
-    }
-
-    const age = ageFromDob(dob);
-    const band = ageBandFromAge(age);
-    router.push({
-      pathname: '/family/add/document',
-      params: { name: trimmed, band, dob, relationship },
-    } as never);
-  };
-
+/** Add member — step 1: who are they. */
+export default function AddMember() {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Add member" onBack={() => router.back()} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}>
-        <ScrollView
-          {...kbd.scrollProps}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: theme.spacing[4], gap: theme.spacing[4] }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled">
-          <FormField label="Full name" required helperText="As on their document." error={errors.name}>
-            <Input
-              placeholder="Maya Example"
-              value={fullName}
-              onChangeText={setFullName}
-              autoCapitalize="words"
-              maxLength={100}
-              accessibilityLabel="Full name"
-              iconLeft={<User size={theme.iconSize.md} color={theme.colors.actionPrimary} />}
-            />
-          </FormField>
-          <FormField label="Date of birth" required error={errors.dob}>
-            <DatePicker
-              value={dob || undefined}
-              onValueChange={setDob}
-              placeholder="YYYY-MM-DD"
-              maxDate={todayIso()}
-              accessibilityLabel="Date of birth"
-            />
-          </FormField>
-          <FormField label="Relationship" required error={errors.relationship}>
-            <Select
-              options={RELATIONSHIPS}
-              value={relationship}
-              onValueChange={setRelationship}
-              placeholder="Choose…"
-              title="Relationship"
-            />
-          </FormField>
-          <Alert variant="info" title="Verification depends on age">
-            Under 5: document + photo. Ages 5–9: document + liveness (any camera). 10+: document + front-camera liveness.
-          </Alert>
-        </ScrollView>
-        <View
-          {...kbd.footerProps}
-          style={{
-            paddingHorizontal: theme.spacing[4],
-            paddingTop: theme.spacing[6],
-            paddingBottom: theme.spacing[4] + insets.bottom,
-            gap: theme.spacing[2],
-          }}>
-          <CoreButton
-            fullWidth
-            size="lg"
-            accessibilityLabel="Add member"
-            loading={checking}
-            disabled={checking}
-            onPress={() => void submit()}>
-            Add member
-          </CoreButton>
-        </View>
-      </KeyboardAvoidingView>
-      <ActionSheet
-        visible={!!existing}
-        onClose={() => setExisting(null)}
-        title={existing ? `${existing.name} is already in your family` : undefined}
-        showCancel={false}
-        items={
-          existing
-            ? [
-                {
-                  key: 'open',
-                  label: `Open ${existing.name.split(' ')[0]}`,
-                  icon: <UserRound size={theme.iconSize.md} color={theme.colors.actionPrimary} />,
-                  onSelect: () => router.replace({ pathname: '/family/[id]', params: { id: existing.id } }),
-                },
-                {
-                  key: 'edit',
-                  label: 'Change details',
-                  icon: <Pencil size={theme.iconSize.md} color={theme.colors.textSecondary} />,
-                },
-              ]
-            : []
-        }
-      />
-    </SafeAreaView>
+    <Screen
+      header={<TopBar title="Add member" right={<Txt v="smallStrong" color={C.ink3}>1/4</Txt>} />}
+      contentStyle={{ paddingTop: 8 }}
+      footer={<Button label="Continue" iconRight={ArrowRight} onPress={go('/family/add/document')} />}>
+      <Steps total={4} current={0} />
+      <Heading title="Who's joining" accent="you?" sub="They'll get their own verified identity, linked to your family." />
+      <View style={{ gap: 10 }}>
+        <Txt v="smallStrong" color={C.ink2}>
+          Relationship
+        </Txt>
+        <Row gap={8} style={{ flexWrap: 'wrap' }}>
+          <Chip label="Spouse" />
+          <Chip label="Child" active />
+          <Chip label="Parent" />
+          <Chip label="Sibling" />
+          <Chip label="Other" />
+        </Row>
+      </View>
+      <View style={{ gap: 18 }}>
+        <Field label="Full name" icon={User} value="Kiara Mali" focused />
+        <Field label="Date of birth" icon={CalendarDays} value="3 Mar 2019" hint="Members under 18 check in with a guardian." />
+      </View>
+    </Screen>
   );
 }

@@ -1,103 +1,72 @@
-import { useRouter } from 'expo-router';
-import { CircleHelp } from 'lucide-react-native';
-import { Linking, ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { ChevronDown, ChevronRight, MessageCircle, Phone, Search } from 'lucide-react-native';
+import { View } from 'react-native';
 
-import { Accordion, ScreenHeader } from '@/components/composite';
-import { CoreButton, NeuBox, RowIcon, Typography } from '@/components/ui';
-import { useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { C, R } from '@/premium/theme';
+import { Card, Chip, Divider, Heading, Row, Screen, Tile, TopBar, Txt } from '@/premium/ui';
 
-const FAQS = [
+const FAQ = [
   {
-    value: 'checkin',
-    title: 'How does face check-in work?',
-    content:
-      'At a participating venue, open Truepas and glance at the kiosk camera. Your enrolled face proves your identity — no documents needed. Every check-in appears in your History tab.',
+    q: 'Where can I use face check-in?',
+    a: 'At 2,400+ partner hotels, airports, theme parks, cinemas, stadiums and cruise terminals across India — look for the Truepas sign.',
+    open: true,
   },
-  {
-    value: 'biometric',
-    title: 'Is my biometric data shared?',
-    content:
-      'Your face template is used only to verify your identity. Check-in consent is separate from biometric consent, and you can withdraw either at any time from Settings → Privacy.',
-  },
-  {
-    value: 'doc-fail',
-    title: 'Why did my document verification fail?',
-    content:
-      'Most failures are image quality — glare, blur, or the document not filling the frame. Recapture in good light on a flat, dark surface and try again.',
-  },
-  {
-    value: 'family',
-    title: 'How are family members verified?',
-    content:
-      'Members under 5 need an identity document plus a clear photo. Members 5 and older need a document plus a short liveness check in the app.',
-  },
-  {
-    value: 'update-face',
-    title: 'How do I update my face?',
-    content:
-      'Go to Profile → Update face. You\'ll repeat a quick liveness check so we can be sure it\'s really you before replacing the enrolled face.',
-  },
+  { q: 'Is my face stored as a photo?', a: '' },
+  { q: 'How do I add my child?', a: '' },
+  { q: 'What if face check-in fails?', a: '' },
 ];
 
-/** Help & FAQ — static content screen; entry points: liveness failure
- *  "Get help", history "How check-in works", and the About page. */
-export default function HelpScreen() {
-  const theme = useThemeTokens();
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-
+/** Help centre — search, topics, FAQ, human support. */
+export default function Help() {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Help & FAQ" onBack={() => router.back()} />
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          padding: theme.spacing[4],
-          gap: theme.spacing[4],
-          paddingBottom: theme.spacing[8] + insets.bottom,
-        }}
-        showsVerticalScrollIndicator={false}>
-        <Accordion
-          multiple
-          items={FAQS.map((f) => ({
-            value: f.value,
-            title: f.title,
-            content: (
-              <Typography variant="body-sm" color="secondary">
-                {f.content}
-              </Typography>
-            ),
-          }))}
-        />
-
-        <NeuBox
-          variant="raised"
-          depth={4}
-          color={theme.colors.surface}
-          style={{ padding: theme.spacing[4] }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing[3] }}>
-            <RowIcon
-              tone="info"
-              icon={<CircleHelp size={iconSize.md} color={theme.colors.onInfoSubtle} />}
-            />
-            <View style={{ flex: 1, gap: 2 }}>
-              <Typography variant="body">Still stuck?</Typography>
-              <Typography variant="body-sm" color="secondary">
-                Our support team can help with verification issues.
-              </Typography>
+    <Screen header={<TopBar title="Help" />} contentStyle={{ paddingTop: 4 }}>
+      <Heading title="How can we" accent="help?" />
+      <View style={{ height: 54, borderRadius: R.full, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, gap: 12 }}>
+        <Search size={19} color={C.ink3} />
+        <Txt v="body" color={C.ink4}>
+          Search questions
+        </Txt>
+      </View>
+      <Row gap={8} style={{ flexWrap: 'wrap' }}>
+        <Chip label="Check-in" active />
+        <Chip label="Face & privacy" />
+        <Chip label="Family" />
+        <Chip label="Documents" />
+      </Row>
+      <Card pad={0} style={{ paddingHorizontal: 18 }}>
+        {FAQ.map((f, i) => (
+          <View key={f.q}>
+            {i > 0 && <Divider />}
+            <View style={{ paddingVertical: 16, gap: 10 }}>
+              <Row between>
+                <Txt v="bodyStrong" style={{ flex: 1 }}>
+                  {f.q}
+                </Txt>
+                {f.open ? <ChevronDown size={18} color={C.ink} /> : <ChevronRight size={18} color={C.ink4} />}
+              </Row>
+              {f.open && (
+                <Txt v="body" style={{ lineHeight: 23 }}>
+                  {f.a}
+                </Txt>
+              )}
             </View>
-            <CoreButton
-              variant="outline"
-              size="sm"
-              accessibilityLabel="Email support"
-              onPress={() => Linking.openURL('mailto:support@truepas.com')}>
-              Email us
-            </CoreButton>
           </View>
-        </NeuBox>
-      </ScrollView>
-    </SafeAreaView>
+        ))}
+      </Card>
+      <Row gap={12}>
+        {[
+          { icon: MessageCircle, t: 'Chat with us', s: 'Replies in ~2 min' },
+          { icon: Phone, t: 'Call us', s: '24 × 7 support' },
+        ].map((x) => (
+          <Card key={x.t} style={{ flex: 1, gap: 12 }}>
+            <Tile icon={x.icon} tone="navy" size={42} />
+            <View>
+              <Txt v="bodyStrong">{x.t}</Txt>
+              <Txt v="small">{x.s}</Txt>
+            </View>
+          </Card>
+        ))}
+      </Row>
+    </Screen>
   );
 }

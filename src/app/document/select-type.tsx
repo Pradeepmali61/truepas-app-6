@@ -1,85 +1,46 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { LinearGradient } from 'expo-linear-gradient';
+import { BookUser, Car, ChevronRight, CreditCard, Fingerprint, Globe2 } from 'lucide-react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { FormField, ScreenHeader } from '@/components/composite';
-import { CoreButton, Select, Typography } from '@/components/ui';
-import { useThemeTokens } from '@/theme';
-import type { DocumentType } from '@/types/domain';
+import { C, F, R, SH } from '@/premium/theme';
+import { Badge, go, Heading, Press, Row, Screen, TopBar, Txt } from '@/premium/ui';
 
-const DOC_TYPES: { value: DocumentType; label: string }[] = [
-  { value: 'passport', label: 'Passport' },
-  { value: 'drivingLicense', label: "Driver's License" },
-  { value: 'idCard', label: 'ID Card' },
-  { value: 'greenCard', label: 'US Green Card' },
-  { value: 'birthCertificate', label: 'Birth Certificate' },
-  { value: 'usVisa', label: 'U.S. Visa' },
-];
+const TYPES = [
+  { icon: BookUser, t: 'Passport', s: 'Best for travel · international', colors: ['#0B3A5B', '#021B2B'], tag: 'Recommended' },
+  { icon: Fingerprint, t: 'Aadhaar', s: 'Instant e-KYC via UIDAI', colors: ['#08B6FC', '#0574A8'] },
+  { icon: Car, t: 'Driving Licence', s: 'All Indian states', colors: ['#3A4A57', '#1A252E'] },
+  { icon: CreditCard, t: 'PAN Card', s: 'For financial venues', colors: ['#5A6B78', '#34424D'] },
+  { icon: Globe2, t: 'National ID', s: '190+ countries supported', colors: ['#0E5A6E', '#06303B'] },
+] as const;
 
-/** Add document — step 1 of 2: pick the type, then scan.
- *  Number/label/expiry are NOT collected — server-side Regula OCR extracts
- *  them during /verify (processing screen sends 'PENDING' placeholders).
- *  Supports family mode: when `family` param is set, the scan flow is scoped
- *  to a family member (personId). */
-export default function AddDocumentScreen() {
-  const theme = useThemeTokens();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { family, personId, memberName, band } = useLocalSearchParams<{
-    family?: string;
-    personId?: string;
-    memberName?: string;
-    band?: string;
-  }>();
-  const isFamilyMode = family === '1';
-
-  const [type, setType] = useState<DocumentType>('passport');
-
-  const continueToUpload = () => {
-    const params: Record<string, string> = { type };
-    if (isFamilyMode) {
-      params.family = '1';
-      params.personId = personId ?? '';
-      params.name = memberName ?? '';
-      params.band = band ?? '';
-    }
-    router.push({ pathname: '/document/scan', params });
-  };
-
+/** Choose a document — each type as a miniature card. */
+export default function SelectType() {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Add document" subtitle="Step 1 of 2 — choose type" onBack={() => router.back()} />
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: theme.spacing[4], gap: theme.spacing[4] }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
-        <FormField label="Document type" required>
-          <Select
-            options={DOC_TYPES}
-            value={type}
-            onValueChange={(v) => setType(v as DocumentType)}
-            placeholder="Choose a type"
-            title="Document type"
-            accessibilityLabel="Document type"
-          />
-        </FormField>
-        <Typography variant="body-sm" color="secondary">
-          The document number and expiry are read from the scan automatically.
-        </Typography>
-      </ScrollView>
-      <View
-        style={{
-          paddingHorizontal: theme.spacing[4],
-          paddingTop: theme.spacing[4],
-          paddingBottom: theme.spacing[4] + insets.bottom,
-          gap: theme.spacing[2],
-        }}>
-        <CoreButton fullWidth size="lg" accessibilityLabel="Continue" onPress={continueToUpload}>
-          Continue
-        </CoreButton>
+    <Screen header={<TopBar title="Add document" />} contentStyle={{ paddingTop: 4 }}>
+      <Heading title="Which ID do you" accent="have?" sub="We read it automatically and verify it against the issuing authority." />
+      <View style={{ gap: 12 }}>
+        {TYPES.map((d) => (
+          <Press key={d.t} onPress={go('/document/scan')} style={[{ borderRadius: R.lg }, SH.sm]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: C.surface, borderRadius: R.lg, padding: 14, borderWidth: 1, borderColor: C.lineSoft }}>
+              <View style={{ width: 62, height: 44, borderRadius: 9, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+                <LinearGradient colors={d.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                <View>
+                  <d.icon size={20} color={C.white} />
+                </View>
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Row gap={8}>
+                  <Text style={{ fontFamily: F.bold, fontSize: 15.5, color: C.ink }}>{d.t}</Text>
+                  {'tag' in d && <Badge label={d.tag} tone="sky" />}
+                </Row>
+                <Txt v="small">{d.s}</Txt>
+              </View>
+              <ChevronRight size={18} color={C.ink4} />
+            </View>
+          </Press>
+        ))}
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 }

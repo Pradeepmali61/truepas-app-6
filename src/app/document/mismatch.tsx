@@ -1,169 +1,75 @@
-import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { TriangleAlert } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import {
+  AlertTriangle,
+  ArrowDown,
+  Camera,
+  MessageCircle,
+} from "lucide-react-native";
+import { View } from "react-native";
 
-import { toApiError } from '@/api/errors';
-import { Alert, ScreenHeader } from '@/components/composite';
-import { CoreButton, NeuBox, PopIn, RowIcon, Typography } from '@/components/ui';
-import { useUpdateProfile } from '@/features/auth/mutations';
-import { formatCountdown, useCountdown } from '@/hooks/useCountdown';
-import { useToast } from '@/hooks/useToast';
-import { flowGuards } from '@/services/flowGuards';
-import { useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { C } from "@/premium/theme";
+import { Badge, Button, Card, Divider, go, Row, Txt } from "@/premium/ui";
+import { ResultView } from "@/premium/views";
 
-const SESSION_TTL_SECONDS = 15 * 60;
-
-/** Profile mismatch session — 15-minute TTL, accept or retry (PRD).
- *  "Accept" copies the document's extracted name/DOB into the profile so the
- *  next verification attempt matches. */
-export default function MismatchScreen() {
-  const theme = useThemeTokens();
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const { seconds } = useCountdown(SESSION_TTL_SECONDS);
-  const updateProfile = useUpdateProfile();
-  const toast = useToast();
-  const params = useLocalSearchParams<{
-    docId?: string;
-    profileName?: string;
-    profileDob?: string;
-    docName?: string;
-    docDob?: string;
-    reason?: string;
-  }>();
-  // Result screen — deep links without a real verification session are
-  // bounced back to the start of the document flow (ADV-001).
-  const [allowed] = useState(() => flowGuards.has('document:mismatch'));
-
-  useEffect(() => {
-    if (allowed) flowGuards.consume('document:mismatch');
-  }, [allowed]);
-
-  const profileName = params.profileName || '—';
-  const docName = params.docName || '—';
-  const profileDob = params.profileDob || '—';
-  const docDob = params.docDob || '—';
-
-  const handleAccept = async () => {
-    try {
-      await updateProfile.mutateAsync({
-        ...(params.docName ? { fullName: params.docName } : {}),
-        ...(params.docDob ? { dateOfBirth: params.docDob } : {}),
-      });
-      if (params.docId) {
-        router.replace({ pathname: '/document/[id]', params: { id: params.docId } } as never);
-      } else {
-        router.dismissTo('/(tabs)');
-      }
-    } catch (err) {
-      toast.show('error', toApiError(err).message || 'Could not update your profile. Please try again.');
-    }
-  };
-
-  if (!allowed) return <Redirect href="/document/select-type" />;
-
-  return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Details Mismatch" />
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: theme.spacing[4], gap: theme.spacing[4] }}
-        showsVerticalScrollIndicator={false}>
-        <View style={{ alignItems: 'center', gap: theme.spacing[2], paddingVertical: theme.spacing[3] }}>
-          <PopIn>
-            <RowIcon
-              tone="warning"
-              icon={<TriangleAlert size={iconSize.lg} color={theme.colors.onWarningSubtle} />}
+/** Mismatch — explain precisely what didn't match, then the fix. */
+export default function Mismatch() {
+  const Line = ({ k, a, b }: { k: string; a: string; b: string }) => {
+    const same = a === b;
+    return (
+      <View style={{ gap: 8, paddingVertical: 12 }}>
+        <Txt v="micro">{k}</Txt>
+        <Row between>
+          <Txt v="small">On your profile</Txt>
+          <Txt v="bodyStrong">{a}</Txt>
+        </Row>
+        <Row between>
+          <Txt v="small">On your document</Txt>
+          <Row gap={8}>
+            <Badge
+              label={same ? "Match" : "Differs"}
+              tone={same ? "green" : "amber"}
             />
-          </PopIn>
-          <Typography variant="h3">Details Mismatch</Typography>
-          <Typography variant="body-sm" color="secondary" center>
-            Extracted details don&apos;t match your profile
-          </Typography>
-        </View>
-
-        <NeuBox
-          variant="raised"
-          depth={4}
-          color={theme.colors.surface}
-          style={{ padding: theme.spacing[4] }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              marginBottom: theme.spacing[3],
-            }}>
-            <Typography variant="caption" color="muted" style={{ letterSpacing: theme.letterSpacing.caps }}>
-              PROFILE
-            </Typography>
-            <Typography variant="caption" color="muted" style={{ letterSpacing: theme.letterSpacing.caps }}>
-              DOCUMENT
-            </Typography>
-          </View>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderBottomWidth: theme.sizes.fieldBorderWidth,
-              borderBottomColor: theme.colors.borderSubtle,
-              paddingBottom: theme.spacing[2],
-              marginBottom: theme.spacing[2],
-            }}>
-            <Typography variant="body" style={{ fontWeight: theme.fontWeight.semibold }}>
-              {profileName}
-            </Typography>
-            <Typography variant="body" style={{ fontWeight: theme.fontWeight.semibold }}>
-              {docName}
-            </Typography>
-          </View>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
-            <Typography variant="body" style={{ fontWeight: theme.fontWeight.semibold }}>
-              {profileDob}
-            </Typography>
-            <Typography variant="body" style={{ fontWeight: theme.fontWeight.semibold }}>
-              {docDob}
-            </Typography>
-          </View>
-        </NeuBox>
-
-        {params.reason ? <Alert variant="info">{params.reason}</Alert> : null}
-
-        <Alert variant="warning">
-          Session expires in {formatCountdown(seconds)}. If the session expires, you&apos;ll need to
-          re-verify your document.
-        </Alert>
-      </ScrollView>
-      <View
-        style={{
-          paddingHorizontal: theme.spacing[4],
-          paddingTop: theme.spacing[4],
-          paddingBottom: theme.spacing[4] + insets.bottom,
-          gap: theme.spacing[2],
-        }}>
-        <CoreButton
-          fullWidth
-          accessibilityLabel="Accept and update profile"
-          loading={updateProfile.isPending}
-          onPress={handleAccept}>
-          Accept & Update Profile
-        </CoreButton>
-        <CoreButton
-          fullWidth
-          variant="outline"
-          accessibilityLabel="Retry with different document"
-          onPress={() => router.replace('/document/select-type')}>
-          Retry with Different Document
-        </CoreButton>
+            <Txt v="bodyStrong" color={same ? C.ink : C.amberInk}>
+              {b}
+            </Txt>
+          </Row>
+        </Row>
       </View>
-    </SafeAreaView>
+    );
+  };
+  return (
+    <ResultView
+      icon={AlertTriangle}
+      tone="amber"
+      over="Needs your attention"
+      title="Details don't"
+      accent="match."
+      sub="Your passport doesn't match your profile exactly. This usually takes a minute to fix."
+      primary={
+        <Button
+          label="Retake photo"
+          icon={Camera}
+          onPress={go("/document/scan")}
+        />
+      }
+      secondary={
+        <Button
+          label="Talk to support"
+          tone="ghost"
+          icon={MessageCircle}
+          onPress={go("/help")}
+        />
+      }
+    >
+      <Card pad={0} style={{ paddingHorizontal: 18, paddingVertical: 4 }}>
+        <Line k="Name" a="Pradeep Mali" b="Pradeep K. Mali" />
+        <Divider />
+        <Line k="Date of birth" a="14 Aug 1994" b="14 Aug 1994" />
+      </Card>
+      <Row gap={8} style={{ justifyContent: "center" }}>
+        <ArrowDown size={14} color={C.ink3} />
+        <Txt v="small">Or update your profile name to match your passport</Txt>
+      </Row>
+    </ResultView>
   );
 }

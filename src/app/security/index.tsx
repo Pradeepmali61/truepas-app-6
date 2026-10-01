@@ -1,171 +1,49 @@
-/**
- * Security hub — sign-in credentials, biometric consent, danger zone.
- * Sensitive flows (password/PIN change, face update) route through the
- * confirm-pin gate first. Biometric withdrawal deletes face templates
- * server-side and sets faceEnrolled=false, forcing re-enrollment.
- *
- * Ported 1:1 from UI-design-repo src/app/screens/settings/SecurityScreen.tsx —
- * navigation targets map to our real confirm-pin/face-update routes.
- */
-import { useRouter } from 'expo-router';
-import { Fingerprint, KeyRound, Lock, ScanFace, Trash2 } from 'lucide-react-native';
-import { useState } from 'react';
-import { ScrollView } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { LinearGradient } from 'expo-linear-gradient';
+import { KeyRound, Laptop, Lock, ScanFace, ShieldCheck, Smartphone } from 'lucide-react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 
-import { isMockApi } from '@/api';
-import { toApiError } from '@/api/errors';
-import { MOCK_PIN } from '@/api/mock';
-import { ListTile, Modal, ScreenHeader, Section, SectionTitle } from '@/components/composite';
-import { CoreButton, Switch, Typography } from '@/components/ui';
-import { useBiometricConsent } from '@/features/auth/mutations';
-import { biometricConsentGiven, biometricConsentRevoked } from '@/features/auth/slice';
-import { useToast } from '@/hooks/useToast';
-import { useAppDispatch, useAppSelector } from '@/store';
-import { useThemeTokens } from '@/theme';
+import { Guilloche } from '@/premium/blocks';
+import { C, F, G, R, SH } from '@/premium/theme';
+import { Badge, go, Group, ListRow, Row, Screen, Toggle, TopBar } from '@/premium/ui';
 
-export default function SecurityScreen() {
-  const router = useRouter();
-  const theme = useThemeTokens();
-  const insets = useSafeAreaInsets();
-  const dispatch = useAppDispatch();
-  const user = useAppSelector((state) => state.auth.user);
-  const toast = useToast();
-  const consent = useBiometricConsent();
-  const [confirmRevoke, setConfirmRevoke] = useState(false);
-
-  // Server truth — reflects the stored user record, not local optimism.
-  const consentOn = !!user?.biometricConsentAt;
-
-  const applyConsent = async (accepted: boolean) => {
-    if (consent.isPending) return;
-    try {
-      await consent.mutateAsync({ accepted });
-      dispatch(accepted ? biometricConsentGiven() : biometricConsentRevoked());
-      // Withdrawing drops faceEnrolled locally too — the tabs layout routes
-      // the user back through consent + re-enrollment on next entry.
-      toast.show(
-        'success',
-        accepted ? 'Biometric consent on' : 'Biometric consent off — your enrolled face was removed.',
-      );
-    } catch (err) {
-      toast.show('error', toApiError(err).message || 'Could not update consent. Please try again.');
-    }
-  };
-
-  const onConsentToggle = (next: boolean) => {
-    if (next) void applyConsent(true);
-    else setConfirmRevoke(true);
-  };
-
+/** Security — score ring hero + controls. */
+export default function Security() {
+  const size = 96;
+  const r = 40;
+  const circ = 2 * Math.PI * r;
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Security" onBack={() => router.back()} />
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          padding: theme.spacing[4],
-          paddingBottom: theme.spacing[8] + insets.bottom,
-          gap: theme.spacing[6],
-        }}
-        showsVerticalScrollIndicator={false}>
-        <Section>
-          <SectionTitle>Sign-in</SectionTitle>
-          <ListTile
-            icon={KeyRound}
-            tone="brand"
-            title="Change password"
-            subtitle="Update your account password"
-            onPress={() =>
-              router.push({
-                pathname: '/security/confirm-pin',
-                params: { next: '/security/change-password' },
-              } as never)
-            }
-          />
-          <ListTile
-            icon={Lock}
-            tone="brand"
-            title="Change PIN"
-            subtitle="4-digit code for sensitive actions"
-            onPress={() =>
-              router.push({
-                pathname: '/security/confirm-pin',
-                params: { next: '/security/change-pin' },
-              } as never)
-            }
-          />
-          <ListTile
-            icon={ScanFace}
-            tone="brand"
-            title="Update face"
-            subtitle="Re-enroll your face template"
-            onPress={() => router.push('/face-update/pin')}
-          />
-        </Section>
+    <Screen header={<TopBar title="Security" />} contentStyle={{ paddingTop: 4 }}>
+      <View style={[{ borderRadius: R.xl, overflow: 'hidden', padding: 22 }, SH.navy]}>
+        <LinearGradient colors={G.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <Guilloche size={360} style={{ right: -180, bottom: -200 }} />
+        <Row gap={20}>
+          <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+            <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+              <Circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.14)" strokeWidth={8} fill="none" />
+              <Circle cx={size / 2} cy={size / 2} r={r} stroke={C.sky} strokeWidth={8} strokeLinecap="round" fill="none" strokeDasharray={`${circ * 0.92} ${circ}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+            </Svg>
+            <Text style={{ fontFamily: F.extrabold, fontSize: 28, letterSpacing: -1, color: C.white }}>92</Text>
+          </View>
+          <View style={{ flex: 1, gap: 6 }}>
+            <Badge label="Excellent" tone="glass" icon={ShieldCheck} />
+            <Text style={{ fontFamily: F.bold, fontSize: 19, letterSpacing: -0.4, color: C.white }}>Your account is well protected</Text>
+            <Text style={{ fontFamily: F.medium, fontSize: 13, color: 'rgba(255,255,255,0.65)' }}>Turn on 2-step sign-in to reach 100.</Text>
+          </View>
+        </Row>
+      </View>
 
-        <Section>
-          <SectionTitle>Face & consent</SectionTitle>
-          <ListTile
-            icon={Fingerprint}
-            tone="brand"
-            title="Biometric consent"
-            subtitle={
-              consentOn ? 'On — your face template is stored' : 'Off — no face template stored'
-            }
-            trailing={
-              <Switch
-                value={consentOn}
-                onValueChange={onConsentToggle}
-                disabled={consent.isPending}
-              />
-            }
-          />
-        </Section>
-
-        <Section>
-          <SectionTitle>Danger zone</SectionTitle>
-          <ListTile
-            icon={Trash2}
-            tone="error"
-            title="Delete account"
-            subtitle="Erase your data permanently"
-            onPress={() => router.push('/account/delete')}
-          />
-        </Section>
-
-        {__DEV__ && isMockApi() && (
-          <Typography variant="caption" color="muted" center>
-            Demo PIN: {MOCK_PIN}
-          </Typography>
-        )}
-      </ScrollView>
-
-      <Modal
-        visible={confirmRevoke}
-        onClose={() => setConfirmRevoke(false)}
-        title="Turn off biometric consent?"
-        footer={
-          <>
-            <CoreButton variant="ghost" onPress={() => setConfirmRevoke(false)}>
-              Cancel
-            </CoreButton>
-            <CoreButton
-              variant="destructive"
-              loading={consent.isPending}
-              onPress={() => {
-                setConfirmRevoke(false);
-                void applyConsent(false);
-              }}>
-              Turn off
-            </CoreButton>
-          </>
-        }>
-        <Typography variant="body" color="secondary">
-          Turning this off removes your enrolled face. You&apos;ll need to re-enroll before using
-          face check-in again.
-        </Typography>
-      </Modal>
-    </SafeAreaView>
+      <Group title="Sign-in">
+        <ListRow icon={ScanFace} tone="sky" title="Face" sub="Updated 12 Mar 2026" onPress={go('/face-update/pin')} />
+        <ListRow icon={KeyRound} tone="sky" title="Change PIN" sub="4-digit app PIN" onPress={go('/security/change-pin')} />
+        <ListRow icon={Lock} tone="sky" title="Change password" onPress={go('/security/change-password')} />
+        <ListRow icon={ShieldCheck} tone="sky" title="2-step sign-in" sub="Recommended" trailing={<Toggle />} />
+      </Group>
+      <Group title="Signed-in devices">
+        <ListRow icon={Smartphone} title="iPhone 16 Pro" sub="This device · Mumbai" trailing={<Badge label="Active" tone="green" dot />} />
+        <ListRow icon={Laptop} title="MacBook Air · Safari" sub="Mumbai · 2 days ago" value="Sign out" chevron={false} />
+      </Group>
+    </Screen>
   );
 }

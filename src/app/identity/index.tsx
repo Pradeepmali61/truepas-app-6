@@ -1,197 +1,56 @@
-import { useRouter } from 'expo-router';
-import { FileText, ScanFace, ShieldCheck, UserRoundCheck, type LucideIcon } from 'lucide-react-native';
-import { ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { LinearGradient } from 'expo-linear-gradient';
+import { BadgeCheck, CalendarDays, FileText, Globe, MapPin, Phone, RefreshCw } from 'lucide-react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-    EmptyState,
-    ErrorState,
-    LoadingState,
-    ScreenHeader,
-} from '@/components/composite';
-import { CoreButton, Divider, FadeUp, NeuBox, RowIcon, StatusChip, Typography } from '@/components/ui';
-import { useIdentitySummary } from '@/features/identity/hooks';
-import { makeStyles, useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
-import type { ActivityItem } from '@/types/domain';
+import { Glow, IdentityCard, PassCode } from '@/premium/blocks';
+import { USER } from '@/premium/data';
+import { C, F, G, R, SH } from '@/premium/theme';
+import { Group, ListRow, Row, TopBar, Txt, go } from '@/premium/ui';
 
-type RowTone = 'success' | 'warning' | 'error' | 'neutral';
-const ROW_VISUAL: Record<string, { tone: RowTone; colorKey: 'onSuccessSubtle' | 'onWarningSubtle' | 'onErrorSubtle' | 'textSecondary' }> = {
-    verified: { tone: 'success', colorKey: 'onSuccessSubtle' },
-    pending: { tone: 'warning', colorKey: 'onWarningSubtle' },
-    failed: { tone: 'error', colorKey: 'onErrorSubtle' },
-};
-
-function CheckRow({ icon: Icon, title, status }: { icon: LucideIcon; title: string; status: string }) {
-    const styles = useStyles();
-    const theme = useThemeTokens();
-    const visual = ROW_VISUAL[status] ?? { tone: 'neutral' as const, colorKey: 'textSecondary' as const };
-    return (
-        <View style={styles.checkRow}>
-            <RowIcon tone={visual.tone} icon={<Icon size={iconSize.md} color={theme.colors[visual.colorKey]} />} />
-            <View style={styles.checkText}>
-                <Typography variant="body">{title}</Typography>
+/** My Truepas — the scannable pass + identity details. */
+export default function Identity() {
+  return (
+    <View style={{ flex: 1, backgroundColor: C.canvas }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={{ paddingBottom: 30 }}>
+          <LinearGradient colors={G.night} style={StyleSheet.absoluteFill} />
+          <Glow size={420} opacity={0.35} style={{ top: -120, left: -40 }} />
+          <SafeAreaView edges={['top']}>
+            <TopBar tone="glass" title="My Truepas" />
+          </SafeAreaView>
+          <View style={{ alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, gap: 18 }}>
+            <View style={[{ backgroundColor: C.white, borderRadius: R.xxl, padding: 22, alignItems: 'center', gap: 14, width: '100%' }, SH.lg]}>
+              <Row gap={8}>
+                <BadgeCheck size={18} color={C.sky} />
+                <Txt v="smallStrong">Show this at any Truepas venue</Txt>
+              </Row>
+              <PassCode size={208} />
+              <Text style={{ fontFamily: F.mono, fontSize: 15, letterSpacing: 3, color: C.ink }}>{USER.id}</Text>
+              <Row gap={6}>
+                <RefreshCw size={13} color={C.ink3} />
+                <Txt v="small">Refreshes in 0:42 for your security</Txt>
+              </Row>
             </View>
-            <StatusChip status={status} />
+          </View>
         </View>
-    );
-}
 
-function ActivityRow({ item }: { item: ActivityItem }) {
-    const styles = useStyles();
-    const theme = useThemeTokens();
-    const dotColor = item.tone === 'success' ? theme.colors.success
-        : item.tone === 'error' ? theme.colors.error
-        : theme.colors.warning;
-    return (
-        <View style={styles.checkRow}>
-            <View style={[styles.dot, { backgroundColor: dotColor }]} />
-            <View style={styles.checkText}>
-                <Typography variant="body-sm" numberOfLines={1}>{item.title}</Typography>
-                <Typography variant="caption" color="muted">{item.timestamp}</Typography>
-            </View>
+        <View style={{ paddingHorizontal: 20, gap: 26, marginTop: 4 }}>
+          <IdentityCard />
+          <Group title="Verified details">
+            <ListRow icon={CalendarDays} title="Date of birth" value={USER.dob} chevron={false} />
+            <ListRow icon={Globe} title="Nationality" value={USER.nationality} chevron={false} />
+            <ListRow icon={MapPin} title="City" value="Mumbai" chevron={false} />
+            <ListRow icon={Phone} title="Mobile" value="+91 •••• 43210" chevron={false} />
+          </Group>
+          <Group title="Linked documents">
+            <ListRow icon={FileText} tone="sky" title="Passport" sub="Verified · Exp. Jan 2033" onPress={go('/document/d1')} />
+            <ListRow icon={FileText} tone="sky" title="Aadhaar" sub="Verified · •••• 7730" onPress={go('/document/d2')} />
+            <ListRow icon={FileText} tone="sky" title="Driving Licence" sub="Verified · Exp. Aug 2034" onPress={go('/document/d3')} />
+          </Group>
         </View>
-    );
+      </ScrollView>
+    </View>
+  );
 }
-
-/** Identity dashboard — GET /cb/identity/summary. Status is computed
- *  server-side: face + document verified → "verified", anything
- *  missing/pending/failed → "incomplete". Design: identity.tsx ScreenFrame 1. */
-export default function IdentityScreen() {
-    const styles = useStyles();
-    const theme = useThemeTokens();
-    const insets = useSafeAreaInsets();
-    const router = useRouter();
-    const { data: summary, isPending, isError, refetch } = useIdentitySummary();
-
-    if (isPending) {
-        return (
-            <SafeAreaView edges={['top']} style={styles.safe}>
-                <ScreenHeader title="Your identity" subtitle="Verification status" onBack={() => router.back()} />
-                <LoadingState label="Loading identity…" />
-            </SafeAreaView>
-        );
-    }
-
-    if (isError || !summary) {
-        return (
-            <SafeAreaView edges={['top']} style={styles.safe}>
-                <ScreenHeader title="Your identity" subtitle="Verification status" onBack={() => router.back()} />
-                <ErrorState
-                    title="Couldn't load identity status"
-                    description="Please check your connection and try again."
-                    onRetry={refetch}
-                />
-            </SafeAreaView>
-        );
-    }
-
-    const verified = summary.status === 'verified';
-
-    const incompleteHint =
-        summary.face !== 'verified' ? 'Complete face verification to finish.'
-        : summary.document === 'missing' ? 'Add a document to finish verification.'
-        : summary.document === 'pending' ? 'Your document is being reviewed.'
-        : summary.document === 'failed' ? 'Document verification failed — try again.'
-        : summary.selfieMatch !== 'verified' ? 'Selfie match is still pending.'
-        : 'Finish verification to unlock check-ins.';
-
-    const cta = summary.document === 'pending'
-        ? { label: 'View document status', route: '/(tabs)/documents' }
-        : summary.document !== 'verified'
-          ? { label: 'Add a document', route: '/document/select-type' }
-          : summary.face !== 'verified'
-            ? { label: 'Verify your face', route: '/face-update/pin' }
-            : null;
-
-    return (
-        <SafeAreaView edges={['top']} style={styles.safe}>
-            <ScreenHeader
-                title="Your identity"
-                subtitle="Verification status"
-                onBack={() => router.back()}
-            />
-            <ScrollView
-                style={styles.flex}
-                contentContainerStyle={[
-                    styles.scrollContent,
-                    { paddingBottom: cta ? theme.sizes.heightLg + theme.spacing[8] : theme.spacing[6] },
-                ]}
-                showsVerticalScrollIndicator={false}>
-                <FadeUp>
-                    <NeuBox variant="raised" depth={6} color={theme.colors.surface} style={styles.card}>
-                        <View style={styles.checkRow}>
-                            <RowIcon
-                                tone={verified ? 'success' : 'warning'}
-                                icon={
-                                    <ShieldCheck
-                                        size={iconSize.lg}
-                                        color={verified ? theme.colors.onSuccessSubtle : theme.colors.onWarningSubtle}
-                                    />
-                                }
-                            />
-                            <View style={styles.checkText}>
-                                <Typography variant="h4">{verified ? "You're verified" : 'Almost there'}</Typography>
-                                <Typography variant="body-sm" color="secondary">
-                                    {verified ? 'Your face and document are verified.' : incompleteHint}
-                                </Typography>
-                            </View>
-                            <StatusChip status={summary.status} />
-                        </View>
-                    </NeuBox>
-                </FadeUp>
-                <FadeUp delay={110}>
-                    <NeuBox variant="raised" depth={4} color={theme.colors.surface} style={[styles.card, styles.cardTight]}>
-                        <CheckRow icon={ScanFace} title="Face enrollment" status={summary.face} />
-                        <Divider style={styles.divider} />
-                        <CheckRow icon={FileText} title="Identity document" status={summary.document} />
-                        <Divider style={styles.divider} />
-                        <CheckRow icon={UserRoundCheck} title="Selfie match" status={summary.selfieMatch} />
-                    </NeuBox>
-                </FadeUp>
-                <FadeUp delay={200}>
-                    <NeuBox variant="raised" depth={4} color={theme.colors.surface} style={styles.card}>
-                        <Typography variant="h4">Recent activity</Typography>
-                        {summary.activity.length > 0 ? (
-                            summary.activity.map((item) => <ActivityRow key={item.id} item={item} />)
-                        ) : (
-                            <EmptyState
-                                compact
-                                title="No activity yet"
-                                description="Verification events will appear here."
-                            />
-                        )}
-                    </NeuBox>
-                </FadeUp>
-            </ScrollView>
-            {cta && (
-                <View style={[styles.footer, { paddingBottom: theme.spacing[4] + insets.bottom }]}>
-                    <CoreButton
-                        fullWidth
-                        size="lg"
-                        accessibilityLabel={cta.label}
-                        onPress={() => router.push(cta.route as never)}>
-                        {cta.label}
-                    </CoreButton>
-                </View>
-            )}
-        </SafeAreaView>
-    );
-}
-
-const useStyles = makeStyles((t) => ({
-    safe: { flex: 1, backgroundColor: t.colors.background },
-    flex: { flex: 1 },
-    scrollContent: { padding: t.spacing[4], gap: t.spacing[4] },
-    card: { padding: t.spacing[4], gap: t.spacing[3] },
-    cardTight: { gap: 0 },
-    checkRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing[3] },
-    checkText: { flex: 1, gap: 2, minWidth: 0 },
-    dot: { width: 8, height: 8, borderRadius: t.radii.full },
-    divider: { marginVertical: t.spacing[3] },
-    footer: {
-        paddingHorizontal: t.spacing[4],
-        paddingTop: t.spacing[4],
-        gap: t.spacing[2],
-    },
-}));

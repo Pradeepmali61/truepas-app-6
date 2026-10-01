@@ -1,55 +1,40 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Users } from 'lucide-react-native';
+/** @jsxImportSource react */
+import { useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ActivityFeed } from '@/components/complex/ActivityFeed';
-import { EmptyState, ErrorState, ScreenHeader } from '@/components/composite';
-import { useFamilyActivity, useFamilyMember } from '@/features/family/hooks';
-import { useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { KIND_ICON } from '@/premium/blocks';
+import { FAMILY, PAST, UPCOMING } from '@/premium/data';
+import { C } from '@/premium/theme';
+import { Avatar, Badge, Card, Heading, Row, Screen, Tile, TopBar, Txt } from '@/premium/ui';
 
-/** Member activity — GET /cb/family/{personId}/activity. The projection isn't
- *  connected yet so this returns []; the empty state is the expected render,
- *  events are not fabricated. */
-export default function FamilyMemberActivityScreen() {
-  const theme = useThemeTokens();
-  const router = useRouter();
-  const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
-  const { data: member } = useFamilyMember(id);
-  const { data: events, isPending, isError, refetch } = useFamilyActivity(id);
-
-  const first = (name ?? member?.name ?? 'Member').split(' ')[0];
-
+/** Member activity — vertical timeline. */
+export default function Activity() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const m = FAMILY.find((x) => x.id === id) ?? FAMILY[0];
+  const items = [PAST[0], PAST[1], UPCOMING[1], PAST[2], PAST[3]];
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title={`${first}'s activity`} onBack={() => router.back()} />
-      {isError ? (
-        <ErrorState
-          title="Couldn't load activity"
-          description="Please check your connection and try again."
-          onRetry={refetch}
-        />
-      ) : (
-        <View style={{ flex: 1, padding: theme.spacing[4] }}>
-          <ActivityFeed
-            loading={isPending}
-            events={(events ?? []).map((e) => ({
-              key: e.id,
-              icon: <Users size={iconSize.sm} color={theme.colors.actionPrimary} />,
-              title: e.title,
-              timestamp: new Date(e.date).toLocaleString(),
-            }))}
-            emptyState={
-              <EmptyState
-                title="No activity yet"
-                description={`Check-ins and verification events for ${first} will appear here once venues start reporting them.`}
-                icon={<Users size={iconSize.lg} color={theme.colors.textMuted} />}
-              />
-            }
-          />
-        </View>
-      )}
-    </SafeAreaView>
+    <Screen header={<TopBar title="Activity" right={<Avatar src={m.image} size={36} />} />} contentStyle={{ paddingTop: 4 }}>
+      <Heading title={`${m.name.split(' ')[0]}'s`} accent="journey." sub="Every face check-in, with time and place." />
+      <View>
+        {items.map((t, i) => (
+          <Row key={t.id + i} gap={14} align="flex-start">
+            <View style={{ alignItems: 'center', width: 44 }}>
+              <Tile icon={KIND_ICON[t.kind]} tone={i === 0 ? 'navy' : 'sky'} size={44} radius={22} />
+              {i < items.length - 1 && <View style={{ width: 2, flex: 1, minHeight: 40, backgroundColor: C.line, marginVertical: 6 }} />}
+            </View>
+            <Card style={{ flex: 1, gap: 6, marginBottom: 14 }} pad={16}>
+              <Row between>
+                <Txt v="bodyStrong">{t.title}</Txt>
+                <Badge label={t.status === 'completed' ? '3.4s' : 'Upcoming'} tone={t.status === 'completed' ? 'green' : 'sky'} />
+              </Row>
+              <Txt v="small">{t.place}</Txt>
+              <Txt v="small" color={C.ink4}>
+                {t.when}
+              </Txt>
+            </Card>
+          </Row>
+        ))}
+      </View>
+    </Screen>
   );
 }

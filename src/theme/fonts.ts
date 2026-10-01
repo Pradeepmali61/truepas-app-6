@@ -10,6 +10,9 @@ import { PlusJakartaSans_400Regular } from "@expo-google-fonts/plus-jakarta-sans
 import { PlusJakartaSans_500Medium } from "@expo-google-fonts/plus-jakarta-sans/500Medium";
 import { PlusJakartaSans_600SemiBold } from "@expo-google-fonts/plus-jakarta-sans/600SemiBold";
 import { PlusJakartaSans_700Bold } from "@expo-google-fonts/plus-jakarta-sans/700Bold";
+import { PlusJakartaSans_800ExtraBold } from "@expo-google-fonts/plus-jakarta-sans/800ExtraBold";
+import { InstrumentSerif_400Regular } from "@expo-google-fonts/instrument-serif/400Regular";
+import { InstrumentSerif_400Regular_Italic } from "@expo-google-fonts/instrument-serif/400Regular_Italic";
 import { SpaceGrotesk_400Regular } from "@expo-google-fonts/space-grotesk/400Regular";
 import { SpaceGrotesk_500Medium } from "@expo-google-fonts/space-grotesk/500Medium";
 import { SpaceGrotesk_600SemiBold } from "@expo-google-fonts/space-grotesk/600SemiBold";
@@ -43,6 +46,9 @@ export const TRUEPAS_FONT_SOURCES: Record<string, FontSource> = {
   PlusJakartaSans_500Medium,
   PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+  InstrumentSerif_400Regular,
+  InstrumentSerif_400Regular_Italic,
   SpaceGrotesk_400Regular,
   SpaceGrotesk_500Medium,
   SpaceGrotesk_600SemiBold,

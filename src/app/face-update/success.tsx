@@ -1,79 +1,41 @@
-import { Redirect, useRouter } from 'expo-router';
-import { ShieldCheck, Sparkles } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+/** @jsxImportSource react */
+import { Image } from 'expo-image';
+import { ArrowRight, Check } from 'lucide-react-native';
 import { View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Badge, CoreButton, FadeUp, PopIn, RowIcon, Typography } from '@/components/ui';
-import { flowGuards } from '@/services/flowGuards';
-import { useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { IMG } from '@/premium/images';
+import { C } from '@/premium/theme';
+import { Badge, Button, Card, go, Row, Txt } from '@/premium/ui';
+import { ResultView } from '@/premium/views';
 
-/** Update face — success (ref: Facepe FaceSuccessModal). Only reachable
- *  after the camera flow confirmed a server-side face update. */
-export default function FaceUpdateSuccessScreen() {
-  const theme = useThemeTokens();
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const [allowed] = useState(() => flowGuards.has('face-update:done'));
-
-  useEffect(() => {
-    if (allowed) flowGuards.consume('face-update:done');
-  }, [allowed]);
-
-  if (!allowed) return <Redirect href="/" />;
-
+/** Check-in success — CLEAR-style "You're in". */
+export default function FaceSuccess() {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <View
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: theme.spacing[5],
-          gap: theme.spacing[4],
-        }}>
-        <PopIn>
-          <RowIcon
-            tone="success"
-            icon={<ShieldCheck size={iconSize.xl} color={theme.colors.onSuccessSubtle} />}
-          />
-        </PopIn>
-        <FadeUp delay={150} style={{ alignItems: 'center', gap: theme.spacing[2] }}>
-          <Typography variant="h3" center>
-            Face Updated!
-          </Typography>
-          <Typography variant="body" color="secondary" center>
-            Your biometric profile is updated and ready for secure authentication.
-          </Typography>
-        </FadeUp>
-        <FadeUp delay={240} style={{ alignItems: 'center', gap: theme.spacing[3] }}>
-          <Badge variant="success">Verified & Secure</Badge>
-          <View style={{ flexDirection: 'row', gap: theme.spacing[2], flexWrap: 'wrap', justifyContent: 'center' }}>
-            <Badge variant="neutral" icon={<ShieldCheck size={iconSize.xs} color={theme.colors.textSecondary} />}>
-              Bank-grade Encryption
-            </Badge>
-            <Badge variant="neutral" icon={<Sparkles size={iconSize.xs} color={theme.colors.textSecondary} />}>
-              Instant Auth Enabled
-            </Badge>
-          </View>
-        </FadeUp>
-      </View>
-      <View
-        style={{
-          paddingHorizontal: theme.spacing[4],
-          paddingTop: theme.spacing[4],
-          paddingBottom: theme.spacing[4] + insets.bottom,
-          gap: theme.spacing[2],
-        }}>
-        <CoreButton
-          fullWidth
-          size="lg"
-          accessibilityLabel="Done"
-          onPress={() => router.dismissTo('/(tabs)')}>
-          Done
-        </CoreButton>
-      </View>
-    </SafeAreaView>
+    <ResultView
+      close
+      icon={Check}
+      tone="green"
+      over="Matched in 0.8 seconds"
+      title="Welcome,"
+      accent="Pradeep."
+      sub="You're checked in at Marine Bay Grand. Your room key is ready on your phone."
+      primary={<Button label="Open digital key" iconRight={ArrowRight} onPress={go('/booking/t1')} />}
+      secondary={<Button label="Back to home" tone="ghost" onPress={go('/(tabs)')} />}>
+      <Card pad={0} style={{ overflow: 'hidden' }}>
+        <Image source={IMG.room} style={{ height: 150 }} contentFit="cover" />
+        <View style={{ padding: 18, gap: 8 }}>
+          <Row between>
+            <Txt v="h3">Room 1208</Txt>
+            <Badge label="Checked in" tone="green" dot />
+          </Row>
+          <Row between>
+            <Txt v="small">Deluxe Sea View · Floor 12</Txt>
+            <Txt v="small" color={C.ink}>
+              Until Sat, 11 AM
+            </Txt>
+          </Row>
+        </View>
+      </Card>
+    </ResultView>
   );
 }

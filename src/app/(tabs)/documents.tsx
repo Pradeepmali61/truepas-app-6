@@ -1,167 +1,77 @@
-/**
- * Documents tab — ported 1:1 from UI-design-repo `screens/main/IdentityScreen.tsx`:
- * identity-status summary hero, the user's document wallet (DocumentRow), and
- * venue-issued credentials (IssuedCard).
- *
- * Data comes from the real hooks (useIdentitySummary / useDocuments) in place
- * of the design's useApiData store. There is no issued-credentials endpoint in
- * our API yet, so that section renders the design's empty state.
- */
-import { useRouter } from 'expo-router';
-import { FileText, Plus, ScanFace, UserRoundCheck } from 'lucide-react-native';
-import { RefreshControl, ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+/** @jsxImportSource react */
+import { Plus, ShieldCheck } from 'lucide-react-native';
+import { ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AsyncBlock, EmptyState, ScreenHeader, Section, SectionTitle, SkeletonRows } from '@/components/composite';
-import { DocumentRow } from '@/components/truepas';
-import { Divider, FadeUp, NeuBox, Skeleton, SoftIconButton, StatusChip, Typography } from '@/components/ui';
-import { useDocuments } from '@/features/documents/hooks';
-import { useIdentitySummary } from '@/features/identity/hooks';
-import { makeStyles, useThemeTokens } from '@/theme';
-import { iconSize } from '@/theme/tokens';
+import { DocCard, TAB_BAR_SPACE } from '@/premium/blocks';
+import { DOCS } from '@/premium/data';
+import { C, F, R } from '@/premium/theme';
+import { Badge, Card, Chip, go, IconCircle, Row, SectionHead, Serif, Tile, Txt } from '@/premium/ui';
 
-/** Height of the floating bottom tab pill (see (tabs)/_layout.tsx). */
-const TAB_BAR_HEIGHT = 88;
+/** Wallet — identity documents as a fanned card stack (Apple Wallet feel). */
+export default function Wallet() {
+  return (
+    <View style={{ flex: 1, backgroundColor: C.canvas }}>
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: TAB_BAR_SPACE + 20, gap: 26 }}>
+          <Row between>
+            <Text style={{ fontFamily: F.extrabold, fontSize: 34, letterSpacing: -1.1, color: C.ink }}>
+              Wallet
+            </Text>
+            <IconCircle icon={Plus} tone="sky" label="Add document" onPress={go('/document/select-type')} />
+          </Row>
 
-export default function DocumentsScreen() {
-    const styles = useStyles();
-    const t = useThemeTokens();
-    const insets = useSafeAreaInsets();
-    const router = useRouter();
+          <Card pad={16} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <Tile icon={ShieldCheck} tone="green" size={46} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Txt v="bodyStrong">3 of 4 documents verified</Txt>
+              <Txt v="small">Your identity strength is excellent</Txt>
+            </View>
+            <Text style={{ fontFamily: F.extrabold, fontSize: 22, color: C.green }}>92</Text>
+          </Card>
 
-    const summary = useIdentitySummary();
-    const documents = useDocuments();
+          <Row gap={8}>
+            <Chip label="All" active />
+            <Chip label="Identity" />
+            <Chip label="Travel" />
+            <Chip label="Driving" />
+          </Row>
 
-    const refreshing = summary.isRefetching || documents.isRefetching;
-    const onRefresh = () => {
-        void summary.refetch();
-        void documents.refetch();
-    };
+          {/* fanned stack */}
+          <View style={{ height: 196 + 3 * 74 }}>
+            {DOCS.map((d, i) => (
+              <View key={d.id} style={{ position: 'absolute', left: 0, right: 0, top: i * 74 }}>
+                <DocCard doc={d} onPress={go(`/document/${d.id}`)} />
+              </View>
+            ))}
+          </View>
 
-    const scrollBottom = TAB_BAR_HEIGHT + insets.bottom + t.spacing[4];
+          <SectionHead title="Add more to your wallet" />
+          <Row gap={12}>
+            {[
+              { t: 'Voter ID', s: 'Election Commission' },
+              { t: 'Visa', s: 'Any country' },
+            ].map((x) => (
+              <Card key={x.t} onPress={go('/document/select-type')} style={{ flex: 1, gap: 12, borderStyle: 'dashed', borderColor: C.line, borderWidth: 1.5 }} flat>
+                <View style={{ width: 36, height: 36, borderRadius: R.sm, backgroundColor: C.skyWash, alignItems: 'center', justifyContent: 'center' }}>
+                  <Plus size={18} color={C.skyPressed} />
+                </View>
+                <View>
+                  <Txt v="bodyStrong">{x.t}</Txt>
+                  <Txt v="small">{x.s}</Txt>
+                </View>
+              </Card>
+            ))}
+          </Row>
 
-    return (
-        <SafeAreaView edges={['top']} style={styles.screen}>
-            <ScreenHeader
-                title="Documents"
-                actions={
-                    <SoftIconButton
-                        icon={Plus}
-                        size={44}
-                        accessibilityLabel="Add document"
-                        onPress={() => router.push('/document/select-type' as never)}
-                    />
-                }
-            />
-            <ScrollView
-                style={styles.flex}
-                contentContainerStyle={[styles.body, { paddingBottom: scrollBottom }]}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={t.colors.actionPrimary} />
-                }>
-                {/* ---------- identity status hero ---------- */}
-                <AsyncBlock
-                    state={{
-                        data: summary.data,
-                        isPending: summary.isPending,
-                        isError: summary.isError,
-                        error: summary.error,
-                        refetch: () => void summary.refetch(),
-                    }}
-                    skeleton={<Skeleton variant="rect" height={168} style={styles.skeletonCard} />}>
-                    {(s) => {
-                        const checks = [
-                            { label: 'Face enrollment', value: s.face, icon: ScanFace },
-                            { label: 'Identity document', value: s.document, icon: FileText },
-                            { label: 'Selfie match', value: s.selfieMatch, icon: UserRoundCheck },
-                        ];
-                        return (
-                            <NeuBox variant="raised" style={styles.card}>
-                                <View style={styles.row}>
-                                    <Typography variant="h4" style={styles.flex}>
-                                        Identity status
-                                    </Typography>
-                                    <StatusChip status={s.status} />
-                                </View>
-                                <Divider />
-                                {checks.map((c, i) => (
-                                    <View key={c.label} style={styles.checkItem}>
-                                        {i > 0 && <Divider />}
-                                        <View style={styles.row}>
-                                            <c.icon size={iconSize.md} color={t.colors.actionPrimary} />
-                                            <Typography variant="body" style={styles.flex}>
-                                                {c.label}
-                                            </Typography>
-                                            <StatusChip status={c.value} />
-                                        </View>
-                                    </View>
-                                ))}
-                            </NeuBox>
-                        );
-                    }}
-                </AsyncBlock>
-
-                {/* ---------- your documents ---------- */}
-                <Section>
-                    <SectionTitle>Your documents</SectionTitle>
-                    <AsyncBlock
-                        state={{
-                            data: documents.data,
-                            isPending: documents.isPending,
-                            isError: documents.isError,
-                            error: documents.error,
-                            refetch: () => void documents.refetch(),
-                        }}
-                        empty={(docs) => docs.length === 0}
-                        emptyTitle="No documents yet"
-                        emptyBody="Add a passport, ID card, or license to verify your identity."
-                        skeleton={<SkeletonRows />}>
-                        {(docs) => (
-                            <Section>
-                                {docs.map((d, i) => (
-                                    <FadeUp key={d.id} delay={Math.min(i, 8) * 60}>
-                                        <DocumentRow
-                                            doc={{
-                                                label: d.label,
-                                                number: d.number,
-                                                status: d.status,
-                                                expiresAt: d.expiresAt ? d.expiresAt.split('T')[0] : null,
-                                                matchScore: d.matchScore,
-                                                type: d.type,
-                                            }}
-                                            onPress={() => router.push(`/document/${d.id}` as never)}
-                                        />
-                                    </FadeUp>
-                                ))}
-                            </Section>
-                        )}
-                    </AsyncBlock>
-                </Section>
-
-                {/* ---------- issued to you ---------- */}
-                <Section>
-                    <SectionTitle>Issued to you</SectionTitle>
-                    <EmptyState
-                        title="No issued credentials"
-                        description="Credentials issued at venue check-ins appear here."
-                    />
-                </Section>
-            </ScrollView>
-        </SafeAreaView>
-    );
+          <View style={{ alignItems: 'center', gap: 8 }}>
+            <Badge label="Stored with AES-256 · on-device keys" tone="neutral" icon={ShieldCheck} />
+            <Txt v="small" color={C.ink4} center>
+              Documents are only shared when <Serif size={15} color={C.ink3}>you</Serif> approve.
+            </Txt>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
+  );
 }
-
-const useStyles = makeStyles((t) => ({
-    screen: { flex: 1, backgroundColor: t.colors.background },
-    flex: { flex: 1 },
-    body: {
-        paddingHorizontal: t.spacing[4],
-        paddingTop: t.spacing[4],
-        gap: t.spacing[6],
-    },
-    card: { padding: t.spacing[4], gap: t.spacing[3] },
-    checkItem: { gap: t.spacing[3] },
-    row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing[3] },
-    skeletonCard: { borderRadius: t.radii.xl },
-}));
