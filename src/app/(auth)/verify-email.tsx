@@ -1,36 +1,111 @@
 /** @jsxImportSource react */
-import { ExternalLink, MailCheck } from 'lucide-react-native';
-import { View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { Alert } from 'react-native';
 
-import { USER } from '@/premium/data';
-import { C } from '@/premium/theme';
-import { Button, Card, go, Row, TextLink, Txt } from '@/premium/ui';
-import { ResultView } from '@/premium/views';
+import { api } from '@/api';
+import { clearRegistrationToken } from '@/api/client';
+import { sessionStarted } from '@/features/auth/slice';
+import { OtpScreen, SIGNUP_STEPS } from '@/premium/flows/auth';
+import { accountDetailsStore } from '@/services/accountDetailsStore';
+import { useAppDispatch } from '@/store';
 
-/** Email confirmation — calm, single-purpose. */
-export default function VerifyEmail() {
+/** Verify email OTP — registration flow step 4 (contract v1.1.0).
+ *  Email verification returns AuthResponse; dispatch sessionStarted and
+ *  route to biometric consent (faceEnrolled is false at this point). */
+export default function VerifyEmailScreen() {
+  const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { email } = useLocalSearchParams<{ email?: string }>();
+
+  useEffect(() => {
+    console.log('[VerifyEmail] Params received:', { email });
+    if (!email) {
+      // Direct navigation (dev-screen jump / reload on this route) — the OTP
+      // screen is useless without the email. Send the user back to register
+      // instead of rendering a broken OTP form.
+      console.warn('[VerifyEmail] Missing email param — redirecting to register.');
+      router.replace('/(auth)/register');
+    }
+  }, [email, router]);
+
+  if (!email) {
+    return null;
+  }
+
   return (
-    <ResultView
-      icon={MailCheck}
+    <OtpScreen
+      topTitle="Verify email"
+      step={{ current: 4, total: SIGNUP_STEPS }}
       over="Almost there"
       title="Check your"
       accent="inbox."
-      sub="Tap the secure link we just sent to confirm your email. It expires in 15 minutes."
-      primary={<Button label="Open mail app" icon={ExternalLink} onPress={go('/(auth)/account-details')} />}
-      secondary={
-        <Row style={{ justifyContent: 'center', paddingVertical: 6 }}>
-          <TextLink label="Resend email" />
-        </Row>
-      }>
-      <Card style={{ gap: 4, alignItems: 'center' }}>
-        <Txt v="small">Sent to</Txt>
-        <Txt v="bodyStrong">{USER.email}</Txt>
-      </Card>
-      <View style={{ alignItems: 'center' }}>
-        <Txt v="small" color={C.ink4} center style={{ maxWidth: 280 }}>
-          Can't find it? Check your spam or promotions folder.
-        </Txt>
-      </View>
-    </ResultView>
+      sub="Enter the 6-digit code we emailed you to confirm your address."
+      address={email}
+      tip="Can't find it? Check your spam or promotions folder."
+      purpose="email"
+      identifier={{ email: email ?? '' }}
+      onResend={async () => {
+        // The backend has no dedicated resend endpoint — the email OTP is sent
+        // by POST /auth/account-details. Re-submit the stashed payload (the
+        // registration token is still in api/client memory) to trigger a
+        // fresh email.
+        const payload = accountDetailsStore.get();
+        if (!payload) {
+          throw new Error('Registration session expired. Please sign up again.');
+        }
+        await api.completeAccountDetails(payload);
+      }}
+      onVerified={(response) => {
+        console.log(
+          '[VerifyEmail] Verification response:',
+          JSON.stringify({
+            ok: response.ok,
+            nextStep: response.nextStep,
+            hasUser: !!response.user,
+            hasAccessToken: !!response.accessToken,
+          }),
+        );
+        // Registration session fully consumed — release the in-memory token
+        // and the stashed account-details payload.
+        clearRegistrationToken();
+        accountDetailsStore.clear();
+        // Email verification during registration returns AuthResponse fields
+        // (user, accessToken, refreshToken) embedded in VerifyOtpResponse.
+        if (response.user && response.accessToken) {
+          dispatch(
+            sessionStarted({
+              user: response.user,
+              accessToken: response.accessToken,
+              refreshToken: response.refreshToken,
+            }),
+          );
+          // Navigate to consent — the auth layout will redirect to consent
+          // because faceEnrolled is false
+          router.replace('/(onboarding)/consent');
+          return;
+        }
+        // Verified but no session tokens — without sessionStarted the
+        // onboarding layout would bounce the user to /welcome silently.
+        // The account almost certainly exists (email is verified), so send
+        // them to login where they can recover with their new password.
+        console.error(
+          '[VerifyEmail] Missing user/accessToken in verify response:',
+          JSON.stringify({
+            ...response,
+            registrationToken: response.registrationToken ? '***' : undefined,
+            accessToken: response.accessToken ? '***' : undefined,
+            refreshToken: response.refreshToken ? '***' : undefined,
+          }),
+        );
+        Alert.alert(
+          'Almost there',
+          'Your email is verified, but we could not sign you in automatically. Please log in with your new password.',
+          [{ text: 'Go to sign in', onPress: () => router.replace('/(auth)/login') }],
+          { cancelable: false },
+        );
+      }}
+      change={{ prompt: 'Wrong address?', label: 'Go back' }}
+    />
   );
 }

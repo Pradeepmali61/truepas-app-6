@@ -7,7 +7,7 @@ import { Image, type ImageStyle } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Check, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react-native";
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -88,7 +88,7 @@ export function Press({
   disabled?: boolean;
   role?: "button" | "link";
 }) {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = useState(() => new Animated.Value(1))[0];
   const flat = (StyleSheet.flatten(style) ?? {}) as ViewStyle;
   const outer: ViewStyle = {
     flex: flat.flex,

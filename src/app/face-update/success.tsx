@@ -1,41 +1,39 @@
 /** @jsxImportSource react */
-import { Image } from 'expo-image';
-import { ArrowRight, Check } from 'lucide-react-native';
+import { Redirect, useRouter } from 'expo-router';
+import { ShieldCheck, Sparkles } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { IMG } from '@/premium/images';
-import { C } from '@/premium/theme';
-import { Badge, Button, Card, go, Row, Txt } from '@/premium/ui';
+import { Badge, Button } from '@/premium/ui';
 import { ResultView } from '@/premium/views';
+import { flowGuards } from '@/services/flowGuards';
 
-/** Check-in success — CLEAR-style "You're in". */
-export default function FaceSuccess() {
+/** Update face — success. Only reachable after the camera flow confirmed a
+ *  server-side face update (PUT /face). */
+export default function FaceUpdateSuccessScreen() {
+  const router = useRouter();
+  const [allowed] = useState(() => flowGuards.has('face-update:done'));
+
+  useEffect(() => {
+    if (allowed) flowGuards.consume('face-update:done');
+  }, [allowed]);
+
+  if (!allowed) return <Redirect href="/" />;
+
   return (
     <ResultView
       close
-      icon={Check}
+      icon={ShieldCheck}
       tone="green"
-      over="Matched in 0.8 seconds"
-      title="Welcome,"
-      accent="Pradeep."
-      sub="You're checked in at Marine Bay Grand. Your room key is ready on your phone."
-      primary={<Button label="Open digital key" iconRight={ArrowRight} onPress={go('/booking/t1')} />}
-      secondary={<Button label="Back to home" tone="ghost" onPress={go('/(tabs)')} />}>
-      <Card pad={0} style={{ overflow: 'hidden' }}>
-        <Image source={IMG.room} style={{ height: 150 }} contentFit="cover" />
-        <View style={{ padding: 18, gap: 8 }}>
-          <Row between>
-            <Txt v="h3">Room 1208</Txt>
-            <Badge label="Checked in" tone="green" dot />
-          </Row>
-          <Row between>
-            <Txt v="small">Deluxe Sea View · Floor 12</Txt>
-            <Txt v="small" color={C.ink}>
-              Until Sat, 11 AM
-            </Txt>
-          </Row>
-        </View>
-      </Card>
+      over="Verified & secure"
+      title="Face"
+      accent="updated."
+      sub="Your biometric profile is updated and ready for secure authentication."
+      primary={<Button label="Done" onPress={() => router.dismissTo('/(tabs)')} />}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+        <Badge label="Bank-grade encryption" tone="neutral" icon={ShieldCheck} />
+        <Badge label="Instant auth enabled" tone="neutral" icon={Sparkles} />
+      </View>
     </ResultView>
   );
 }

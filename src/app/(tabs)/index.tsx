@@ -1,136 +1,337 @@
 /** @jsxImportSource react */
-import { Bell, FileScan, KeyRound, QrCode, ScanFace, UserPlus } from 'lucide-react-native';
-import { ScrollView, Text, View } from 'react-native';
+/**
+ * Home — "my identity + my journey". Premium layout over the real data the
+ * original HomeScreen used: useFamily / useBookings / useNotifications(unread)
+ * plus the identity summary for the identity-card badge.
+ *
+ * Header avatar opens the profile drawer (account card + settings menu +
+ * sign out / delete account); bell shows the unread dot; next upcoming
+ * booking is the hero; family strip (Add / You / members with face status);
+ * the two most recent past check-ins; pull-to-refresh refetches everything.
+ */
+import { useRouter } from 'expo-router';
+import { Bell, CalendarDays, FileScan, KeyRound, type LucideIcon, QrCode, ScanFace, UserPlus } from 'lucide-react-native';
+import { useState, type ReactNode } from 'react';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { IdentityCard, JourneyCard, JourneyHero, TAB_BAR_SPACE, TripRow } from '@/premium/blocks';
-import { FAMILY, PAST, UPCOMING, USER } from '@/premium/data';
+import { useFamily } from '@/features/family/hooks';
+import { useBookings } from '@/features/history/hooks';
+import { useIdentitySummary } from '@/features/identity/hooks';
+import { useNotifications } from '@/features/notifications/hooks';
+import { useProfilePicture } from '@/features/profile/hooks';
+import { IdentityCard, TAB_BAR_SPACE } from '@/premium/blocks';
+import {
+  BookingCarouselCard,
+  BookingHero,
+  BookingRow,
+  greeting,
+  isTodayIso,
+  ProfileDrawer,
+  SoonAction,
+} from '@/premium/flows/home';
+import { Async, Bone, ComingSoon, EmptyView, SkeletonList } from '@/premium/kit';
 import { C, F, R } from '@/premium/theme';
-import { Avatar, Button, Card, Divider, go, IconCircle, Press, Row, SectionHead, Serif, Tile, Txt } from '@/premium/ui';
+import { Avatar, Button, Card, Divider, IconCircle, Press, Row, SectionHead, Serif, Tile, Txt } from '@/premium/ui';
+import { useAppSelector } from '@/store';
 
-/** Home — "My identity + my journey": greeting, identity, today's check-in, what's next. */
-export default function Home() {
-  const [today, ...next] = UPCOMING;
+export default function HomeScreen() {
+  const router = useRouter();
+  const user = useAppSelector((state) => state.auth.user);
+  const { url: avatarUri } = useProfilePicture();
+  const [drawer, setDrawer] = useState(false);
+
+  const family = useFamily();
+  const bookings = useBookings();
+  const unread = useNotifications(true);
+  const summary = useIdentitySummary();
+
+  const hasUnread = (unread.data?.pages.flat() ?? []).length > 0;
+  const past = bookings.data?.filter((b) => b.status !== 'upcoming') ?? [];
+  const upcoming = (bookings.data?.filter((b) => b.status === 'upcoming') ?? []).sort((a, b) =>
+    a.checkIn.localeCompare(b.checkIn),
+  );
+  const [nextUpcoming, ...laterUpcoming] = upcoming;
+
+  const refreshing = family.isRefetching || bookings.isRefetching || unread.isRefetching || summary.isRefetching;
+  const onRefresh = () => {
+    void family.refetch();
+    void bookings.refetch();
+    void unread.refetch();
+    void summary.refetch();
+  };
+
+  const open = (href: string) => () => router.push(href as never);
+  const firstName = user?.fullName?.trim().split(/\s+/)[0] ?? '';
+
+  /* Identity-card badge: the server-computed summary when we have it,
+     otherwise the session's face-enrolment flag. */
+  const idVerified = summary.data ? summary.data.status === 'verified' : !!user?.faceEnrolled;
+  const idLabel = summary.data
+    ? summary.data.status === 'verified'
+      ? 'Verified'
+      : 'Incomplete'
+    : user?.faceEnrolled
+      ? 'Face linked'
+      : 'Setup pending';
+
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: TAB_BAR_SPACE + 20, gap: 30 }}>
-          {/* greeting */}
+        <ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: TAB_BAR_SPACE + 20, gap: 30 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.sky} />}
+        >
+          {/* ---------- greeting + identity ---------- */}
           <View style={{ paddingHorizontal: 20, paddingTop: 8, gap: 22 }}>
             <Row between>
-              <Press onPress={go('/profile')}>
+              <Press onPress={() => setDrawer(true)} label="Profile" role="button">
                 <Row gap={12}>
-                  <Avatar src="user" size={46} ring />
+                  <Avatar uri={avatarUri} name={user?.fullName} size={46} ring />
                   <View>
-                    <Txt v="small">Good evening</Txt>
-                    <Txt v="h3" style={{ fontSize: 19 }}>
-                      {USER.first}
+                    <Txt v="small">{greeting()}</Txt>
+                    <Txt v="h3" style={{ fontSize: 19 }} lines={1}>
+                      {firstName}
                     </Txt>
                   </View>
                 </Row>
               </Press>
-              <Row gap={10}>
-                <IconCircle icon={QrCode} label="Show pass" onPress={go('/identity')} />
-                <IconCircle icon={Bell} label="Notifications" dot onPress={go('/notification')} />
-              </Row>
+              <IconCircle icon={Bell} label="Notifications" dot={hasUnread} onPress={open('/notification')} />
             </Row>
 
             <Text style={{ fontFamily: F.extrabold, fontSize: 34, lineHeight: 40, letterSpacing: -1.1, color: C.ink }}>
               Where are you{'\n'}going <Serif size={40} color={C.sky}>today?</Serif>
             </Text>
 
-            <IdentityCard compact onPress={go('/identity')} />
-          </View>
-
-          {/* today — the primary moment */}
-          <View style={{ paddingHorizontal: 20, gap: 16 }}>
-            <SectionHead title="Today" action="Details" onAction={go(`/booking/${today.id}`)} />
-            <JourneyHero
-              trip={today}
-              onPress={go(`/booking/${today.id}`)}
-              cta={<Button label="Check in with your face" icon={ScanFace} onPress={go('/face-update/camera')} />}
+            <IdentityCard
+              compact
+              name={user?.fullName ?? ''}
+              idLine={user?.email ?? ''}
+              photoUri={avatarUri ?? null}
+              verified={idVerified}
+              statusLabel={idLabel}
+              onPress={open('/identity')}
             />
           </View>
 
-          {/* coming up */}
-          <View style={{ gap: 16 }}>
-            <View style={{ paddingHorizontal: 20 }}>
-              <SectionHead title="Coming up" action="See all" onAction={go('/(tabs)/history')} />
+          {/* ---------- next check-in — the primary moment ---------- */}
+          {bookings.isPending && bookings.data == null ? (
+            <View style={{ paddingHorizontal: 20, gap: 16 }}>
+              <Bone w="38%" h={20} />
+              <Bone h={320} r={R.xxl} />
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 14, paddingBottom: 16 }}>
-              {next.map((t) => (
-                <JourneyCard key={t.id} trip={t} onPress={go(`/booking/${t.id}`)} />
-              ))}
-            </ScrollView>
-          </View>
+          ) : nextUpcoming != null ? (
+            <View style={{ paddingHorizontal: 20, gap: 16 }}>
+              <SectionHead
+                title={isTodayIso(nextUpcoming.checkIn) ? 'Today' : 'Next check-in'}
+                action="Details"
+                onAction={open(`/booking/${nextUpcoming.id}`)}
+              />
+              <BookingHero
+                b={nextUpcoming}
+                onPress={open(`/booking/${nextUpcoming.id}`)}
+                cta={
+                  <SoonAction light>
+                    <Button label="Check in with your face" icon={ScanFace} />
+                  </SoonAction>
+                }
+              />
+            </View>
+          ) : null}
 
-          {/* quick actions */}
-          <View style={{ paddingHorizontal: 20, gap: 16, marginTop: -14 }}>
+          {/* ---------- coming up ---------- */}
+          {laterUpcoming.length > 0 && (
+            <View style={{ gap: 16 }}>
+              <View style={{ paddingHorizontal: 20 }}>
+                <SectionHead title="Coming up" action="See all" onAction={open('/(tabs)/history')} />
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20, gap: 14, paddingBottom: 16 }}
+              >
+                {laterUpcoming.map((b) => (
+                  <BookingCarouselCard key={b.id} b={b} onPress={open(`/booking/${b.id}`)} />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* ---------- quick actions ---------- */}
+          <View style={{ paddingHorizontal: 20, gap: 16, marginTop: laterUpcoming.length > 0 ? -14 : 0 }}>
             <SectionHead title="Quick actions" />
-            <Row gap={10}>
-              {[
-                { icon: FileScan, label: 'Add\ndocument', href: '/document/select-type' },
-                { icon: UserPlus, label: 'Add\nfamily', href: '/family/add' },
-                { icon: QrCode, label: 'Share\nidentity', href: '/identity' },
-                { icon: KeyRound, label: 'Digital\nkeys', href: `/booking/${today.id}` },
-              ].map((a) => (
-                <Press key={a.label} onPress={go(a.href)} style={{ flex: 1 }}>
-                  <Card pad={14} style={{ alignItems: 'center', gap: 10, borderRadius: R.lg }}>
-                    <Tile icon={a.icon} tone="sky" size={44} radius={22} />
-                    <Txt v="smallStrong" center style={{ fontSize: 12.5, lineHeight: 16 }}>
-                      {a.label}
-                    </Txt>
-                  </Card>
-                </Press>
-              ))}
+            <Row gap={10} align="stretch">
+              <QuickAction icon={FileScan} label={'Add\ndocument'} onPress={open('/document/select-type')} />
+              <QuickAction icon={UserPlus} label={'Add\nfamily'} onPress={open('/family/add')} />
+              <QuickAction icon={QrCode} label={'Share\nidentity'} soon />
+              <QuickAction icon={KeyRound} label={'Digital\nkeys'} soon />
             </Row>
           </View>
 
-          {/* family */}
+          {/* ---------- family ---------- */}
           <View style={{ paddingHorizontal: 20, gap: 16 }}>
-            <SectionHead title="Travelling together" action="Manage" onAction={go('/family')} />
+            <SectionHead title="Travelling together" action="Manage" onAction={open('/family')} />
             <Card pad={18}>
-              <Row between>
-                <Row gap={0}>
-                  {FAMILY.map((m, i) => (
-                    <View key={m.id} style={{ marginLeft: i === 0 ? 0 : -12, borderRadius: 30, borderWidth: 3, borderColor: C.surface }}>
-                      <Avatar src={m.image} size={46} />
-                    </View>
-                  ))}
-                </Row>
-                <Press onPress={go('/family/add')}>
-                  <View style={{ width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.ink4, alignItems: 'center', justifyContent: 'center' }}>
-                    <UserPlus size={19} color={C.ink2} />
-                  </View>
-                </Press>
-              </Row>
-              <Divider style={{ marginVertical: 16 }} />
-              <Row between>
-                <View style={{ gap: 2 }}>
-                  <Txt v="bodyStrong">4 family members</Txt>
-                  <Txt v="small">3 verified · 1 awaiting face scan</Txt>
-                </View>
-                <View style={{ height: 8, width: 92, borderRadius: 4, backgroundColor: C.sunken, overflow: 'hidden' }}>
-                  <View style={{ width: '75%', height: '100%', backgroundColor: C.sky, borderRadius: 4 }} />
-                </View>
-              </Row>
+              <Async
+                q={family}
+                compact
+                skeleton={
+                  <Row gap={16}>
+                    {[0, 1, 2, 3].map((i) => (
+                      <View key={i} style={{ alignItems: 'center', gap: 8 }}>
+                        <Bone w={50} h={50} r={25} />
+                        <Bone w={36} h={10} />
+                      </View>
+                    ))}
+                  </Row>
+                }
+              >
+                {(members) => {
+                  const enrolled = members.filter((m) => m.faceEnrolled).length;
+                  return (
+                    <>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingRight: 4 }}>
+                        <StripCell label="Add" a11y="Add family member" onPress={open('/family/add')}>
+                          <View
+                            style={{
+                              width: 50,
+                              height: 50,
+                              borderRadius: 25,
+                              borderWidth: 1.5,
+                              borderStyle: 'dashed',
+                              borderColor: C.ink4,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <UserPlus size={19} color={C.ink2} />
+                          </View>
+                        </StripCell>
+                        <StripCell label="You" a11y="Your profile" onPress={() => setDrawer(true)}>
+                          <Avatar uri={avatarUri} name={user?.fullName} size={50} status={user?.faceEnrolled ? 'verified' : 'pending'} />
+                        </StripCell>
+                        {members.map((m) => (
+                          <StripCell key={m.id} label={m.name.split(' ')[0]} a11y={m.name} onPress={open(`/family/${m.id}`)}>
+                            <Avatar name={m.name} size={50} status={m.faceEnrolled ? 'verified' : 'pending'} />
+                          </StripCell>
+                        ))}
+                      </ScrollView>
+                      <Divider style={{ marginVertical: 16 }} />
+                      <Row between>
+                        <View style={{ gap: 2, flex: 1 }}>
+                          <Txt v="bodyStrong">
+                            {members.length === 0
+                              ? 'No family members yet'
+                              : `${members.length} family member${members.length === 1 ? '' : 's'}`}
+                          </Txt>
+                          <Txt v="small">
+                            {members.length === 0
+                              ? 'Add family to check in together.'
+                              : `${enrolled} face enrolled · ${members.length - enrolled} awaiting face scan`}
+                          </Txt>
+                        </View>
+                        {members.length > 0 && (
+                          <View style={{ height: 8, width: 92, borderRadius: 4, backgroundColor: C.sunken, overflow: 'hidden' }}>
+                            <View
+                              style={{
+                                width: `${(enrolled / members.length) * 100}%`,
+                                height: '100%',
+                                backgroundColor: C.sky,
+                                borderRadius: 4,
+                              }}
+                            />
+                          </View>
+                        )}
+                      </Row>
+                    </>
+                  );
+                }}
+              </Async>
             </Card>
           </View>
 
-          {/* recent */}
+          {/* ---------- previous check-ins ---------- */}
           <View style={{ paddingHorizontal: 20, gap: 8 }}>
-            <SectionHead title="Recent check-ins" action="History" onAction={go('/(tabs)/history')} />
-            <Card pad={0} style={{ paddingHorizontal: 14, paddingVertical: 4 }}>
-              {PAST.slice(0, 3).map((t, i) => (
-                <View key={t.id}>
-                  {i > 0 && <Divider inset={76} />}
-                  <TripRow trip={t} onPress={go(`/booking/${t.id}`)} />
-                </View>
-              ))}
-            </Card>
+            <SectionHead title="Recent check-ins" action="See all" onAction={open('/(tabs)/history')} />
+            <Async q={bookings} compact skeleton={<SkeletonList rows={2} thumb={62} />}>
+              {() =>
+                past.length === 0 ? (
+                  <Card>
+                    <EmptyView
+                      compact
+                      icon={CalendarDays}
+                      title="No check-ins yet"
+                      body="When you check in at a venue with Truepas, it shows up here."
+                    />
+                  </Card>
+                ) : (
+                  <Card pad={0} style={{ paddingHorizontal: 14, paddingVertical: 4 }}>
+                    {past.slice(0, 2).map((b, i) => (
+                      <View key={b.id}>
+                        {i > 0 && <Divider inset={76} />}
+                        <BookingRow b={b} onPress={open(`/booking/${b.id}`)} />
+                      </View>
+                    ))}
+                  </Card>
+                )
+              }
+            </Async>
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <ProfileDrawer visible={drawer} onClose={() => setDrawer(false)} />
     </View>
+  );
+}
+
+function QuickAction({ icon, label, onPress, soon }: { icon: LucideIcon; label: string; onPress?: () => void; soon?: boolean }) {
+  const body = (
+    <Card pad={14} style={{ alignItems: 'center', gap: 10, borderRadius: R.lg, flex: 1 }}>
+      <Tile icon={icon} tone="sky" size={44} radius={22} />
+      <Txt v="smallStrong" center style={{ fontSize: 12.5, lineHeight: 16 }}>
+        {label}
+      </Txt>
+    </Card>
+  );
+  if (!soon) {
+    return (
+      <Press onPress={onPress} label={label.replace('\n', ' ')} role="button" style={{ flex: 1 }}>
+        {body}
+      </Press>
+    );
+  }
+  return (
+    <View style={{ flex: 1 }} accessible accessibilityLabel={`${label.replace('\n', ' ')}, coming soon`} accessibilityState={{ disabled: true }}>
+      <View pointerEvents="none" style={{ flex: 1, opacity: 0.5 }}>
+        {body}
+      </View>
+      <View pointerEvents="none" style={{ position: 'absolute', top: -10, left: 0, right: 0, alignItems: 'center' }}>
+        <ComingSoon label="Soon" />
+      </View>
+    </View>
+  );
+}
+
+function StripCell({
+  label,
+  a11y,
+  onPress,
+  children,
+}: {
+  label: string;
+  a11y: string;
+  onPress: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y} style={{ alignItems: 'center', gap: 6, width: 58 }}>
+      {children}
+      <Txt v="small" color={C.ink2} lines={1} style={{ fontSize: 12 }}>
+        {label}
+      </Txt>
+    </Pressable>
   );
 }

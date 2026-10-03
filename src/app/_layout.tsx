@@ -10,7 +10,8 @@ import { FieldLabelStyleProvider, ToastProvider } from '@/components/composite';
 import { sessionEnded } from '@/features/auth/slice';
 import { clearAllProfileImages } from '@/services/profileImageStore';
 import { store } from '@/store';
-import { ThemeProvider, useTheme, useTruepasFonts } from '@/theme';
+import { C } from '@/premium/theme';
+import { ThemeProvider, useTruepasFonts } from '@/theme';
 
 import '@/global.css';
 
@@ -56,10 +57,8 @@ setOnSessionExpired(() => {
 
 function RootShell({ children }: { children: React.ReactNode }) {
   const [fontsLoaded] = useTruepasFonts();
-  const { resolvedScheme, theme } = useTheme();
-
   if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: theme.colors.background }} />;
+    return <View style={{ flex: 1, backgroundColor: C.canvas }} />;
   }
 
   return (
@@ -73,7 +72,6 @@ function RootShell({ children }: { children: React.ReactNode }) {
 /** Renders inside ThemeProvider so the stack's behind-screen color tracks
  *  the active palette instead of flashing white during transitions. */
 function RootStack() {
-  const { theme } = useTheme();
   return (
     <Stack
       screenOptions={{
@@ -81,7 +79,7 @@ function RootStack() {
         animation: 'slide_from_right',
         // Premium showcase canvas
 
-        contentStyle: { backgroundColor: '#F6F8FA' },
+        contentStyle: { backgroundColor: C.canvas },
       }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(onboarding)" />

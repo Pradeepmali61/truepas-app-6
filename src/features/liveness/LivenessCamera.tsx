@@ -30,7 +30,12 @@ import {
     Typography
 } from '@/components/ui';
 import { useEnrollFace, useUpdateFace } from '@/features/auth/mutations';
-import { ChallengeStage, FinishingStage, LivenessResultStage } from '@/features/liveness/LivenessStages';
+// Premium (Truepas 3.0) stage UIs — same props as LivenessStages; camera stays mounted per AGENTS.md.
+import {
+  PremiumChallengeStage as ChallengeStage,
+  PremiumFinishingStage as FinishingStage,
+  PremiumLivenessResultStage as LivenessResultStage,
+} from '@/premium/flows/face';
 import { useLivenessSession } from '@/features/liveness/useLivenessSession';
 import { flowGuards } from '@/services/flowGuards';
 import { useThemeTokens } from '@/theme';

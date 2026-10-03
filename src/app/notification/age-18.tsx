@@ -1,38 +1,48 @@
 /** @jsxImportSource react */
-import { Cake, Send } from 'lucide-react-native';
+/**
+ * Age-18 transition notification — a dependent has turned 18 and is eligible
+ * for their own Truepas account. Static content (no age-18 endpoint yet).
+ */
+import { useRouter } from 'expo-router';
+import { Cake, Clock, Plus } from 'lucide-react-native';
 import { View } from 'react-native';
 
-import { C } from '@/premium/theme';
+import { Banner } from '@/premium/kit';
 import { Avatar, Button, Card, Divider, Row, Txt } from '@/premium/ui';
 import { ResultView } from '@/premium/views';
 
-/** A family member turns 18 — warm milestone + hand-over of their identity. */
-export default function Age18() {
+export default function Age18NotificationScreen() {
+  const router = useRouter();
   return (
     <ResultView
       icon={Cake}
       tone="sky"
       over="A milestone"
-      title="Meera is now"
+      title="Max Kim is now"
       accent="18."
-      sub="She can now own her Truepas. Send her an invite to take over her verified identity — her history comes with her."
-      primary={<Button label="Send invite to Meera" icon={Send} />}
-      secondary={<Button label="Remind me later" tone="ghost" />}>
+      sub="They're eligible for a new Truepas account and can now manage their own identity verification."
+      primary={
+        <Button
+          label="Create their account"
+          icon={Plus}
+          onPress={() => router.dismissTo('/(tabs)')}
+        />
+      }
+      secondary={<Button label="Remind me later" icon={Clock} tone="ghost" onPress={() => router.back()} />}
+    >
       <Card style={{ gap: 14 }}>
         <Row gap={14}>
-          <Avatar src="sister" size={56} status="verified" />
-          <View style={{ flex: 1 }}>
-            <Txt v="h3">Meera Mali</Txt>
-            <Txt v="small">Verified since Jun 2025 · 14 check-ins</Txt>
+          <Avatar name="Max Kim" size={56} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt v="h3">Max Kim</Txt>
+            <Txt v="small">Has turned 18</Txt>
           </View>
         </Row>
         <Divider />
-        {['Her face & documents move to her own account', 'You stay connected as family', 'Guardian controls switch off automatically'].map((t) => (
-          <Row key={t} gap={10}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.sky }} />
-            <Txt v="body">{t}</Txt>
-          </Row>
-        ))}
+        <View style={{ gap: 10 }}>
+          <Banner tone="success" title="Eligible to create own account" />
+          <Banner tone="warning" title="Data retained for 30 days after removal" />
+        </View>
       </Card>
     </ResultView>
   );

@@ -1,6 +1,13 @@
 /** @jsxImportSource react */
+/**
+ * Welcome — root of the signed-out stack (no back button): cinematic brand
+ * hero + the two entry points. "Create your Truepas" → register, "I already
+ * have an account" → login (same targets as the original WelcomeScreen).
+ * Long-press on the wordmark opens the premium /showcase — dev builds only.
+ */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { ArrowRight, BedDouble } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,10 +15,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Wordmark } from '@/premium/blocks';
 import { IMG } from '@/premium/images';
 import { C, F, R, SH } from '@/premium/theme';
-import { Button, go, Row, Serif, VerifiedTick } from '@/premium/ui';
+import { Button, Row, Serif, VerifiedTick } from '@/premium/ui';
 
-/** Cinematic welcome — full-bleed travel photography with a live verification moment. */
-export default function Welcome() {
+export default function WelcomeScreen() {
+  const router = useRouter();
+
   return (
     <View style={{ flex: 1, backgroundColor: C.navyNight }}>
       <Image source={IMG.hotelNight} style={StyleSheet.absoluteFill} contentFit="cover" />
@@ -22,14 +30,21 @@ export default function Welcome() {
       />
       <SafeAreaView style={{ flex: 1, paddingHorizontal: 24 }}>
         <Row between style={{ paddingTop: 10 }}>
-          <Pressable onLongPress={go('/showcase')} delayLongPress={600}>
+          <Pressable
+            onLongPress={__DEV__ ? () => router.push('/showcase' as never) : undefined}
+            delayLongPress={600}
+            accessibilityRole="header"
+            accessibilityLabel="Truepas">
             <Wordmark light size={22} />
           </Pressable>
           <Text style={{ fontFamily: F.semibold, fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>EN</Text>
         </Row>
 
-        {/* floating live-verification moment */}
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'flex-end', paddingTop: 30 }}>
+        {/* Illustrative verification moment (marketing art, not account data). */}
+        <View
+          style={{ flex: 1, justifyContent: 'center', alignItems: 'flex-end', paddingTop: 30 }}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants">
           <View style={[styles.glassCard, SH.lg]}>
             <View style={{ padding: 2, borderRadius: 18, borderWidth: 2, borderColor: C.sky }}>
               <Image source={IMG.user} style={{ width: 46, height: 46, borderRadius: 14 }} contentFit="cover" />
@@ -55,17 +70,19 @@ export default function Welcome() {
 
         <View style={{ gap: 14, paddingBottom: 8 }}>
           <Text style={styles.over}>YOUR FACE IS YOUR PASS</Text>
-          <Text style={styles.headline}>
+          <Text style={styles.headline} accessibilityRole="header">
             One face.{'\n'}Every <Serif size={54} color={C.skyLight}>check-in.</Serif>
           </Text>
-          <Text style={styles.sub}>Hotels, flights, theme parks and cruises — verified in a glance. No queues, no paperwork.</Text>
+          <Text style={styles.sub}>
+            Contactless check-in for you and your family — hotels, flights, theme parks and cruises, verified in a glance.
+          </Text>
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, marginBottom: 14 }}>
             <View style={[styles.dot, { width: 22, backgroundColor: C.sky }]} />
             <View style={styles.dot} />
             <View style={styles.dot} />
           </View>
-          <Button label="Create your Truepas" iconRight={ArrowRight} onPress={go('/(auth)/register')} />
-          <Button label="I already have an account" tone="glass" onPress={go("/(auth)/login")} />
+          <Button label="Create your Truepas" iconRight={ArrowRight} onPress={() => router.push('/(auth)/register')} />
+          <Button label="I already have an account" tone="glass" onPress={() => router.push('/(auth)/login')} />
         </View>
       </SafeAreaView>
     </View>

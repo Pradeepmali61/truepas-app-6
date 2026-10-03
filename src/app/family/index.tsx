@@ -1,52 +1,50 @@
 /** @jsxImportSource react */
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { ShieldCheck, UserPlus } from 'lucide-react-native';
-import { StyleSheet, Text, View } from 'react-native';
+/**
+ * FamilyScreen — pushed route (Home → See all). One portrait card per member
+ * (relationship, age, status, capture mode, age band, cameras); the empty
+ * state and the sticky CTA push the add-member flow. Pull to refresh.
+ * Premium skin over the original (0483c76) behaviour.
+ */
+import { useRouter } from 'expo-router';
+import { UserPlus, Users } from 'lucide-react-native';
 
-import { FAMILY } from '@/premium/data';
-import { IMG } from '@/premium/images';
-import { C, F, R, SH } from '@/premium/theme';
-import { Badge, Button, Card, go, Heading, Press, Row, Screen, Tile, TopBar, Txt } from '@/premium/ui';
+import { useFamily } from '@/features/family/hooks';
+import { MemberGrid, MemberGridSkeleton } from '@/premium/flows/family';
+import { Async, EmptyView } from '@/premium/kit';
+import { Button, Heading, Screen, TopBar } from '@/premium/ui';
 
-/** Family — portrait cards (Disney "party" feel), one tap to each member. */
-export default function Family() {
+export default function FamilyScreen() {
+  const router = useRouter();
+  const members = useFamily();
+  const addMember = () => router.push('/family/add' as never);
+  const isEmpty = members.data?.length === 0;
+
   return (
-    <Screen header={<TopBar title="Family" />} contentStyle={{ paddingTop: 4 }} footer={<Button label="Add a family member" icon={UserPlus} onPress={go('/family/add')} />}>
-      <Heading title="Travel" accent="together." sub="Everyone in your circle checks in with their own face — kids included, under your supervision." />
-
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-        {FAMILY.map((m) => (
-          <Press key={m.id} onPress={go(`/family/${m.id}`)} style={[{ width: '48%', flexGrow: 1, borderRadius: R.xl }, SH.md]}>
-            <View style={{ height: 228, borderRadius: R.xl, overflow: 'hidden', padding: 14, justifyContent: 'space-between' }}>
-              <Image source={IMG[m.image]} style={StyleSheet.absoluteFill} contentFit="cover" />
-              <LinearGradient colors={['rgba(1,27,39,0)', 'rgba(1,27,39,0.85)']} locations={[0.45, 1]} style={StyleSheet.absoluteFill} />
-              <View style={{ alignSelf: 'flex-end' }}>
-                {m.status === 'verified' ? <Badge label="Verified" tone="green" dot /> : <Badge label="Face pending" tone="amber" dot />}
-              </View>
-              <View>
-                <Text style={{ fontFamily: F.bold, fontSize: 17, color: C.white }}>{m.name.split(' ')[0]}</Text>
-                <Text style={{ fontFamily: F.medium, fontSize: 12.5, color: 'rgba(255,255,255,0.72)' }}>
-                  {m.relation} · {m.age} yrs
-                </Text>
-              </View>
-            </View>
-          </Press>
-        ))}
-      </View>
-
-      <Card style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-        <Tile icon={ShieldCheck} tone="sky" size={46} />
-        <View style={{ flex: 1, gap: 2 }}>
-          <Txt v="bodyStrong">Guardian controls on</Txt>
-          <Txt v="small">Kiara (7) can only check in alongside an adult.</Txt>
-        </View>
-      </Card>
-      <Row gap={6} style={{ justifyContent: 'center' }}>
-        <Txt v="small" color={C.ink4}>
-          Up to 8 members per family plan
-        </Txt>
-      </Row>
+    <Screen
+      header={<TopBar title="Family" />}
+      contentStyle={{ paddingTop: 4, flexGrow: 1 }}
+      refreshing={members.isRefetching}
+      onRefresh={() => void members.refetch()}
+      footer={isEmpty ? undefined : <Button label="Add a family member" icon={UserPlus} onPress={addMember} />}>
+      <Heading
+        title="Travel"
+        accent="together."
+        sub="Everyone in your family checks in with their own face — kids included."
+      />
+      <Async
+        q={members}
+        skeleton={<MemberGridSkeleton />}
+        empty={(list) => list.length === 0}
+        emptyView={
+          <EmptyView
+            icon={Users}
+            title="No family members"
+            body="Add family to check them in with you at venues."
+            action={<Button label="Add your first member" icon={UserPlus} full={false} onPress={addMember} />}
+          />
+        }>
+        {(list) => <MemberGrid members={list} onOpen={(m) => router.push(`/family/${m.id}` as never)} />}
+      </Async>
     </Screen>
   );
 }

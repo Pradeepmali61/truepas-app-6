@@ -1,0 +1,145 @@
+/** @jsxImportSource react */
+/**
+ * TRUEPAS PREMIUM — the real bottom tab bar. Same look as blocks.TabBar
+ * (floating pill + raised face button) but wired to the navigator:
+ * tabPress events + haptics like the original CustomTabBar, and the centre
+ * face button explains that venue face check-in isn't live yet instead of
+ * routing into the face-update flow (there is no in-app check-in API).
+ */
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import { CalendarCheck, House, type LucideIcon, ScanFace, Users, Wallet } from 'lucide-react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { ComingSoon, ConfirmSheet } from '@/premium/kit';
+import { C, F, G, SH } from '@/premium/theme';
+import { Press } from '@/premium/ui';
+
+type Item =
+  | { kind: 'tab'; route: string; label: string; icon: LucideIcon }
+  | { kind: 'link'; href: string; label: string; icon: LucideIcon };
+
+const LEFT: Item[] = [
+  { kind: 'tab', route: 'index', label: 'Home', icon: House },
+  { kind: 'tab', route: 'history', label: 'Check-ins', icon: CalendarCheck },
+];
+const RIGHT: Item[] = [
+  { kind: 'tab', route: 'documents', label: 'Wallet', icon: Wallet },
+  { kind: 'link', href: '/family', label: 'Family', icon: Users },
+];
+
+type Route = BottomTabBarProps['state']['routes'][number];
+
+export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
+  const [faceInfo, setFaceInfo] = useState(false);
+  const activeRoute = state.routes[state.index]?.name;
+
+  const press = (it: Item) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (it.kind === 'link') {
+      router.push(it.href as never);
+      return;
+    }
+    const route = state.routes.find((r: Route) => r.name === it.route);
+    if (!route) return;
+    const isFocused = activeRoute === it.route;
+    const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+    if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name as never);
+  };
+
+  const item = (it: Item) => {
+    const on = it.kind === 'tab' && it.route === activeRoute;
+    return (
+      <Pressable
+        key={it.label}
+        onPress={() => press(it)}
+        style={{ flex: 1, alignItems: 'center', gap: 4 }}
+        accessibilityRole="tab"
+        accessibilityLabel={it.label}
+        accessibilityState={{ selected: on }}
+      >
+        <it.icon size={22} color={on ? C.ink : C.ink4} strokeWidth={on ? 2.4 : 2} />
+        <Text style={{ fontFamily: on ? F.bold : F.medium, fontSize: 11, color: on ? C.ink : C.ink4 }}>{it.label}</Text>
+      </Pressable>
+    );
+  };
+
+  return (
+    <>
+      <View
+        pointerEvents="box-none"
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: Math.max(insets.bottom, 12), paddingHorizontal: 16 }}
+      >
+        <View
+          style={[
+            {
+              height: 68,
+              borderRadius: 34,
+              backgroundColor: 'rgba(255,255,255,0.96)',
+              borderWidth: 1,
+              borderColor: C.lineSoft,
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 6,
+            },
+            SH.lg,
+          ]}
+        >
+          {LEFT.map(item)}
+          <View style={{ width: 76, alignItems: 'center' }}>
+            <Press
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                setFaceInfo(true);
+              }}
+              label="Face check-in (coming soon)"
+              role="button"
+              style={[{ borderRadius: 30, marginTop: -30 }, SH.sky]}
+            >
+              <View
+                style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: 30,
+                  overflow: 'hidden',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 4,
+                  borderColor: C.canvas,
+                }}
+              >
+                <LinearGradient colors={G.sky} style={StyleSheet.absoluteFill} />
+                <View>
+                  <ScanFace size={26} color={C.white} strokeWidth={2.2} />
+                </View>
+              </View>
+            </Press>
+          </View>
+          {RIGHT.map(item)}
+        </View>
+      </View>
+
+      <ConfirmSheet
+        visible={faceInfo}
+        icon={ScanFace}
+        title="Face check-in at venues"
+        body="Soon you'll check in at hotels, parks and events just by looking at the venue camera — no tickets or cards. We'll let you know when it's live."
+        confirmLabel="View my check-ins"
+        cancelLabel="Close"
+        onConfirm={() => {
+          setFaceInfo(false);
+          const route = state.routes.find((r: Route) => r.name === 'history');
+          if (route) navigation.navigate(route.name as never);
+        }}
+        onCancel={() => setFaceInfo(false)}
+      >
+        <ComingSoon />
+      </ConfirmSheet>
+    </>
+  );
+}

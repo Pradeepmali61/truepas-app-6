@@ -19,11 +19,10 @@ import {
   ScanFace,
   Ship,
   Trophy,
-  User,
   Users,
   Wallet,
 } from "lucide-react-native";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
@@ -338,7 +337,7 @@ function Chip3D() {
 /* ───────────────────────── face scanner ───────────────────────── */
 
 function useSpin(ms = 2600) {
-  const v = useRef(new Animated.Value(0)).current;
+  const v = useState(() => new Animated.Value(0))[0];
   useEffect(() => {
     const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: ms, easing: Easing.linear, useNativeDriver: true }));
     loop.start();
@@ -348,7 +347,7 @@ function useSpin(ms = 2600) {
 }
 
 function usePulse(ms = 1800) {
-  const v = useRef(new Animated.Value(0)).current;
+  const v = useState(() => new Animated.Value(0))[0];
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -591,32 +590,38 @@ export function Keypad({ dark, onKey, disabled }: { dark?: boolean; onKey?: (k: 
 /* ───────────────────────── misc ───────────────────────── */
 
 /** Deterministic pseudo-QR — the digital key / pass code. */
-export function PassCode({ size = 168, color = C.ink }: { size?: number; color?: string }) {
-  const n = 25;
-  const cell = size / n;
+const QR_N = 25;
+const QR_CELLS: [number, number][] = (() => {
+  const out: [number, number][] = [];
   let seed = 7;
-  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
   const finder = (x: number, y: number) =>
-    (x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7);
-  const cells: ReactNode[] = [];
-  for (let y = 0; y < n; y++)
-    for (let x = 0; x < n; x++) {
-      if (finder(x, y)) continue;
-      if (rnd() > 0.52) cells.push(<Rect key={`${x}-${y}`} x={x * cell} y={y * cell} width={cell} height={cell} rx={cell * 0.3} fill={color} />);
+    (x < 7 && y < 7) || (x >= QR_N - 7 && y < 7) || (x < 7 && y >= QR_N - 7);
+  for (let y = 0; y < QR_N; y++)
+    for (let x = 0; x < QR_N; x++) {
+      seed = (seed * 9301 + 49297) % 233280;
+      if (!finder(x, y) && seed / 233280 > 0.52) out.push([x, y]);
     }
-  const Finder = ({ x, y }: { x: number; y: number }) => (
-    <>
-      <Rect x={x * cell} y={y * cell} width={cell * 7} height={cell * 7} rx={cell * 1.8} fill={color} />
-      <Rect x={(x + 1) * cell} y={(y + 1) * cell} width={cell * 5} height={cell * 5} rx={cell * 1.3} fill={C.white} />
-      <Rect x={(x + 2) * cell} y={(y + 2) * cell} width={cell * 3} height={cell * 3} rx={cell * 0.9} fill={color} />
-    </>
-  );
+  return out;
+})();
+
+function qrFinder(x: number, y: number, cell: number, color: string, key: string) {
+  return [
+    <Rect key={key + "o"} x={x * cell} y={y * cell} width={cell * 7} height={cell * 7} rx={cell * 1.8} fill={color} />,
+    <Rect key={key + "m"} x={(x + 1) * cell} y={(y + 1) * cell} width={cell * 5} height={cell * 5} rx={cell * 1.3} fill={C.white} />,
+    <Rect key={key + "i"} x={(x + 2) * cell} y={(y + 2) * cell} width={cell * 3} height={cell * 3} rx={cell * 0.9} fill={color} />,
+  ];
+}
+
+export function PassCode({ size = 168, color = C.ink }: { size?: number; color?: string }) {
+  const cell = size / QR_N;
   return (
     <Svg width={size} height={size}>
-      {cells}
-      <Finder x={0} y={0} />
-      <Finder x={n - 7} y={0} />
-      <Finder x={0} y={n - 7} />
+      {QR_CELLS.map(([x, y]) => (
+        <Rect key={`${x}-${y}`} x={x * cell} y={y * cell} width={cell} height={cell} rx={cell * 0.3} fill={color} />
+      ))}
+      {qrFinder(0, 0, cell, color, "a")}
+      {qrFinder(QR_N - 7, 0, cell, color, "b")}
+      {qrFinder(0, QR_N - 7, cell, color, "c")}
     </Svg>
   );
 }

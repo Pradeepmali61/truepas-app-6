@@ -6,7 +6,7 @@
  */
 import { LinearGradient } from "expo-linear-gradient";
 import { Check, Lightbulb, Loader, type LucideIcon, ShieldCheck, X } from "lucide-react-native";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Animated, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -26,7 +26,7 @@ export function FaceScanView({
   checks = [
     { label: "Blink", done: true },
     { label: "Turn left", done: false, active: true },
-    { label: "Smile", done: false },
+    { label: "Turn right", done: false },
   ],
   src = "user",
   progress = 0.62,
@@ -93,7 +93,7 @@ export function FaceScanView({
             <Row gap={8} style={{ justifyContent: "center", paddingBottom: 6 }}>
               <ShieldCheck size={15} color="rgba(255,255,255,0.5)" />
               <Txt v="small" color="rgba(255,255,255,0.5)">
-                Encrypted on-device · never stored as a photo
+                Encrypted and stored securely in your face gallery
               </Txt>
             </Row>
           )}
@@ -106,7 +106,7 @@ export function FaceScanView({
 /* ───────────────────────── processing ───────────────────────── */
 
 function Spin({ children }: { children: ReactNode }) {
-  const v = useRef(new Animated.Value(0)).current;
+  const v = useState(() => new Animated.Value(0))[0];
   useEffect(() => {
     const l = Animated.loop(Animated.timing(v, { toValue: 1, duration: 1100, easing: Easing.linear, useNativeDriver: true }));
     l.start();
@@ -174,7 +174,7 @@ export function ProcessingView({
           </Card>
           <Row gap={8} style={{ justifyContent: "center" }}>
             <ShieldCheck size={15} color={C.ink3} />
-            <Txt v="small">Bank-grade encryption · ISO 27001 certified</Txt>
+            <Txt v="small">Your data is encrypted in transit and at rest</Txt>
           </Row>
         </ScrollView>
       </SafeAreaView>
@@ -285,6 +285,7 @@ export function LegalView({
   intro,
   sections,
   footer,
+  summary,
 }: {
   topTitle: string;
   title: string;
@@ -293,6 +294,8 @@ export function LegalView({
   intro: string;
   sections: { h: string; p: string }[];
   footer?: ReactNode;
+  /** Optional plain-language summary callout — only pass text the legal copy supports. */
+  summary?: string;
 }) {
   return (
     <View style={{ flex: 1, backgroundColor: C.surface }}>
@@ -310,12 +313,14 @@ export function LegalView({
               {intro}
             </Txt>
           </View>
-          <View style={{ backgroundColor: C.skyMist, borderRadius: R.lg, padding: 16, flexDirection: "row", gap: 12, borderWidth: 1, borderColor: C.skyWash }}>
-            <Lightbulb size={18} color={C.skyPressed} />
-            <Txt v="small" color={C.navy} style={{ flex: 1, lineHeight: 19 }}>
-              The short version: your biometric data is encrypted, never sold, and you can delete it at any time.
-            </Txt>
-          </View>
+          {!!summary && (
+            <View style={{ backgroundColor: C.skyMist, borderRadius: R.lg, padding: 16, flexDirection: "row", gap: 12, borderWidth: 1, borderColor: C.skyWash }}>
+              <Lightbulb size={18} color={C.skyPressed} />
+              <Txt v="small" color={C.navy} style={{ flex: 1, lineHeight: 19 }}>
+                {summary}
+              </Txt>
+            </View>
+          )}
           {sections.map((s, i) => (
             <View key={s.h} style={{ gap: 10 }}>
               <Row gap={10}>

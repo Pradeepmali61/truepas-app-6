@@ -1,16 +1,12 @@
 /** @jsxImportSource react */
-import { DocScanView } from '@/premium/DocScanView';
+import { CameraUnavailableView, loadFamilyPhotoCapture } from '@/premium/flows/family';
 
-/** Add member — step 3: capture their document. */
-export default function MemberPhotoCapture() {
-  return (
-    <DocScanView
-      topTitle="Add member"
-      title="Birth certificate"
-      hint="Place the document flat, inside the frame, in good light."
-      step={3}
-      total={4}
-      next="/family/add/face-capture"
-    />
-  );
+/** Add family — photo enrollment for under-5 members. The premium camera
+ *  screen (src/premium/flows/familyPhotoCapture, a 1:1 behaviour port of
+ *  features/liveness/PhotoCapture) is lazy-required: it statically imports
+ *  react-native-vision-camera, which throws on builds without NitroModules. */
+const Photo = loadFamilyPhotoCapture();
+
+export default function FamilyPhotoCaptureScreen() {
+  return Photo ? <Photo /> : <CameraUnavailableView />;
 }

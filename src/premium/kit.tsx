@@ -5,7 +5,7 @@
  * Screens wired to the real API compose these alongside ui.tsx / blocks.tsx.
  */
 import { AlertTriangle, CheckCircle2, CircleAlert, Clock, Inbox, Info, type LucideIcon, RotateCcw } from "lucide-react-native";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Animated, Easing, Modal, Pressable, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -250,7 +250,7 @@ export function Async<T>({
 /* ───────────────────────── skeletons ───────────────────────── */
 
 function usePulse() {
-  const v = useRef(new Animated.Value(0.55)).current;
+  const v = useState(() => new Animated.Value(0.55))[0];
   useEffect(() => {
     const l = Animated.loop(
       Animated.sequence([
