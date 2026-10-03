@@ -103,7 +103,7 @@ export function isTodayIso(iso: string): boolean {
 
 /** Booking amount — same rendering as the original BookingCard. */
 export function money(amount: number): string {
-  return `$${amount.toFixed(2)}`;
+  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /** "May 2032" — for document expiry. */
@@ -279,7 +279,9 @@ export function BookingHero({ b, onPress, cta }: { b: Booking; onPress?: () => v
       onPress={onPress}
       scaleTo={0.985}
       label={`Next check-in at ${b.venue}, ${b.location}`}
-      role="button"
+      // No button role when the card hosts its own action: on web a role=button
+      // renders <button>, and a nested <button> is invalid HTML.
+      role={cta ? undefined : 'button'}
       style={[{ borderRadius: R.xxl }, SH.lg]}
     >
       <View style={{ minHeight: 420, borderRadius: R.xxl, overflow: 'hidden', justifyContent: 'space-between', padding: 18, gap: 24 }}>
