@@ -87,7 +87,36 @@ export function Guilloche({ size = 360, color = "#FFFFFF", opacity = 0.07, style
 
 /* ───────────────────────── identity ───────────────────────── */
 
-export function IdentityCard({ onPress, compact }: { onPress?: () => void; compact?: boolean }) {
+export interface IdentityMeta {
+  k: string;
+  v: string;
+}
+
+export function IdentityCard({
+  onPress,
+  compact,
+  name = USER.name,
+  idLine = USER.id,
+  photoUri,
+  verified = true,
+  statusLabel,
+  meta = [
+    { k: "Face", v: "Linked" },
+    { k: "Documents", v: "3 verified" },
+    { k: "Member since", v: USER.since },
+  ],
+}: {
+  onPress?: () => void;
+  compact?: boolean;
+  name?: string;
+  /** Second line under the name (ID number, email...). */
+  idLine?: string;
+  /** Real profile photo; falls back to initials when null and no showcase photo. */
+  photoUri?: string | null;
+  verified?: boolean;
+  statusLabel?: string;
+  meta?: IdentityMeta[];
+}) {
   return (
     <Press onPress={onPress} scaleTo={0.985} style={[{ borderRadius: R.xxl }, SH.navy]}>
       <View style={{ borderRadius: R.xxl, overflow: "hidden", padding: 22, gap: compact ? 18 : 26 }}>
@@ -97,30 +126,45 @@ export function IdentityCard({ onPress, compact }: { onPress?: () => void; compa
 
         <Row between>
           <Wordmark light size={17} />
-          <Badge label="Verified" tone="glass" icon={ScanFace} />
+          <Badge label={statusLabel ?? (verified ? "Verified" : "Setup pending")} tone={verified ? "glass" : "amber"} icon={verified ? ScanFace : undefined} dot={!verified} />
         </Row>
 
         <Row gap={16} align="flex-end">
           <View style={{ padding: 3, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.14)" }}>
-            <Image source={IMG.user} style={{ width: compact ? 64 : 76, height: compact ? 72 : 88, borderRadius: 20 }} contentFit="cover" />
+            {photoUri !== undefined && !photoUri ? (
+              <View style={{ width: compact ? 64 : 76, height: compact ? 72 : 88, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ fontFamily: F.bold, fontSize: 24, color: C.white }}>{initialsOf(name)}</Text>
+              </View>
+            ) : (
+              <Image source={photoUri ? { uri: photoUri } : IMG.user} style={{ width: compact ? 64 : 76, height: compact ? 72 : 88, borderRadius: 20 }} contentFit="cover" />
+            )}
           </View>
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={{ fontFamily: F.semibold, fontSize: 11, letterSpacing: 1.4, color: C.skyLight }}>DIGITAL IDENTITY</Text>
-            <Text style={{ fontFamily: F.bold, fontSize: 22, letterSpacing: -0.5, color: C.white }}>{USER.name}</Text>
-            <Text style={{ fontFamily: F.mono, fontSize: 13, letterSpacing: 2, color: "rgba(255,255,255,0.66)" }}>{USER.id}</Text>
+            <Text style={{ fontFamily: F.bold, fontSize: 22, letterSpacing: -0.5, color: C.white }} numberOfLines={1}>{name}</Text>
+            {!!idLine && (
+              <Text style={{ fontFamily: F.mono, fontSize: 13, letterSpacing: idLine.includes("@") ? 0.2 : 2, color: "rgba(255,255,255,0.66)" }} numberOfLines={1}>
+                {idLine}
+              </Text>
+            )}
           </View>
         </Row>
 
-        {!compact && (
+        {!compact && meta.length > 0 && (
           <Row between style={{ paddingTop: 16, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.12)" }}>
-            <Meta k="Face" v="Linked" />
-            <Meta k="Documents" v="3 verified" />
-            <Meta k="Member since" v={USER.since} />
+            {meta.map((m) => (
+              <Meta key={m.k} k={m.k} v={m.v} />
+            ))}
           </Row>
         )}
       </View>
     </Press>
   );
+}
+
+function initialsOf(name: string): string {
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  return p.length ? ((p[0][0] ?? "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase() : "?";
 }
 
 function Meta({ k, v }: { k: string; v: string }) {
@@ -331,6 +375,8 @@ export function FaceRing({
   dark,
   photo = true,
   src = "user",
+  uri,
+  children,
 }: {
   size?: number;
   mode?: "scan" | "success" | "error" | "idle";
@@ -338,6 +384,10 @@ export function FaceRing({
   dark?: boolean;
   photo?: boolean;
   src?: keyof typeof IMG;
+  /** Real photo URI (overrides the bundled showcase photo). */
+  uri?: string | null;
+  /** Live content (e.g. the camera preview) rendered inside the circle. */
+  children?: ReactNode;
 }) {
   const spin = useSpin();
   const pulse = usePulse();
@@ -414,12 +464,14 @@ export function FaceRing({
             justifyContent: "center",
           }}
         >
-          {photo ? (
-            <Image source={IMG[src]} style={StyleSheet.absoluteFill} contentFit="cover" />
+          {children != null ? (
+            <View style={StyleSheet.absoluteFill}>{children}</View>
+          ) : photo ? (
+            <Image source={uri ? { uri } : IMG[src]} style={StyleSheet.absoluteFill} contentFit="cover" />
           ) : (
             <ScanFace size={size * 0.3} color={dark ? "rgba(255,255,255,0.5)" : C.ink4} strokeWidth={1.2} />
           )}
-          {mode === "scan" && photo && <ScanBeam size={size - 64} />}
+          {mode === "scan" && (photo || children != null) && <ScanBeam size={size - 64} />}
           {mode === "success" && <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(8,182,252,0.18)" }]} />}
         </View>
         {mode === "success" && (
@@ -505,7 +557,7 @@ export function TabBar({ active }: { active: TabKey }) {
 
 /* ───────────────────────── keypad ───────────────────────── */
 
-export function Keypad({ dark }: { dark?: boolean }) {
+export function Keypad({ dark, onKey, disabled }: { dark?: boolean; onKey?: (k: string) => void; disabled?: boolean }) {
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"];
   const fg = dark ? C.white : C.ink;
   return (
@@ -515,7 +567,14 @@ export function Keypad({ dark }: { dark?: boolean }) {
           {k === "" ? (
             <View style={{ height: 64 }} />
           ) : (
-            <Press scaleTo={0.9} style={{ width: 76, height: 64, borderRadius: 22, alignItems: "center", justifyContent: "center" }}>
+            <Press
+              scaleTo={0.9}
+              disabled={disabled}
+              onPress={onKey ? () => onKey(k) : undefined}
+              label={k === "del" ? "Delete" : k}
+              role="button"
+              style={{ width: 76, height: 64, borderRadius: 22, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.4 : 1 }}
+            >
               {k === "del" ? (
                 <Delete size={24} color={fg} strokeWidth={1.8} />
               ) : (

@@ -7,16 +7,22 @@ import { Image, type ImageStyle } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Check, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react-native";
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
+  ActivityIndicator,
   Animated,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
+  type KeyboardTypeOptions,
   type StyleProp,
+  type TextInputProps,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
@@ -71,12 +77,16 @@ export function Press({
   children,
   scaleTo = 0.97,
   label,
+  disabled,
+  role,
 }: {
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
   children: ReactNode;
   scaleTo?: number;
   label?: string;
+  disabled?: boolean;
+  role?: "button" | "link";
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const flat = (StyleSheet.flatten(style) ?? {}) as ViewStyle;
@@ -91,6 +101,9 @@ export function Press({
   return (
     <Pressable
       accessibilityLabel={label}
+      accessibilityRole={role}
+      accessibilityState={disabled ? { disabled: true } : undefined}
+      disabled={disabled}
       onPress={onPress}
       onPressIn={() => to(scaleTo)}
       onPressOut={() => to(1)}
@@ -114,6 +127,9 @@ export function Screen({
   footer,
   contentStyle,
   header,
+  keyboard,
+  refreshing,
+  onRefresh,
 }: {
   children: ReactNode;
   scroll?: boolean;
@@ -122,14 +138,23 @@ export function Screen({
   footer?: ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   header?: ReactNode;
+  /** Forms: lift content + footer above the software keyboard. */
+  keyboard?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }) {
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
+      <KeyboardAvoidingView style={{ flex: 1 }} enabled={!!keyboard} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <SafeAreaView edges={edges} style={{ flex: 1 }}>
         {header}
         {scroll ? (
           <ScrollView
             style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={C.sky} /> : undefined
+            }
             contentContainerStyle={[{ paddingHorizontal: S.gutter, paddingBottom: 40, gap: S.section }, contentStyle]}
             showsVerticalScrollIndicator={false}
           >
@@ -140,6 +165,7 @@ export function Screen({
         )}
         {footer != null && <Footer>{footer}</Footer>}
       </SafeAreaView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -324,6 +350,8 @@ export function Button({
   size = "lg",
   style,
   full = true,
+  loading,
+  disabled,
 }: {
   label: string;
   onPress?: () => void;
@@ -333,7 +361,10 @@ export function Button({
   size?: "lg" | "md" | "sm";
   style?: StyleProp<ViewStyle>;
   full?: boolean;
+  loading?: boolean;
+  disabled?: boolean;
 }) {
+  const inactive = !!disabled || !!loading;
   const h = size === "lg" ? 58 : size === "md" ? 48 : 38;
   const fg =
     tone === "sky" || tone === "ink" || tone === "danger" || tone === "glass"
@@ -367,13 +398,23 @@ export function Button({
               ? { backgroundColor: C.red }
               : {};
   return (
-    <Press onPress={onPress} label={label} style={[full && { alignSelf: "stretch" }, tone === "sky" && SH.sky, { borderRadius: R.full }, style]}>
-      <View style={[base, skin]}>
+    <Press
+      onPress={onPress}
+      label={label}
+      role="button"
+      disabled={inactive}
+      style={[full && { alignSelf: "stretch" }, tone === "sky" && !inactive && SH.sky, { borderRadius: R.full }, style]}
+    >
+      <View style={[base, skin, disabled && !loading && { opacity: 0.45 }]}>
         {tone === "sky" && <LinearGradient colors={G.sky} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
-        {Icon && (
-          <View>
-            <Icon size={size === "sm" ? 16 : 19} color={fg} strokeWidth={2.2} />
-          </View>
+        {loading ? (
+          <ActivityIndicator size="small" color={fg} />
+        ) : (
+          Icon && (
+            <View>
+              <Icon size={size === "sm" ? 16 : 19} color={fg} strokeWidth={2.2} />
+            </View>
+          )
         )}
         <Text style={{ fontFamily: F.bold, fontSize: size === "sm" ? 13.5 : 16, letterSpacing: -0.1, color: fg }}>{label}</Text>
         {IconR && (
@@ -584,12 +625,17 @@ export function Photo({ src, style }: { src: ImgKey; style?: StyleProp<ImageStyl
 
 export function Avatar({
   src,
+  uri,
+  name,
   size = 44,
   ring,
   status,
   ringColor = C.sky,
 }: {
-  src: ImgKey;
+  /** Bundled mock photo (showcase). Real data passes `uri` and/or `name`. */
+  src?: ImgKey;
+  uri?: string | null;
+  name?: string | null;
   size?: number;
   ring?: boolean;
   status?: "verified" | "pending";
@@ -603,7 +649,26 @@ export function Avatar({
         ring && { borderWidth: 2, borderColor: ringColor },
       ]}
     >
-      <Image source={IMG[src]} style={{ width: inner - (ring ? 2 : 0), height: inner - (ring ? 2 : 0), borderRadius: inner / 2 }} contentFit="cover" />
+      {uri || src ? (
+        <Image
+          source={uri ? { uri } : IMG[src as ImgKey]}
+          style={{ width: inner - (ring ? 2 : 0), height: inner - (ring ? 2 : 0), borderRadius: inner / 2 }}
+          contentFit="cover"
+        />
+      ) : (
+        <View
+          style={{
+            width: inner - (ring ? 2 : 0),
+            height: inner - (ring ? 2 : 0),
+            borderRadius: inner / 2,
+            backgroundColor: C.skyWash,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ fontFamily: F.bold, fontSize: Math.round(size * 0.36), color: C.navy }}>{initials(name)}</Text>
+        </View>
+      )}
       {status != null && (
         <View
           style={{
@@ -627,6 +692,12 @@ export function Avatar({
   );
 }
 
+export function initials(name?: string | null): string {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return ((parts[0][0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
 /* ───────────────────────── form ───────────────────────── */
 
 export function Field({
@@ -639,17 +710,36 @@ export function Field({
   secure,
   hint,
   error,
+  onChangeText,
+  onBlur,
+  keyboardType,
+  editable = true,
+  inputProps,
+  left,
 }: {
   label: string;
+  /** Controlled when `onChangeText` is passed; otherwise a static showcase value. */
   value?: string;
   placeholder?: string;
   icon?: LucideIcon;
   right?: ReactNode;
+  /** Force the focused look (showcase). Real inputs track focus themselves. */
   focused?: boolean;
   secure?: boolean;
   hint?: string;
   error?: string;
+  onChangeText?: (t: string) => void;
+  onBlur?: () => void;
+  keyboardType?: KeyboardTypeOptions;
+  editable?: boolean;
+  /** Extra TextInput props (autoComplete, maxLength, autoCapitalize, textContentType...). */
+  inputProps?: Omit<TextInputProps, "value" | "onChangeText" | "onBlur" | "style">;
+  /** Leading element after the icon (e.g. a country-code picker). */
+  left?: ReactNode;
 }) {
+  const [hasFocus, setHasFocus] = useState(false);
+  const isFocused = !!focused || hasFocus;
+  const controlled = onChangeText != null;
   return (
     <View style={{ gap: 8 }}>
       <Txt v="smallStrong" color={C.ink2}>
@@ -662,18 +752,33 @@ export function Field({
             borderRadius: R.md,
             backgroundColor: C.surface,
             borderWidth: 1.5,
-            borderColor: error ? C.red : focused ? C.sky : C.line,
+            borderColor: error ? C.red : isFocused ? C.sky : C.line,
             flexDirection: "row",
             alignItems: "center",
             paddingHorizontal: 16,
             gap: 12,
           },
-          focused && { boxShadow: "0px 0px 0px 4px rgba(8,182,252,0.14)" },
+          isFocused && !error && { boxShadow: "0px 0px 0px 4px rgba(8,182,252,0.14)" },
+          !editable && { backgroundColor: C.sunken, borderStyle: "dashed" },
         ]}
       >
-        {Icon && <Icon size={19} color={focused ? C.sky : C.ink3} strokeWidth={2} />}
+        {Icon && <Icon size={19} color={isFocused ? C.sky : C.ink3} strokeWidth={2} />}
+        {left}
         <TextInput
-          defaultValue={value}
+          {...inputProps}
+          {...(controlled ? { value } : { defaultValue: value })}
+          onChangeText={onChangeText}
+          onFocus={(e) => {
+            setHasFocus(true);
+            inputProps?.onFocus?.(e);
+          }}
+          onBlur={() => {
+            setHasFocus(false);
+            onBlur?.();
+          }}
+          editable={editable}
+          keyboardType={keyboardType}
+          accessibilityLabel={label}
           placeholder={placeholder}
           placeholderTextColor={C.ink4}
           secureTextEntry={secure}
@@ -690,8 +795,8 @@ export function Field({
   );
 }
 
-export function Toggle({ on }: { on?: boolean }) {
-  return (
+export function Toggle({ on, onChange, disabled, label }: { on?: boolean; onChange?: (v: boolean) => void; disabled?: boolean; label?: string }) {
+  const knob = (
     <View
       style={{
         width: 50,
@@ -705,10 +810,24 @@ export function Toggle({ on }: { on?: boolean }) {
       <View style={[{ width: 24, height: 24, borderRadius: 12, backgroundColor: C.white }, SH.sm]} />
     </View>
   );
+  if (!onChange) return knob;
+  return (
+    <Pressable
+      onPress={() => onChange(!on)}
+      disabled={disabled}
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: !!on, disabled: !!disabled }}
+      hitSlop={8}
+      style={disabled ? { opacity: 0.5 } : undefined}
+    >
+      {knob}
+    </Pressable>
+  );
 }
 
-export function Chip({ label, active, icon: Icon }: { label: string; active?: boolean; icon?: LucideIcon }) {
-  return (
+export function Chip({ label, active, icon: Icon, onPress }: { label: string; active?: boolean; icon?: LucideIcon; onPress?: () => void }) {
+  const body = (
     <View
       style={{
         height: 38,
@@ -725,6 +844,12 @@ export function Chip({ label, active, icon: Icon }: { label: string; active?: bo
       {Icon && <Icon size={15} color={active ? C.white : C.ink2} />}
       <Text style={{ fontFamily: F.semibold, fontSize: 13.5, color: active ? C.white : C.ink2 }}>{label}</Text>
     </View>
+  );
+  if (!onPress) return body;
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: !!active }}>
+      {body}
+    </Pressable>
   );
 }
 
