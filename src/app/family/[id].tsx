@@ -15,22 +15,23 @@ import {
   Camera,
   FileText,
   History,
+  Image as ImageIcon,
   ScanFace,
   Trash2,
   UserCheck,
   Users,
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useToast } from '@/components/composite/Toast';
 import { useDocuments } from '@/features/documents/hooks';
-import { useFamilyMember, useMemberPhoto, useRemoveFamilyMember } from '@/features/family/hooks';
+import { useFamilyMember, useMemberPhoto, useRemoveFamilyMember, useSetMemberPhoto } from '@/features/family/hooks';
 import { Glow, Guilloche } from '@/premium/blocks';
 import { ChecklistCard, DocRow, formatDate, statusBadge, type ChecklistStep } from '@/premium/flows/family';
 import { Async, Bone, ConfirmSheet, EmptyView, SkeletonList, SoonOverlay } from '@/premium/kit';
-import { C, F } from '@/premium/theme';
+import { C, F, SH } from '@/premium/theme';
 import { Badge, Button, Group, initials, ListRow, Screen, Toggle, TopBar, Txt, VerifiedTick } from '@/premium/ui';
 import type { FamilyMember } from '@/types/domain';
 
@@ -69,7 +70,7 @@ function isFaceDone(m: FamilyMember): boolean {
 export default function FamilyMemberScreen() {
   const router = useRouter();
   const { toast } = useToast();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, photo } = useLocalSearchParams<{ id: string; photo?: string }>();
 
   const member = useFamilyMember(id);
   const memberDocs = useDocuments(id);
@@ -78,6 +79,17 @@ export default function FamilyMemberScreen() {
 
   const m = member.data;
   const photoUri = useMemberPhoto(id);
+  const setPhoto = useSetMemberPhoto(id);
+  // Opened from the Family "Add photos" nudge: start on the source sheet.
+  const [photoSheet, setPhotoSheet] = useState(photo === '1');
+  const choosePhoto = async (source: 'camera' | 'library') => {
+    setPhotoSheet(false);
+    const r = await setPhoto.pick(source);
+    if (r === 'saved') toast({ variant: 'success', title: 'Photo added' });
+    else if (r === 'denied')
+      toast({ variant: 'error', title: source === 'camera' ? 'Camera access is needed' : 'Photo access is needed' });
+    else if (r === 'failed') toast({ variant: 'error', title: "Couldn't add the photo" });
+  };
   const first = m?.name.split(' ')[0] ?? '';
   const isPhoto = (m?.faceCaptureMode ?? (m && m.age < 5 ? 'photo' : 'liveness')) === 'photo';
   // Member docs may stay 'pending' when backend verification isn't run for
@@ -201,6 +213,29 @@ export default function FamilyMemberScreen() {
                 <Text style={{ fontFamily: F.bold, fontSize: 44, letterSpacing: 1, color: C.white }}>{initials(m.name)}</Text>
               )}
             </View>
+            <Pressable
+              onPress={() => setPhotoSheet(true)}
+              disabled={setPhoto.busy}
+              accessibilityRole="button"
+              accessibilityLabel={photoUri ? `Change ${first}'s photo` : `Add ${first}'s photo`}
+              style={{ marginTop: -22, marginLeft: 92 }}>
+              <View
+                style={[
+                  {
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: C.sky,
+                    borderWidth: 3,
+                    borderColor: C.white,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                  SH.sky,
+                ]}>
+                <Camera size={17} color={C.white} strokeWidth={2.4} />
+              </View>
+            </Pressable>
           </View>
         </View>
 
@@ -286,6 +321,16 @@ export default function FamilyMemberScreen() {
         </View>
       </ScrollView>
 
+      <ConfirmSheet
+        visible={photoSheet}
+        icon={Camera}
+        title={photoUri ? `Change ${first}'s photo` : `Add ${first}'s photo`}
+        body="Use a clear photo of their face. It is kept on this phone and only shown to you."
+        confirmLabel="Take photo"
+        onConfirm={() => void choosePhoto('camera')}
+        onCancel={() => setPhotoSheet(false)}>
+        <Button label="Choose from gallery" tone="soft" icon={ImageIcon} onPress={() => void choosePhoto('library')} />
+      </ConfirmSheet>
       <ConfirmSheet
         visible={confirmRemove}
         danger

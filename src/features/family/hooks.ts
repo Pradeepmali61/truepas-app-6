@@ -1,4 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
+import { useState } from 'react';
+import { Platform } from 'react-native';
 
 import { api } from '@/api';
 import { deleteMemberProfileImage, getMemberProfileImage, saveMemberFacePhoto } from '@/services/profileImageStore';
@@ -62,18 +65,64 @@ const memberPhotoKey = (personId: string) => ['member-photo', personId] as const
  * (the API has no member photo URL yet). Null on web, on another device, or
  * before enrolment, so callers fall back to initials.
  */
+const memberPhotoQuery = (personId: string) => ({
+  queryKey: memberPhotoKey(personId),
+  queryFn: async () => {
+    const uri = await getMemberProfileImage(personId);
+    // Same file path on re-enrolment: bust the image cache per read.
+    return uri ? `${uri}?t=${Date.now()}` : null;
+  },
+  staleTime: Infinity,
+});
+
 export function useMemberPhoto(personId?: string): string | null {
-  const query = useQuery({
-    queryKey: memberPhotoKey(personId ?? ''),
-    queryFn: async () => {
-      const uri = await getMemberProfileImage(personId as string);
-      // Same file path on re-enrolment: bust the image cache per read.
-      return uri ? `${uri}?t=${Date.now()}` : null;
-    },
-    enabled: !!personId,
-    staleTime: Infinity,
-  });
+  const query = useQuery({ ...memberPhotoQuery(personId ?? ''), enabled: !!personId });
   return query.data ?? null;
+}
+
+/** Members with no photo on this device (resolved checks only). */
+export function useMembersWithoutPhoto(members: FamilyMember[]): FamilyMember[] {
+  const results = useQueries({ queries: members.map((m) => memberPhotoQuery(m.id)) });
+  return members.filter((_m, i) => results[i]?.isSuccess && !results[i]?.data);
+}
+
+export type PickPhotoResult = 'saved' | 'cancelled' | 'denied' | 'failed';
+
+/**
+ * Set a member's avatar from the camera or the gallery (members whose photo
+ * wasn't captured on this phone). Square crop, shrunk and kept on this device
+ * like the enrolment photo, until the backend stores member photos.
+ */
+export function useSetMemberPhoto(personId: string) {
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const pick = async (source: 'camera' | 'library'): Promise<PickPhotoResult> => {
+    if (busy) return 'cancelled';
+    setBusy(true);
+    try {
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') return 'denied';
+      } else if (Platform.OS === 'ios') {
+        // Android uses the system photo picker — no storage permission needed.
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') return 'denied';
+      }
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 };
+      const result =
+        source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+      const uri = result.canceled ? null : result.assets[0]?.uri;
+      if (!uri) return 'cancelled';
+      await saveMemberFacePhoto(personId, uri);
+      await queryClient.invalidateQueries({ queryKey: memberPhotoKey(personId) });
+      return 'saved';
+    } catch {
+      return 'failed';
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { pick, busy };
 }
 
 /** Save the enrolment capture as the member's avatar. Best effort: a failure
