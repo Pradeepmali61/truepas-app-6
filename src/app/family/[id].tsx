@@ -3,16 +3,20 @@
  * FamilyDetailScreen — a single family member. Hero, setup checklist derived
  * from verification state, the member's documents and the remove flow.
  * "Continue setup" routes to our real next step (document capture, then
- * photo/liveness capture). Premium skin over the original (0483c76) behaviour.
+ * photo/liveness capture). Once set up, "Update face" re-runs the member's
+ * capture (PIN first) and "Add a document" adds extra documents without
+ * repeating the face step. Premium skin over the original (0483c76) behaviour.
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   BadgeCheck,
   BellRing,
   CalendarDays,
   Camera,
+  FilePlus,
   FileText,
   History,
   Image as ImageIcon,
@@ -21,16 +25,17 @@ import {
   UserCheck,
   Users,
 } from 'lucide-react-native';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useToast } from '@/components/composite/Toast';
-import { useDocuments } from '@/features/documents/hooks';
-import { useFamilyMember, useMemberPhoto, useRemoveFamilyMember, useSetMemberPhoto } from '@/features/family/hooks';
+import { documentKeys, useDocuments } from '@/features/documents/hooks';
+import { familyKeys, useFamilyMember, useMemberPhoto, useRemoveFamilyMember, useSetMemberPhoto } from '@/features/family/hooks';
 import { Glow, Guilloche } from '@/premium/blocks';
 import { ChecklistCard, DocRow, formatDate, statusBadge, type ChecklistStep } from '@/premium/flows/family';
 import { Async, Bone, ConfirmSheet, EmptyView, SkeletonList, SoonOverlay } from '@/premium/kit';
+import { useHeroStatusBar } from '@/premium/statusBar';
 import { C, F, SH } from '@/premium/theme';
 import { Badge, Button, Group, initials, ListRow, Screen, Toggle, TopBar, Txt, VerifiedTick } from '@/premium/ui';
 import type { FamilyMember } from '@/types/domain';
@@ -78,6 +83,25 @@ export default function FamilyMemberScreen() {
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   const m = member.data;
+  // Navy hero: light status bar icons until the canvas scrolls under them
+  // (the hero fades into the canvas from about two-thirds down).
+  const heroStatusBar = useHeroStatusBar(230, !!m);
+
+  // Coming back from a capture/document flow (which pops back to this
+  // screen): refresh the member and their documents. Skips the first focus —
+  // the queries already load on mount.
+  const queryClient = useQueryClient();
+  const seenFocus = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!seenFocus.current) {
+        seenFocus.current = true;
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: familyKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: documentKeys.member(id) });
+    }, [queryClient, id]),
+  );
   const photoUri = useMemberPhoto(id);
   const setPhoto = useSetMemberPhoto(id);
   // Opened from the Family "Add photos" nudge: start on the source sheet.
@@ -116,6 +140,25 @@ export default function FamilyMemberScreen() {
     : isPhoto
       ? `Take ${first}'s face photo`
       : `Complete ${first}'s face scan`;
+
+  // Extra documents any time — processing sees personId and returns here
+  // without re-running face capture.
+  const addDocument = () =>
+    m &&
+    router.push({
+      pathname: '/document/select-type',
+      params: { family: '1', personId: id, memberName: m.name, band: m.ageBand },
+    } as never);
+
+  // Redo an enrolled member's face: PIN first (as for your own face), then
+  // their own capture — liveness 5+ (PUT /face with personId), one photo under
+  // 5 (POST /face/enroll) — which pops back here.
+  const updateFace = () =>
+    m &&
+    router.push({
+      pathname: '/face-update/pin',
+      params: { personId: id, name: first, age: String(m.age), capture: isPhoto ? 'photo' : 'liveness' },
+    } as never);
 
   // "Go to Family" — reset to Tabs → Family so leftover add-flow screens
   // don't sit under the list. Header/hardware back stay plain router.back().
@@ -178,6 +221,7 @@ export default function FamilyMemberScreen() {
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40 }}
+        {...heroStatusBar}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.sky} />}>
         {/* ---------- hero (members have no photo — monogram on the identity gradient) ---------- */}
         <View style={{ height: 340, overflow: 'hidden' }}>
@@ -291,16 +335,47 @@ export default function FamilyMemberScreen() {
               compact
               skeleton={<SkeletonList rows={2} thumb={40} />}
               empty={(docs) => docs.length === 0}
-              emptyView={<EmptyView compact icon={FileText} title="No documents yet" body={`Add a document to verify ${first}.`} />}>
+              emptyView={
+                <EmptyView
+                  compact
+                  icon={FileText}
+                  title="No documents yet"
+                  body={`Add a document to verify ${first}.`}
+                  action={<Button label="Add a document" tone="soft" size="md" icon={FilePlus} onPress={addDocument} />}
+                />
+              }>
               {(docs) => (
                 <Group>
-                  {docs.map((d) => (
-                    <DocRow key={d.id} doc={d} onPress={() => router.push(`/document/${d.id}` as never)} />
-                  ))}
+                  {[
+                    ...docs.map((d) => (
+                      <DocRow key={d.id} doc={d} onPress={() => router.push(`/document/${d.id}` as never)} />
+                    )),
+                    <ListRow
+                      key="add"
+                      icon={FilePlus}
+                      tone="sky"
+                      title="Add a document"
+                      sub="Passport, ID card or birth certificate"
+                      onPress={addDocument}
+                    />,
+                  ]}
                 </Group>
               )}
             </Async>
           </View>
+
+          {/* ---------- manage (enrolled members) ---------- */}
+          {isFaceDone(m) && (
+            <Group title="Manage">
+              <ListRow
+                icon={isPhoto ? Camera : ScanFace}
+                tone="sky"
+                title={isPhoto ? 'Retake face photo' : 'Update face'}
+                sub={isPhoto ? `Replace ${first}'s enrolled photo` : `New liveness check for ${first}`}
+                onPress={updateFace}
+              />
+            </Group>
+          )}
 
           {/* ---------- permissions (approved design, no backend yet) ---------- */}
           <SoonOverlay>

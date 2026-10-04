@@ -6,11 +6,13 @@
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import { FileText, Lock, Mail, MapPin, QrCode, ScanFace, Shield, ShieldCheck, Star, Users, type LucideIcon } from 'lucide-react-native';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Glow, Guilloche, Wordmark } from '@/premium/blocks';
 import { APP_VERSION, emailSupport, SoonRow, SUPPORT_EMAIL } from '@/premium/flows/account';
+import { useHeroStatusBar } from '@/premium/statusBar';
 import { C, F, G } from '@/premium/theme';
 import { Card, Divider, go, Group, ListRow, Serif, Tile, TopBar, Txt } from '@/premium/ui';
 
@@ -48,11 +50,14 @@ const FEATURES: { icon: LucideIcon; title: string; desc: string }[] = [
 ];
 
 export default function AboutScreen() {
+  // Navy brand header: light status bar until it scrolls out from under it.
+  const [headerH, setHeaderH] = useState(300);
+  const heroStatusBar = useHeroStatusBar(headerH);
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} {...heroStatusBar}>
         {/* ---------- brand header ---------- */}
-        <View style={{ paddingBottom: 40, overflow: 'hidden' }}>
+        <View style={{ paddingBottom: 40, overflow: 'hidden' }} onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
           <LinearGradient colors={G.night} style={StyleSheet.absoluteFill} />
           <Glow size={420} opacity={0.4} style={{ top: -60, left: -20 }} />
           <Guilloche size={520} style={{ left: -60, top: -120 }} />

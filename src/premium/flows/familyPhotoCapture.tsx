@@ -9,6 +9,11 @@
  * Statically imports react-native-vision-camera — NEVER import this file from
  * a route. Load it through loadFamilyPhotoCapture() (./family), which falls
  * back to <CameraUnavailableView /> on builds without NitroModules.
+ *
+ * `update=1` (member page → PIN): retakes an enrolled member's photo. Under-5
+ * members have no liveness session, and PUT /face requires one, so the update
+ * re-sends POST /face/enroll { selfieBase64, personId }; on success it pops
+ * back to the member page instead of replacing it.
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Baby, Camera as CameraIcon, SwitchCamera } from 'lucide-react-native';
@@ -17,6 +22,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput, type CameraRef } from 'react-native-vision-camera';
 
 import { toApiError } from '@/api/errors';
+import { useToast } from '@/components/composite/Toast';
 import { useEnrollFace } from '@/features/auth/mutations';
 import { useRememberMemberPhoto } from '@/features/family/hooks';
 
@@ -28,7 +34,14 @@ import { GlassPill, NightStage } from './family';
 
 export function FamilyPhotoCapture() {
   const router = useRouter();
-  const { name, age, personId } = useLocalSearchParams<{ name?: string; age?: string; personId?: string }>();
+  const { name, age, personId, update } = useLocalSearchParams<{
+    name?: string;
+    age?: string;
+    personId?: string;
+    update?: string;
+  }>();
+  const isUpdate = update === '1' && !!personId;
+  const { toast } = useToast();
 
   const { hasPermission, requestPermission } = useCameraPermission();
   // Under-5 photo enrollment allows either camera — a parent can hold the
@@ -58,7 +71,11 @@ export function FamilyPhotoCapture() {
   }, [hasPermission, requestPermission]);
 
   const goToMemberDetail = () => {
-    if (personId) {
+    if (isUpdate && personId) {
+      // The member page is already under us — pop back to it.
+      toast({ variant: 'success', title: 'Face photo updated' });
+      router.dismissTo({ pathname: '/family/[id]', params: { id: personId } });
+    } else if (personId) {
       router.replace({ pathname: '/family/[id]', params: { id: personId } });
     } else {
       router.dismissTo('/(tabs)');
@@ -90,11 +107,11 @@ export function FamilyPhotoCapture() {
   };
 
   const stage = {
-    topTitle: 'Face enrollment',
+    topTitle: isUpdate ? 'Update face' : 'Face enrollment',
     subtitle: age ? `Age ${age} · photo enrollment` : 'Photo enrollment',
     onBack: () => void settleCameraThen(router.back),
-    step: 3,
-    total: 3,
+    step: isUpdate ? undefined : 3,
+    total: isUpdate ? undefined : 3,
     right: (
       <IconCircle
         icon={SwitchCamera}
@@ -131,8 +148,12 @@ export function FamilyPhotoCapture() {
     <NightStage
       {...stage}
       title={name ? `${name}'s` : 'Face'}
-      accent="photo."
-      instruction="Members under 5 enroll with one clear photo — no liveness check needed."
+      accent={isUpdate ? 'new photo.' : 'photo.'}
+      instruction={
+        isUpdate
+          ? 'Take one clear photo. It replaces the current face photo.'
+          : 'Members under 5 enroll with one clear photo — no liveness check needed.'
+      }
       footer={
         <Button
           label="Capture photo"

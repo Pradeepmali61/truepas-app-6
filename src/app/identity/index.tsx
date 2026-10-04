@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { BadgeCheck, FileText, Hourglass, ScanFace, ShieldCheck, UserRoundCheck } from 'lucide-react-native';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useDocuments } from '@/features/documents/hooks';
 import { useIdentitySummary } from '@/features/identity/hooks';
@@ -19,6 +19,7 @@ import { useProfilePicture } from '@/features/profile/hooks';
 import { FaceRing, Glow, IdentityCard } from '@/premium/blocks';
 import { fmtMonthYear, StatusBadge, statusLabel, statusTileTone } from '@/premium/flows/home';
 import { EmptyView, ErrorView, LoadingView } from '@/premium/kit';
+import { useHeroStatusBar } from '@/premium/statusBar';
 import { C, F, G, R, SH } from '@/premium/theme';
 import { Button, Card, Divider, Footer, Group, initials, ListRow, Row, Screen, Tile, TopBar, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
@@ -30,6 +31,10 @@ export default function IdentityScreen() {
   const { url: avatarUri } = useProfilePicture();
   const { data: summary, isPending, isError, refetch, isRefetching } = useIdentitySummary();
   const documents = useDocuments();
+  const insets = useSafeAreaInsets();
+  // Navy pass header: light status bar until the white pass card (below the
+  // 60pt TopBar + 12pt gap) scrolls up under it.
+  const heroStatusBar = useHeroStatusBar(insets.top + 72, !isPending && !isError && !!summary);
 
   if (isPending) {
     return (
@@ -77,6 +82,7 @@ export default function IdentityScreen() {
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
+        {...heroStatusBar}
         contentContainerStyle={{ paddingBottom: cta ? 16 : 40 }}
         refreshControl={
           <RefreshControl

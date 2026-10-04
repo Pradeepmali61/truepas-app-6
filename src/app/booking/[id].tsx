@@ -32,6 +32,7 @@ import {
   yearOf,
 } from '@/premium/flows/home';
 import { Async, EmptyView } from '@/premium/kit';
+import { useHeroStatusBar } from '@/premium/statusBar';
 import { C, F, G, R, SH } from '@/premium/theme';
 import { Avatar, Badge, Card, Divider, Group, ListRow, Row, Screen, SectionHead, TopBar, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
@@ -65,6 +66,9 @@ function BookingDetail({ b }: { b: Booking }) {
   const { url: avatarUri } = useProfilePicture();
   const family = useFamily().data ?? [];
   const docs = useDocuments().data ?? [];
+  // Dark photo header (340, the card overlaps it by 28): light status bar
+  // until the canvas scrolls under it.
+  const heroStatusBar = useHeroStatusBar(312);
 
   const upcoming = b.status === 'upcoming';
   const members = b.checkedInMembers ?? [];
@@ -117,7 +121,7 @@ function BookingDetail({ b }: { b: Booking }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} {...heroStatusBar}>
         {/* ---------- photo header ---------- */}
         <View style={{ height: 340 }}>
           <BookingBackdrop b={b} iconSize={72} />

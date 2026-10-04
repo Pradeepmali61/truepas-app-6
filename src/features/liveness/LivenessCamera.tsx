@@ -423,6 +423,10 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
         }
       } else {
         await updateFace.mutateAsync(facePayload);
+        // Family member face update: the new frame replaces their avatar too.
+        if (personId && capturedUri.current) {
+          await rememberMemberPhoto(personId, capturedUri.current);
+        }
       }
       console.log('[Liveness] Face enrollment SUCCESS');
       await settleCameraThen(onSuccess);

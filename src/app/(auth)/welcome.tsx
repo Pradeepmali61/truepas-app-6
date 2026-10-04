@@ -14,11 +14,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Wordmark } from '@/premium/blocks';
 import { IMG } from '@/premium/images';
+import { useLightStatusBar } from '@/premium/statusBar';
 import { C, F, R, SH } from '@/premium/theme';
 import { Button, Row, Serif, VerifiedTick } from '@/premium/ui';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  useLightStatusBar();
 
   return (
     <View style={{ flex: 1, backgroundColor: C.navyNight }}>

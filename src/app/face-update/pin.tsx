@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { isMockApi } from '@/api';
 import { MOCK_PIN } from '@/api/mock';
 import { PIN_LENGTH, usePinVerification } from '@/features/auth/usePinVerification';
+import { MEMBER_FACE_UPDATE_GUARD } from '@/features/family/hooks';
 import { formatCountdown } from '@/hooks/useCountdown';
 import { Keypad } from '@/premium/blocks';
 import { Banner, CodeInput } from '@/premium/kit';
@@ -14,17 +15,34 @@ import { flowGuards } from '@/services/flowGuards';
 
 /** Update face — PIN verification (PRD FR-04: PIN required for face updates).
  *  Forwards `personId` (when present) so the face update targets the family
- *  member instead of the authenticated main user. Shares attempts/lockout
- *  logic with confirm-pin via usePinVerification. */
+ *  member instead of the authenticated main user. With `capture` (from the
+ *  member page) it opens the member's own capture screen in update mode —
+ *  liveness (5+, PUT /face) or one photo (under 5) — which lands back on the
+ *  member page. Shares attempts/lockout logic with confirm-pin via
+ *  usePinVerification. */
 export default function FaceUpdatePinScreen() {
   const router = useRouter();
-  const { personId, age } = useLocalSearchParams<{ personId?: string; age?: string }>();
+  const { personId, age, name, capture } = useLocalSearchParams<{
+    personId?: string;
+    age?: string;
+    name?: string;
+    capture?: 'liveness' | 'photo';
+  }>();
   const gate = usePinVerification();
   const busy = gate.locked || gate.isPending;
 
   const handleComplete = async (value?: string) => {
     const code = await gate.submit(value);
     if (!code) return;
+    if (personId && (capture === 'liveness' || capture === 'photo')) {
+      flowGuards.grant(MEMBER_FACE_UPDATE_GUARD);
+      // Replace: back from the capture screen returns to the member page.
+      router.replace({
+        pathname: capture === 'photo' ? '/family/add/photo-capture' : '/family/add/face-capture',
+        params: { personId, update: '1', ...(name ? { name } : {}), ...(age ? { age } : {}) },
+      });
+      return;
+    }
     flowGuards.grant('face-update:camera');
     router.push({
       pathname: '/face-update/camera',

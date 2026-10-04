@@ -1,6 +1,5 @@
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { AppState, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider } from 'react-redux';
@@ -10,6 +9,7 @@ import { FieldLabelStyleProvider, ToastProvider } from '@/components/composite';
 import { sessionEnded } from '@/features/auth/slice';
 import { clearAllProfileImages } from '@/services/profileImageStore';
 import { store } from '@/store';
+import { AppStatusBar } from '@/premium/statusBar';
 import { C } from '@/premium/theme';
 import { ThemeProvider, useTruepasFonts } from '@/theme';
 
@@ -68,7 +68,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <StatusBar style="dark" />
+      <AppStatusBar />
       {children}
       <AppLock />
     </>

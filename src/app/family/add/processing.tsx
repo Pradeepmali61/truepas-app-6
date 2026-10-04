@@ -31,7 +31,8 @@ const DOC_LABELS: Record<DocumentType, string> = {
 /** Family document processing — runs AFTER document capture.
  *  Two modes:
  *  - personId present (existing member): adds the captured document to that
- *    member's profile, then routes to the member detail page.
+ *    member's profile, then pops back to the member detail page (no face
+ *    step — adding an extra document never re-runs face capture).
  *  - no personId (new member): creates the family member, then:
  *    - 5+: routes to face-capture (liveness + face enrollment), which
  *      then routes to the member detail page on completion.
@@ -163,9 +164,12 @@ export default function FamilyProcessingScreen() {
         await verifyMemberDoc(doc.id, scanResult.documentImageBase64);
         clearScanResult();
         setStatus('done');
-        // Route back to the member detail page (not just router.back()
-        // which would land on the select-type page).
-        router.replace({ pathname: '/family/[id]', params: { id: personId } });
+        // Existing member (Continue setup / "Add a document"): never runs
+        // face capture here — the member page owns that step, so a member
+        // whose face is already enrolled just gets the extra document. Pop
+        // back to the member page that started this flow (select-type stays
+        // off the back stack); replaces this screen if it isn't there.
+        router.dismissTo({ pathname: '/family/[id]', params: { id: personId } });
         return;
       }
 

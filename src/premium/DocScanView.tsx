@@ -22,6 +22,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { IMG } from './images';
 import { ComingSoon } from './kit';
+import { useLightStatusBar } from './statusBar';
 import { C, F } from './theme';
 import { back, Footer, go, IconCircle, Press, Row, Steps, TopBar, Txt } from './ui';
 
@@ -197,6 +198,8 @@ export function DocScanView({
   /** Replaces the shutter row; `null` renders no footer. */
   footer?: ReactNode | null;
 }) {
+  // Dark camera stage — light status bar icons while it's on screen.
+  useLightStatusBar();
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const live = camera != null;
   const shutter = onCapture ?? (next ? go(next) : undefined);

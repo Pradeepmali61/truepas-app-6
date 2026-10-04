@@ -1,9 +1,10 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { api } from '@/api';
+import { flowGuards } from '@/services/flowGuards';
 import { deleteMemberProfileImage, getMemberProfileImage, saveMemberFacePhoto } from '@/services/profileImageStore';
 import { ageFromDob } from '@/utils/age';
 import type { AddFamilyMemberRequest, FamilyAgeBand, FamilyMember } from '@/types/domain';
@@ -170,4 +171,22 @@ export function isDuplicateMemberError(err: any): boolean {
   const status = err?.response?.status;
   const msg = String(err?.response?.data?.message ?? '');
   return status === 409 || /already exists/i.test(msg);
+}
+
+/** One-shot flag the PIN screen grants before a member face update. */
+export const MEMBER_FACE_UPDATE_GUARD = 'family:face-update';
+
+/**
+ * PIN gate for a member's face update (PRD FR-04: PIN before any face
+ * update). /face-update/pin grants the flag and opens the member capture
+ * screen with update=1; the screen consumes it on mount, so a deep link or a
+ * replay can't skip the PIN. First-time enrolment (isUpdate false) is never
+ * gated. Returns false when the screen must bounce to the PIN step.
+ */
+export function useMemberFaceUpdateGate(isUpdate: boolean): boolean {
+  const [granted] = useState(() => !isUpdate || flowGuards.has(MEMBER_FACE_UPDATE_GUARD));
+  useEffect(() => {
+    if (isUpdate && granted) flowGuards.consume(MEMBER_FACE_UPDATE_GUARD);
+  }, [isUpdate, granted]);
+  return granted;
 }

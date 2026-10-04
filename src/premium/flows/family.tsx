@@ -37,6 +37,7 @@ import type { FamilyMember, IdentityDocument } from '@/types/domain';
 
 import { Guilloche } from '../blocks';
 import { Banner, Bone } from '../kit';
+import { useLightStatusBar } from '../statusBar';
 import { C, F, G, R, SH } from '../theme';
 import { Badge, type BadgeTone, Button, Card, Footer, initials, Press, Screen, Steps, Tile, TopBar, Txt } from '../ui';
 
@@ -609,6 +610,7 @@ export function NightStage({
   children?: ReactNode;
   footer?: ReactNode;
 }) {
+  useLightStatusBar();
   return (
     <View style={{ flex: 1, backgroundColor: C.navyNight }}>
       <LinearGradient colors={G.night} style={StyleSheet.absoluteFill} />

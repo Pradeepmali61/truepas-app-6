@@ -156,9 +156,11 @@ export function useUpdateFace() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: FaceUpdateRequest) => api.updateFace(payload),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['user'] });
       queryClient.invalidateQueries({ queryKey: ['identity'] });
+      // Family member face update (personId) — refresh their member record.
+      if (variables.personId) queryClient.invalidateQueries({ queryKey: ['family'] });
     },
   });
 }
