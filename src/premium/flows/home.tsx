@@ -651,6 +651,46 @@ function GhostCircle({ icon: Icon }: { icon: LucideIcon }) {
   );
 }
 
+/** Compact you + family avatar stack, for cards outside Home. */
+export function TravellerStack({
+  you,
+  members,
+}: {
+  you: { name?: string | null; uri?: string | null; faceEnrolled: boolean };
+  members: FamilyMember[];
+}) {
+  const shown = members.slice(0, STACK_MAX);
+  const extra = members.length - shown.length;
+  return (
+    <Row gap={0}>
+      <StackSlot first z={9}>
+        <Avatar uri={you.uri} name={you.name} size={STACK_SIZE} status={you.faceEnrolled ? 'verified' : 'pending'} />
+      </StackSlot>
+      {shown.map((m, i) => (
+        <StackSlot key={m.id} z={8 - i}>
+          <MemberAvatar m={m} tint={MEMBER_TINTS[i % MEMBER_TINTS.length]} />
+        </StackSlot>
+      ))}
+      {extra > 0 && (
+        <StackSlot z={0}>
+          <View
+            style={{
+              width: STACK_SIZE,
+              height: STACK_SIZE,
+              borderRadius: STACK_SIZE / 2,
+              backgroundColor: C.navy,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ fontFamily: F.bold, fontSize: 15, color: C.white }}>+{extra}</Text>
+          </View>
+        </StackSlot>
+      )}
+    </Row>
+  );
+}
+
 export function TogetherCard({
   members,
   you,

@@ -2,44 +2,39 @@
 /**
  * Booking detail — GET /cb/bookings/{bookingId}. Photo header with venue +
  * location, then the real facts (check-in / check-out, guests, amount,
- * status, checked-in members). The digital key and venue services in the
- * approved design have no backend yet and are shown as "Coming soon".
+ * status, checked-in members). The approved design's QR key becomes a Face
+ * check-in card (when it opens + whose faces are ready), and venue services
+ * (no data in the API) become "Before you go": real readiness rows plus
+ * directions and sharing that work today.
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams } from 'expo-router';
-import {
-  BellRing,
-  CalendarDays,
-  Car,
-  Coffee,
-  Map as MapIcon,
-  MapPin,
-  Sparkles,
-  Ticket,
-  Users,
-  UtensilsCrossed,
-  Wifi,
-} from 'lucide-react-native';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { CalendarDays, FileCheck, MapPin, Navigation, ScanFace, Share2, Users, UsersRound } from 'lucide-react-native';
+import { Linking, Platform, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useDocuments } from '@/features/documents/hooks';
+import { useFamily } from '@/features/family/hooks';
 import { useBooking } from '@/features/history/hooks';
-import { Guilloche, PassCode } from '@/premium/blocks';
+import { useProfilePicture } from '@/features/profile/hooks';
+import { Guilloche } from '@/premium/blocks';
 import {
   BookingBackdrop,
   BookingTypeIcon,
-  bookingKind,
   bookingTypeLabel,
   Fact,
   fmtDay,
   money,
   StatusBadge,
+  statusLabel,
+  TravellerStack,
   whenLabel,
   yearOf,
 } from '@/premium/flows/home';
-import { Async, EmptyView, SoonOverlay } from '@/premium/kit';
+import { Async, EmptyView } from '@/premium/kit';
 import { C, F, G, R, SH } from '@/premium/theme';
-import { Avatar, Card, Divider, Group, ListRow, Row, Screen, SectionHead, TopBar, Txt } from '@/premium/ui';
+import { Avatar, Badge, Card, Divider, Group, ListRow, Row, Screen, SectionHead, TopBar, Txt } from '@/premium/ui';
+import { useAppSelector } from '@/store';
 import type { Booking } from '@/types/domain';
 
 export default function BookingDetailScreen() {
@@ -65,12 +60,60 @@ export default function BookingDetailScreen() {
 }
 
 function BookingDetail({ b }: { b: Booking }) {
-  const kind = bookingKind(b.type);
-  const stay = kind === 'hotel' || kind === 'cruise';
+  const router = useRouter();
+  const user = useAppSelector((state) => state.auth.user);
+  const { url: avatarUri } = useProfilePicture();
+  const family = useFamily().data ?? [];
+  const docs = useDocuments().data ?? [];
+
+  const upcoming = b.status === 'upcoming';
   const members = b.checkedInMembers ?? [];
   const progress = Math.min(1, members.length / Math.max(b.guests, 1));
   const checkInYear = yearOf(b.checkIn);
   const checkOutYear = yearOf(b.checkOut);
+
+  /* Face check-in card */
+  const faceEnrolled = !!user?.faceEnrolled;
+  const you = { name: user?.fullName, uri: avatarUri, faceEnrolled };
+  const travellers = 1 + family.length;
+  const ready = (faceEnrolled ? 1 : 0) + family.filter((m) => m.faceEnrolled).length;
+  const pending = family.find((m) => !m.faceEnrolled);
+  const when = whenLabel(b.checkIn);
+  const entry =
+    b.status === 'completed'
+      ? { title: 'Checked in', sub: `${members.length} of ${b.guests} guests checked in with their face.` }
+      : upcoming
+        ? {
+            title: when === 'Today' ? 'Opens today' : `Opens ${fmtDay(b.checkIn)}`,
+            sub: `Just look at the camera at ${b.venue}.`,
+          }
+        : { title: statusLabel(b.status), sub: 'Face check-in is closed for this booking.' };
+
+  /* Before you go: ID row */
+  const verifiedDoc = docs.find((d) => d.status === 'verified');
+  const pendingDoc = docs.find((d) => d.status === 'pending');
+  const idRow = verifiedDoc
+    ? { done: true, tone: 'green' as const, title: 'ID verified', sub: verifiedDoc.label, href: '' }
+    : pendingDoc
+      ? { done: false, tone: 'amber' as const, title: 'ID in review', sub: pendingDoc.label, href: '/(tabs)/documents' }
+      : { done: false, tone: 'amber' as const, title: 'Add an ID', sub: 'Passport, ID card or licence', href: '/document/select-type' };
+
+  const place = `${b.venue}, ${b.location}`;
+  const openDirections = () => {
+    const q = encodeURIComponent(place);
+    const url = Platform.OS === 'ios' ? `http://maps.apple.com/?q=${q}` : `https://www.google.com/maps/search/?api=1&query=${q}`;
+    void Linking.openURL(url).catch(() => {});
+  };
+  const shareBooking = () => {
+    const lines = [
+      `${b.venue} · ${bookingTypeLabel(b.type)}`,
+      b.location,
+      `Check-in ${fmtDay(b.checkIn)}${checkInYear != null ? ` ${checkInYear}` : ''}`,
+      `Check-out ${fmtDay(b.checkOut)}${checkOutYear != null ? ` ${checkOutYear}` : ''}`,
+      `${b.guests} ${b.guests === 1 ? 'guest' : 'guests'}`,
+    ];
+    void Share.share({ message: lines.join('\n') }).catch(() => {});
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
@@ -176,46 +219,87 @@ function BookingDetail({ b }: { b: Booking }) {
             </Card>
           </View>
 
-          {/* ---------- digital key (no backend yet) ---------- */}
-          <SoonOverlay light>
-            <View style={[{ borderRadius: R.xl, overflow: 'hidden', padding: 20 }, SH.navy]}>
-              <LinearGradient colors={G.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-              <Guilloche size={380} style={{ right: -190, top: -190 }} />
-              <Row between align="flex-start">
-                <View style={{ gap: 4, flex: 1, paddingRight: 12 }}>
-                  <Text style={{ fontFamily: F.semibold, fontSize: 12, letterSpacing: 1.3, color: C.skyLight, marginTop: 34 }}>
-                    {stay ? 'DIGITAL KEY' : 'FACE PASS'}
-                  </Text>
-                  <Text style={{ fontFamily: F.extrabold, fontSize: 28, letterSpacing: -1, color: C.white }}>Face entry</Text>
-                  <Text style={{ fontFamily: F.medium, fontSize: 13, color: 'rgba(255,255,255,0.65)' }}>
-                    {stay ? 'Your face opens your room.' : 'Walk in with your face — no tickets.'}
-                  </Text>
-                </View>
-                <View style={{ backgroundColor: C.white, padding: 10, borderRadius: 18 }}>
-                  <PassCode size={104} />
-                </View>
-              </Row>
-            </View>
-          </SoonOverlay>
-
-          {/* ---------- venue services (no backend yet) ---------- */}
-          <SoonOverlay>
-            {stay ? (
-              <Group title="Stay services">
-                <ListRow icon={Coffee} tone="sky" title="In-room dining" sub="Order to your room" />
-                <ListRow icon={Sparkles} tone="sky" title="Spa & wellness" sub="Book a treatment" />
-                <ListRow icon={Car} tone="sky" title="Airport transfer" sub="Arrange a ride" />
-                <ListRow icon={Wifi} tone="sky" title="Wi-Fi" sub="Connect automatically" />
-                <ListRow icon={BellRing} tone="sky" title="Request housekeeping" />
-              </Group>
-            ) : (
-              <Group title="Your visit">
-                <ListRow icon={MapIcon} tone="sky" title="Map & directions" sub={b.location} />
-                <ListRow icon={UtensilsCrossed} tone="sky" title="Food & drinks" sub="Order ahead, pay with your face" />
-                <ListRow icon={Ticket} tone="sky" title="Add-ons & upgrades" />
-              </Group>
+          {/* ---------- face check-in (replaces the QR key: the face is the key) ---------- */}
+          <View style={[{ borderRadius: R.xl, overflow: 'hidden', padding: 20, gap: 18 }, SH.navy]}>
+            <LinearGradient colors={G.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <Guilloche size={380} style={{ right: -190, top: -190 }} />
+            <Row between align="flex-start">
+              <View style={{ gap: 4, flex: 1, paddingRight: 12 }}>
+                <Text style={{ fontFamily: F.semibold, fontSize: 12, letterSpacing: 1.3, color: C.skyLight }}>FACE CHECK-IN</Text>
+                <Text style={{ fontFamily: F.extrabold, fontSize: 28, letterSpacing: -1, color: C.white }}>{entry.title}</Text>
+                <Text style={{ fontFamily: F.medium, fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.7)' }}>{entry.sub}</Text>
+              </View>
+              <View style={{ backgroundColor: C.white, width: 92, height: 92, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
+                <ScanFace size={46} color={C.sky} strokeWidth={1.6} />
+              </View>
+            </Row>
+            {upcoming && (
+              <>
+                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.14)' }} />
+                <Row between gap={12}>
+                  <TravellerStack you={you} members={family} />
+                  <View style={{ alignItems: 'flex-end', flexShrink: 1 }}>
+                    <Text style={{ fontFamily: F.mono, fontSize: 15, color: C.white }}>
+                      {ready}/{travellers}
+                    </Text>
+                    <Text style={{ fontFamily: F.medium, fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>faces ready</Text>
+                  </View>
+                </Row>
+              </>
             )}
-          </SoonOverlay>
+          </View>
+
+          {/* ---------- before you go / your visit: only actions that work today ---------- */}
+          {upcoming ? (
+            <Group title="Before you go">
+              <ListRow
+                icon={ScanFace}
+                tone={faceEnrolled ? 'green' : 'amber'}
+                title={faceEnrolled ? 'Face enrolled' : 'Enrol your face'}
+                sub={faceEnrolled ? 'Your face is your key' : 'Needed to check in with a look'}
+                trailing={faceEnrolled ? <Badge label="Done" tone="green" /> : undefined}
+                chevron={!faceEnrolled}
+                onPress={faceEnrolled ? undefined : () => router.push('/face-update/pin' as never)}
+              />
+              <ListRow
+                icon={FileCheck}
+                tone={idRow.tone}
+                title={idRow.title}
+                sub={idRow.sub}
+                trailing={idRow.done ? <Badge label="Done" tone="green" /> : undefined}
+                chevron={!idRow.done}
+                onPress={idRow.done ? undefined : () => router.push(idRow.href as never)}
+              />
+              <ListRow
+                icon={UsersRound}
+                tone={family.length === 0 ? 'sky' : pending ? 'amber' : 'green'}
+                title={family.length === 0 ? 'Travelling with family?' : `Family faces ${ready - (faceEnrolled ? 1 : 0)} of ${family.length}`}
+                sub={
+                  family.length === 0
+                    ? 'Add them to check in together'
+                    : pending
+                      ? `${pending.name.split(' ')[0]} still needs a face scan`
+                      : 'Everyone can check in with you'
+                }
+                trailing={family.length > 0 && !pending ? <Badge label="Done" tone="green" /> : undefined}
+                chevron={family.length === 0 || !!pending}
+                onPress={
+                  family.length === 0
+                    ? () => router.push('/family/add' as never)
+                    : pending
+                      ? () => router.push(`/family/${pending.id}` as never)
+                      : undefined
+                }
+              />
+              <ListRow icon={Navigation} tone="sky" title="Directions" sub={b.location} onPress={openDirections} />
+              <ListRow icon={Share2} tone="sky" title="Share booking" sub="Send the details to anyone" onPress={shareBooking} />
+            </Group>
+          ) : (
+            <Group title="Your visit">
+              <ListRow icon={Navigation} tone="sky" title="Directions" sub={b.location} onPress={openDirections} />
+              <ListRow icon={Share2} tone="sky" title="Share booking" sub="Send the details to anyone" onPress={shareBooking} />
+            </Group>
+          )}
         </View>
       </ScrollView>
     </View>

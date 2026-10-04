@@ -4,23 +4,23 @@
  * face + document verified → "verified", anything missing/pending/failed →
  * "incomplete". Shows the verified / almost-there card with the next-step
  * hint, the Face / Document / Selfie checks, linked documents, recent
- * activity and the next-step CTA. The scannable venue pass in the approved
- * design has no backend yet ("Coming soon").
+ * activity and the next-step CTA. The header pass shows the user's face in
+ * the scan ring: at Truepas venues the face is the pass, so there is no QR.
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { BadgeCheck, FileText, ScanFace, ShieldCheck, UserRoundCheck } from 'lucide-react-native';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { BadgeCheck, FileText, Hourglass, ScanFace, ShieldCheck, UserRoundCheck } from 'lucide-react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useDocuments } from '@/features/documents/hooks';
 import { useIdentitySummary } from '@/features/identity/hooks';
 import { useProfilePicture } from '@/features/profile/hooks';
-import { Glow, IdentityCard, PassCode } from '@/premium/blocks';
+import { FaceRing, Glow, IdentityCard } from '@/premium/blocks';
 import { fmtMonthYear, StatusBadge, statusLabel, statusTileTone } from '@/premium/flows/home';
-import { EmptyView, ErrorView, LoadingView, SoonOverlay } from '@/premium/kit';
-import { C, G, R, SH } from '@/premium/theme';
-import { Button, Card, Divider, Footer, Group, ListRow, Row, Screen, Tile, TopBar, Txt } from '@/premium/ui';
+import { EmptyView, ErrorView, LoadingView } from '@/premium/kit';
+import { C, F, G, R, SH } from '@/premium/theme';
+import { Button, Card, Divider, Footer, Group, initials, ListRow, Row, Screen, Tile, TopBar, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
 import type { ActivityItem } from '@/types/domain';
 
@@ -89,7 +89,7 @@ export default function IdentityScreen() {
           />
         }
       >
-        {/* ---------- venue pass (no backend yet) ---------- */}
+        {/* ---------- identity pass: your face is the pass ---------- */}
         <View style={{ paddingBottom: 30 }}>
           <LinearGradient colors={G.night} style={StyleSheet.absoluteFill} />
           <Glow size={420} opacity={0.35} style={{ top: -120, left: -40 }} />
@@ -97,16 +97,25 @@ export default function IdentityScreen() {
             <TopBar tone="glass" title="Your identity" />
           </SafeAreaView>
           <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-            <SoonOverlay>
-              <View style={[{ backgroundColor: C.white, borderRadius: R.xxl, padding: 22, alignItems: 'center', gap: 14 }, SH.lg]}>
-                <Row gap={8}>
-                  <BadgeCheck size={18} color={C.sky} />
-                  <Txt v="smallStrong">Show this at any Truepas venue</Txt>
-                </Row>
-                <PassCode size={176} />
-                <Txt v="small">Your personal venue pass</Txt>
-              </View>
-            </SoonOverlay>
+            <View style={[{ backgroundColor: C.white, borderRadius: R.xxl, padding: 22, alignItems: 'center', gap: 6 }, SH.lg]}>
+              <Row gap={8}>
+                {verified ? <BadgeCheck size={18} color={C.sky} /> : <Hourglass size={17} color={C.amberInk} />}
+                <Txt v="smallStrong">{verified ? 'Verified by Truepas' : 'Verification in progress'}</Txt>
+              </Row>
+              <FaceRing size={176} mode={verified ? 'success' : 'idle'} uri={avatarUri} photo={!!avatarUri}>
+                {avatarUri ? undefined : (
+                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.skyWash }}>
+                    <Text style={{ fontFamily: F.bold, fontSize: 40, color: C.navy }}>{initials(user?.fullName)}</Text>
+                  </View>
+                )}
+              </FaceRing>
+              <Txt v="h3" center lines={1} style={{ marginTop: -18 }}>
+                {user?.fullName ?? ''}
+              </Txt>
+              <Txt v="small" center>
+                At Truepas venues, your face is your pass.
+              </Txt>
+            </View>
           </View>
         </View>
 
