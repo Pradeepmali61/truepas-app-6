@@ -7,7 +7,6 @@
  * Data: useIdentitySummary + useDocuments. There is no issued-credentials
  * endpoint in our API yet, so that section renders its empty state.
  */
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { FileText, MoveHorizontal, Plus, ShieldCheck, Ticket } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
@@ -28,6 +27,7 @@ import { Async, Bone, EmptyView } from '@/premium/kit';
 import { C, F, R } from '@/premium/theme';
 import { Button, Card, Chip, IconCircle, Row, SectionHead, Tile, Txt } from '@/premium/ui';
 import type { DocumentType, IdentityDocument, IdentitySummary, VerificationStatus } from '@/types/domain';
+import { selectHaptic } from '@/services/haptics';
 
 type Cat = 'all' | 'identity' | 'travel' | 'driving';
 
@@ -323,7 +323,7 @@ function DeckCard({
         const dir = g.dx >= 0 ? 1 : -1;
         const off = dir * (latest.current.width + 40);
         Animated.timing(x, { toValue: off, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: true }).start(() => {
-          void Haptics.selectionAsync().catch(() => {});
+          selectHaptic();
           latest.current.onSwiped();
           Animated.spring(x, { toValue: 0, speed: 12, bounciness: 4, useNativeDriver: true }).start();
         });

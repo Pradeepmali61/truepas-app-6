@@ -8,7 +8,6 @@
  * the verify / resend / attempts / expiry logic is ported 1:1, only the UI
  * changed (CodeInput, Banner, premium header).
  */
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import {
   CalendarDays,
@@ -50,6 +49,7 @@ import type { OtpPurpose, VerifyOtpRequest, VerifyOtpResponse } from '@/types/do
 import { Banner, CodeInput } from '../kit';
 import { C, F, R, S, SH } from '../theme';
 import { Button, Card, Field, Footer, Heading, Row, Steps, TextLink, Tile, TopBar, Txt } from '../ui';
+import { errorHaptic, successHaptic, tapHaptic } from '@/services/haptics';
 
 /* ───────────────────────── form shell ───────────────────────── */
 
@@ -779,7 +779,7 @@ export function OtpScreen({
       }
 
       setVerifyState('success');
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      successHaptic();
       onVerified(response, otp);
     } catch (err: unknown) {
       const apiErr = toApiError(err);
@@ -829,7 +829,7 @@ export function OtpScreen({
           status: apiErr.status,
         });
       }
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      errorHaptic();
       shake();
       setCode('');
     }
@@ -838,7 +838,7 @@ export function OtpScreen({
   const handleResend = async () => {
     if (!onResend || resending || resendSeconds > 0) return;
     setResending(true);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    tapHaptic();
     try {
       await onResend();
       // Fresh code sent — restart both timers, restore attempts and clear entry.

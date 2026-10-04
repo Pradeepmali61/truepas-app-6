@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -40,6 +39,7 @@ import {
 import { useLivenessSession } from '@/features/liveness/useLivenessSession';
 import { flowGuards } from '@/services/flowGuards';
 import { useThemeTokens } from '@/theme';
+import { errorHaptic, successHaptic, tapHaptic } from '@/services/haptics';
 
 interface LivenessCameraProps {
   /** "enroll" for first-time enrollment, "update" for face update flow. */
@@ -486,14 +486,14 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
       easing: Easing.out(Easing.ease),
       useNativeDriver: false, // width isn't a native-driver property
     }).start();
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    tapHaptic();
   }, [liveness.phase, liveness.currentStepIndex, capture, stepMs]);
 
   // Tactile payoff — the verification moment deserves a felt confirmation
   // (design-repo VerifyResultScreen).
   useEffect(() => {
-    if (liveness.phase === 'passed') void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    else if (liveness.phase === 'failed') void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    if (liveness.phase === 'passed') successHaptic();
+    else if (liveness.phase === 'failed') errorHaptic();
   }, [liveness.phase]);
 
   // Permission not granted

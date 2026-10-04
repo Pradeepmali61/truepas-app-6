@@ -7,7 +7,6 @@
  * face is the pass (there is no in-app check-in API to trigger instead).
  */
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { CalendarCheck, House, type LucideIcon, ScanFace, Users, Wallet } from 'lucide-react-native';
@@ -16,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, F, G, SH } from '@/premium/theme';
 import { Press } from '@/premium/ui';
+import { tapHaptic } from '@/services/haptics';
 
 type Item =
   | { kind: 'tab'; route: string; label: string; icon: LucideIcon }
@@ -37,7 +37,7 @@ export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
   const activeRoute = state.routes[state.index]?.name;
 
   const press = (it: Item) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    tapHaptic();
     if (it.kind === 'link') {
       router.push(it.href as never);
       return;
@@ -91,7 +91,7 @@ export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
           <View style={{ width: 76, alignItems: 'center' }}>
             <Press
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                tapHaptic();
                 router.push('/identity' as never);
               }}
               label="Your identity"

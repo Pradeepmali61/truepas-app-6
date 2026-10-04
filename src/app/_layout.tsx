@@ -14,6 +14,11 @@ import { C } from '@/premium/theme';
 import { ThemeProvider, useTruepasFonts } from '@/theme';
 
 import '@/global.css';
+import { AppLock } from '@/features/settings/AppLock';
+import { loadPrefs } from '@/services/prefs';
+
+// Settings (haptics, app lock) are read once, before anything uses them.
+void loadPrefs();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,6 +70,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <>
       <StatusBar style="dark" />
       {children}
+      <AppLock />
     </>
   );
 }

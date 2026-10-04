@@ -1,9 +1,9 @@
-import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { AppIcon, type IconName } from "./AppIcon";
 import { getNeuBoxShadow, getNeuColors, NEU_RADIUS, useNeuBase } from "./neumorphism";
+import { tapHaptic } from '@/services/haptics';
 
 type NeuButtonType = "elevated_soft" | "elevated_flat";
 
@@ -47,7 +47,7 @@ export function NeuButton({
   };
   const handlePress = () => {
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      tapHaptic();
     }
     onPress?.();
   };

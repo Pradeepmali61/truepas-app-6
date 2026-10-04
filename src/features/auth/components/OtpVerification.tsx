@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useState } from 'react';
@@ -16,6 +15,7 @@ import { useCountdown } from '@/hooks/useCountdown';
 import { useKeyboardScrollPad } from '@/hooks/useKeyboardScrollPad';
 import { makeStyles, useThemeTokens } from '@/theme';
 import type { OtpPurpose, VerifyOtpRequest, VerifyOtpResponse } from '@/types/domain';
+import { errorHaptic, successHaptic, tapHaptic } from '@/services/haptics';
 
 interface OtpVerificationProps {
   title: string;
@@ -133,7 +133,7 @@ export function OtpVerification({
       }
 
       setVerifyState('success');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      successHaptic();
       onVerified(response, otp);
     } catch (err: any) {
       const apiErr = toApiError(err);
@@ -183,7 +183,7 @@ export function OtpVerification({
           status: apiErr.status,
         });
       }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      errorHaptic();
       shakeX.value = withSequence(
         withTiming(-10, { duration: 50 }),
         withTiming(10, { duration: 50 }),
@@ -198,7 +198,7 @@ export function OtpVerification({
   const handleResend = async () => {
     if (!onResend || resending || resendSeconds > 0) return;
     setResending(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    tapHaptic();
     try {
       await onResend();
       // Fresh code sent — restart both timers, restore attempts and clear entry.
