@@ -13,7 +13,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import {
   CalendarDays,
-  Camera,
   CarFront,
   Check,
   ChevronDown,
@@ -26,7 +25,6 @@ import {
   Loader,
   type LucideIcon,
   Plane,
-  ScanFace,
   ScrollText,
   X,
 } from 'lucide-react-native';
@@ -143,23 +141,6 @@ export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPr
                 justifyContent: 'center',
               }}>
               <Text style={{ fontFamily: F.bold, fontSize: 26, letterSpacing: 0.5, color: C.white }}>{initials(member.name)}</Text>
-            </View>
-            {/* Nudge: a face scan also sets the photo, so pending members get that. */}
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 5,
-                marginTop: 10,
-                height: 24,
-                paddingHorizontal: 10,
-                borderRadius: R.full,
-                backgroundColor: 'rgba(255,255,255,0.16)',
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.26)',
-              }}>
-              {verified ? <Camera size={12} color={C.white} strokeWidth={2.4} /> : <ScanFace size={12} color={C.white} strokeWidth={2.4} />}
-              <Text style={{ fontFamily: F.semibold, fontSize: 11.5, color: C.white }}>{verified ? 'Add photo' : 'Scan face'}</Text>
             </View>
           </View>
         )}
