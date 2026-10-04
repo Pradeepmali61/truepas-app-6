@@ -30,6 +30,7 @@ import {
     Typography
 } from '@/components/ui';
 import { useEnrollFace, useUpdateFace } from '@/features/auth/mutations';
+import { useRememberMemberPhoto } from '@/features/family/hooks';
 // Premium (Truepas 3.0) stage UIs — same props as LivenessStages; camera stays mounted per AGENTS.md.
 import {
   PremiumChallengeStage as ChallengeStage,
@@ -94,6 +95,9 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
 
   const liveness = useLivenessSession();
   const enrollFace = useEnrollFace();
+  const rememberMemberPhoto = useRememberMemberPhoto();
+  /** Finalize frame, kept so a family member's enrolment can become their avatar. */
+  const capturedUri = useRef<string | null>(null);
   const updateFace = useUpdateFace();
 
   // Under-10 members may flip to the rear camera (parent holds the phone);
@@ -368,6 +372,7 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
       const fileUri = photoFile.filePath.startsWith('file://')
         ? photoFile.filePath
         : `file://${photoFile.filePath}`;
+      capturedUri.current = fileUri;
 
       console.log('[Liveness] Calling finalize API...');
       const result = await liveness.finalize(fileUri);
@@ -413,6 +418,8 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
           // (the onboarding layout redirects the moment it goes true) and the
           // flag proves the success screen followed a real enrollment.
           flowGuards.grant('onboarding:face-enrolled');
+        } else if (capturedUri.current) {
+          await rememberMemberPhoto(personId, capturedUri.current);
         }
       } else {
         await updateFace.mutateAsync(facePayload);
@@ -428,7 +435,7 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
     } finally {
       setEnrolling(false);
     }
-  }, [enrolling, liveness, mode, personId, enrollFace, updateFace, onSuccess, settleCameraThen, failWithCooldown]);
+  }, [enrolling, liveness, mode, personId, enrollFace, updateFace, rememberMemberPhoto, onSuccess, settleCameraThen, failWithCooldown]);
 
   // Auto-finalize when phase becomes 'finalizing'
   useEffect(() => {

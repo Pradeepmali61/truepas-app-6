@@ -8,6 +8,7 @@
  * under-5 photo camera lives in ./familyPhotoCapture and is lazy-required via
  * loadFamilyPhotoCapture(), same contract as features/liveness/cameraModule.
  */
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import {
@@ -33,6 +34,7 @@ import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useMemberPhoto } from '@/features/family/hooks';
 import type { FamilyMember, IdentityDocument } from '@/types/domain';
 
 import { Guilloche } from '../blocks';
@@ -123,12 +125,14 @@ function GlassTag({ icon: Icon, label }: { icon?: LucideIcon; label: string }) {
   );
 }
 
-/** Portrait card — the approved "party" grid look, initials instead of a photo.
+/** Portrait card — the approved "party" grid look; the enrolment photo when
+ *  this device has it, otherwise initials.
  *  Carries everything the old FamilyCard showed: relationship, age, status,
  *  capture mode, age band and allowed cameras. */
 export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPress: () => void }) {
   const verified = member.verification === 'verified' || !!member.faceEnrolled;
   const photo = member.faceCaptureMode !== 'liveness';
+  const photoUri = useMemberPhoto(member.id);
   return (
     <Press onPress={onPress} label={member.name} role="button" style={[{ flex: 1, borderRadius: R.xl }, SH.md]}>
       <View style={{ minHeight: 236, borderRadius: R.xl, overflow: 'hidden', padding: 14, justifyContent: 'space-between', gap: 10 }}>
@@ -148,8 +152,13 @@ export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPr
               borderColor: 'rgba(255,255,255,0.28)',
               alignItems: 'center',
               justifyContent: 'center',
+              overflow: 'hidden',
             }}>
-            <Text style={{ fontFamily: F.bold, fontSize: 25, letterSpacing: 0.5, color: C.white }}>{initials(member.name)}</Text>
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={{ width: 72, height: 72 }} contentFit="cover" />
+            ) : (
+              <Text style={{ fontFamily: F.bold, fontSize: 25, letterSpacing: 0.5, color: C.white }}>{initials(member.name)}</Text>
+            )}
           </View>
         </View>
         <View style={{ gap: 8 }}>

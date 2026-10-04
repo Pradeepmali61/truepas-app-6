@@ -5,6 +5,7 @@
  * "Continue setup" routes to our real next step (document capture, then
  * photo/liveness capture). Premium skin over the original (0483c76) behaviour.
  */
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -25,7 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useToast } from '@/components/composite/Toast';
 import { useDocuments } from '@/features/documents/hooks';
-import { useFamilyMember, useRemoveFamilyMember } from '@/features/family/hooks';
+import { useFamilyMember, useMemberPhoto, useRemoveFamilyMember } from '@/features/family/hooks';
 import { Glow, Guilloche } from '@/premium/blocks';
 import { ChecklistCard, DocRow, formatDate, statusBadge, type ChecklistStep } from '@/premium/flows/family';
 import { Async, Bone, ConfirmSheet, EmptyView, SkeletonList, SoonOverlay } from '@/premium/kit';
@@ -76,6 +77,7 @@ export default function FamilyMemberScreen() {
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   const m = member.data;
+  const photoUri = useMemberPhoto(id);
   const first = m?.name.split(' ')[0] ?? '';
   const isPhoto = (m?.faceCaptureMode ?? (m && m.age < 5 ? 'photo' : 'liveness')) === 'photo';
   // Member docs may stay 'pending' when backend verification isn't run for
@@ -191,8 +193,13 @@ export default function FamilyMemberScreen() {
                 borderColor: 'rgba(255,255,255,0.3)',
                 alignItems: 'center',
                 justifyContent: 'center',
+                overflow: 'hidden',
               }}>
-              <Text style={{ fontFamily: F.bold, fontSize: 44, letterSpacing: 1, color: C.white }}>{initials(m.name)}</Text>
+              {photoUri ? (
+                <Image source={{ uri: photoUri }} style={{ width: 128, height: 128 }} contentFit="cover" />
+              ) : (
+                <Text style={{ fontFamily: F.bold, fontSize: 44, letterSpacing: 1, color: C.white }}>{initials(m.name)}</Text>
+              )}
             </View>
           </View>
         </View>

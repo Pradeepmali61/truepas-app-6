@@ -53,6 +53,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useLogoutFlow } from '@/features/auth/useLogoutFlow';
+import { useMemberPhoto } from '@/features/family/hooks';
 import { useProfilePicture } from '@/features/profile/hooks';
 import { Guilloche } from '@/premium/blocks';
 import { IMG, type ImgKey } from '@/premium/images';
@@ -620,6 +621,11 @@ function StackSlot({ first, z, children }: { first?: boolean; z: number; childre
   );
 }
 
+function MemberAvatar({ m, tint }: { m: FamilyMember; tint: readonly [string, string] }) {
+  const uri = useMemberPhoto(m.id);
+  return <Avatar uri={uri} name={m.name} size={STACK_SIZE} tint={tint} status={m.faceEnrolled ? 'verified' : 'pending'} />;
+}
+
 function GhostCircle({ icon: Icon }: { icon: LucideIcon }) {
   return (
     <View
@@ -686,12 +692,7 @@ export function TogetherCard({
             ) : (
               shown.map((m, i) => (
                 <StackSlot key={m.id} z={8 - i}>
-                  <Avatar
-                    name={m.name}
-                    size={STACK_SIZE}
-                    tint={MEMBER_TINTS[i % MEMBER_TINTS.length]}
-                    status={m.faceEnrolled ? 'verified' : 'pending'}
-                  />
+                  <MemberAvatar m={m} tint={MEMBER_TINTS[i % MEMBER_TINTS.length]} />
                 </StackSlot>
               ))
             )}

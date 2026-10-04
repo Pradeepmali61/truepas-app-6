@@ -18,6 +18,7 @@ import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput, type Came
 
 import { toApiError } from '@/api/errors';
 import { useEnrollFace } from '@/features/auth/mutations';
+import { useRememberMemberPhoto } from '@/features/family/hooks';
 
 import { FaceRing } from '../blocks';
 import { Banner } from '../kit';
@@ -37,6 +38,7 @@ export function FamilyPhotoCapture() {
   const photoOutput = usePhotoOutput();
   const cameraRef = useRef<CameraRef>(null);
   const enrollFace = useEnrollFace();
+  const rememberMemberPhoto = useRememberMemberPhoto();
   const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Stop the preview and let the native camera settle before leaving —
@@ -78,6 +80,7 @@ export function FamilyPhotoCapture() {
       const filePath = photoFile.filePath.startsWith('file://') ? photoFile.filePath : `file://${photoFile.filePath}`;
       const selfieBase64 = await new File(filePath).base64();
       await enrollFace.mutateAsync({ selfieBase64, personId });
+      await rememberMemberPhoto(personId, filePath);
       await settleCameraThen(goToMemberDetail);
     } catch (err) {
       setError(toApiError(err).message || 'Could not enroll the photo. Please try again.');

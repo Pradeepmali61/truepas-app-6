@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/api';
+import { deleteMemberProfileImage, getMemberProfileImage, saveMemberFacePhoto } from '@/services/profileImageStore';
 import { ageFromDob } from '@/utils/age';
 import type { AddFamilyMemberRequest, FamilyAgeBand, FamilyMember } from '@/types/domain';
 
@@ -46,10 +47,47 @@ export function useRemoveFamilyMember() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.removeFamilyMember(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      deleteMemberProfileImage(id).catch(() => {});
+      queryClient.removeQueries({ queryKey: memberPhotoKey(id) });
       queryClient.invalidateQueries({ queryKey: familyKeys.all });
     },
   });
+}
+
+const memberPhotoKey = (personId: string) => ['member-photo', personId] as const;
+
+/**
+ * A member's avatar photo: the face photo saved on this device at enrolment
+ * (the API has no member photo URL yet). Null on web, on another device, or
+ * before enrolment, so callers fall back to initials.
+ */
+export function useMemberPhoto(personId?: string): string | null {
+  const query = useQuery({
+    queryKey: memberPhotoKey(personId ?? ''),
+    queryFn: async () => {
+      const uri = await getMemberProfileImage(personId as string);
+      // Same file path on re-enrolment: bust the image cache per read.
+      return uri ? `${uri}?t=${Date.now()}` : null;
+    },
+    enabled: !!personId,
+    staleTime: Infinity,
+  });
+  return query.data ?? null;
+}
+
+/** Save the enrolment capture as the member's avatar. Best effort: a failure
+ *  here must never fail the enrolment itself. */
+export function useRememberMemberPhoto() {
+  const queryClient = useQueryClient();
+  return async (personId: string, captureUri: string) => {
+    try {
+      await saveMemberFacePhoto(personId, captureUri);
+      await queryClient.invalidateQueries({ queryKey: memberPhotoKey(personId) });
+    } catch {
+      // keep initials
+    }
+  };
 }
 
 /** Backend age rules: 0-4 photo enrollment · 5-9 liveness (front or back camera) · 10+ liveness (front only). */
