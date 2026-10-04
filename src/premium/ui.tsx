@@ -631,6 +631,7 @@ export function Avatar({
   ring,
   status,
   ringColor = C.sky,
+  tint,
 }: {
   /** Bundled mock photo (showcase). Real data passes `uri` and/or `name`. */
   src?: ImgKey;
@@ -640,6 +641,8 @@ export function Avatar({
   ring?: boolean;
   status?: "verified" | "pending";
   ringColor?: string;
+  /** Initials background / text colours (defaults to sky). */
+  tint?: readonly [string, string];
 }) {
   const inner = ring ? size - 6 : size;
   return (
@@ -661,12 +664,12 @@ export function Avatar({
             width: inner - (ring ? 2 : 0),
             height: inner - (ring ? 2 : 0),
             borderRadius: inner / 2,
-            backgroundColor: C.skyWash,
+            backgroundColor: tint?.[0] ?? C.skyWash,
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Text style={{ fontFamily: F.bold, fontSize: Math.round(size * 0.36), color: C.navy }}>{initials(name)}</Text>
+          <Text style={{ fontFamily: F.bold, fontSize: Math.round(size * 0.36), color: tint?.[1] ?? C.navy }}>{initials(name)}</Text>
         </View>
       )}
       {status != null && (

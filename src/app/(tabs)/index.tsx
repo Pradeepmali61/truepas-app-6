@@ -6,7 +6,7 @@
  *
  * Header avatar opens the profile drawer (account card + settings menu +
  * sign out / delete account); bell shows the unread dot; next upcoming
- * booking is the hero; family strip (Add / You / members with face status);
+ * booking is the hero; stacked family card (you + members, face status);
  * the two most recent past check-ins; pull-to-refresh refetches everything.
  *
  * No upcoming bookings (every new user): the hero and carousel keep their
@@ -27,8 +27,8 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react-native';
-import { useState, type ReactNode } from 'react';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { useState } from 'react';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useFamily } from '@/features/family/hooks';
@@ -46,6 +46,7 @@ import {
   ProfileDrawer,
   ReadyHero,
   SoonAction,
+  TogetherCard,
   VENUES,
   VenueCard,
 } from '@/premium/flows/home';
@@ -245,83 +246,30 @@ export default function HomeScreen() {
           {/* ---------- family ---------- */}
           <View style={{ paddingHorizontal: 20, gap: 16 }}>
             <SectionHead title="Travelling together" action="Manage" onAction={open('/family')} />
-            <Card pad={18}>
-              <Async
+            <Async
                 q={family}
                 compact
                 skeleton={
-                  <Row gap={16}>
-                    {[0, 1, 2, 3].map((i) => (
-                      <View key={i} style={{ alignItems: 'center', gap: 8 }}>
-                        <Bone w={50} h={50} r={25} />
-                        <Bone w={36} h={10} />
-                      </View>
-                    ))}
-                  </Row>
+                  <Card pad={18} style={{ gap: 16 }}>
+                    <Row gap={6}>
+                      {[0, 1, 2, 3].map((i) => (
+                        <Bone key={i} w={50} h={50} r={25} />
+                      ))}
+                    </Row>
+                    <Bone w="60%" h={14} />
+                  </Card>
                 }
               >
-                {(members) => {
-                  const enrolled = members.filter((m) => m.faceEnrolled).length;
-                  return (
-                    <>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingRight: 4 }}>
-                        <StripCell label="Add" a11y="Add family member" onPress={open('/family/add')}>
-                          <View
-                            style={{
-                              width: 50,
-                              height: 50,
-                              borderRadius: 25,
-                              borderWidth: 1.5,
-                              borderStyle: 'dashed',
-                              borderColor: C.ink4,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <UserPlus size={19} color={C.ink2} />
-                          </View>
-                        </StripCell>
-                        <StripCell label="You" a11y="Your profile" onPress={() => setDrawer(true)}>
-                          <Avatar uri={avatarUri} name={user?.fullName} size={50} status={user?.faceEnrolled ? 'verified' : 'pending'} />
-                        </StripCell>
-                        {members.map((m) => (
-                          <StripCell key={m.id} label={m.name.split(' ')[0]} a11y={m.name} onPress={open(`/family/${m.id}`)}>
-                            <Avatar name={m.name} size={50} status={m.faceEnrolled ? 'verified' : 'pending'} />
-                          </StripCell>
-                        ))}
-                      </ScrollView>
-                      <Divider style={{ marginVertical: 16 }} />
-                      <Row between>
-                        <View style={{ gap: 2, flex: 1 }}>
-                          <Txt v="bodyStrong">
-                            {members.length === 0
-                              ? 'No family members yet'
-                              : `${members.length} family member${members.length === 1 ? '' : 's'}`}
-                          </Txt>
-                          <Txt v="small">
-                            {members.length === 0
-                              ? 'Add family to check in together.'
-                              : `${enrolled} face enrolled · ${members.length - enrolled} awaiting face scan`}
-                          </Txt>
-                        </View>
-                        {members.length > 0 && (
-                          <View style={{ height: 8, width: 92, borderRadius: 4, backgroundColor: C.sunken, overflow: 'hidden' }}>
-                            <View
-                              style={{
-                                width: `${(enrolled / members.length) * 100}%`,
-                                height: '100%',
-                                backgroundColor: C.sky,
-                                borderRadius: 4,
-                              }}
-                            />
-                          </View>
-                        )}
-                      </Row>
-                    </>
-                  );
-                }}
+                {(members) => (
+                  <TogetherCard
+                    members={members}
+                    you={{ name: user?.fullName, uri: avatarUri, faceEnrolled: !!user?.faceEnrolled }}
+                    onOpen={open('/family')}
+                    onAdd={open('/family/add')}
+                    onMember={(id) => router.push(`/family/${id}` as never)}
+                  />
+                )}
               </Async>
-            </Card>
           </View>
 
           {/* ---------- previous check-ins ---------- */}
@@ -483,26 +431,5 @@ function QuickAction({ icon, label, onPress, soon }: { icon: LucideIcon; label: 
         <ComingSoon label="Soon" />
       </View>
     </View>
-  );
-}
-
-function StripCell({
-  label,
-  a11y,
-  onPress,
-  children,
-}: {
-  label: string;
-  a11y: string;
-  onPress: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y} style={{ alignItems: 'center', gap: 6, width: 58 }}>
-      {children}
-      <Txt v="small" color={C.ink2} lines={1} style={{ fontSize: 12 }}>
-        {label}
-      </Txt>
-    </Pressable>
   );
 }

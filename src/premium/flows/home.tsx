@@ -13,10 +13,12 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
+  Baby,
   BedDouble,
   CalendarDays,
   Check,
   FerrisWheel,
+  Heart,
   LogOut,
   type LucideIcon,
   Mail,
@@ -30,6 +32,8 @@ import {
   Ship,
   Ticket,
   Trash2,
+  UserPlus,
+  UserRound,
   X,
 } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -54,9 +58,9 @@ import { Guilloche } from '@/premium/blocks';
 import { IMG, type ImgKey } from '@/premium/images';
 import { ComingSoon, ConfirmSheet } from '@/premium/kit';
 import { C, F, G, R, SH } from '@/premium/theme';
-import { Avatar, Badge, type BadgeTone, Card, Group, IconCircle, ListRow, Press, Row, Txt } from '@/premium/ui';
+import { Avatar, Badge, type BadgeTone, Button, Card, Group, IconCircle, ListRow, Press, Row, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
-import type { Booking, DocumentType, IdentityDocument } from '@/types/domain';
+import type { Booking, DocumentType, FamilyMember, IdentityDocument } from '@/types/domain';
 
 /* ───────────────────────── formatting ───────────────────────── */
 
@@ -579,6 +583,199 @@ export function BookingRow({ b, onPress }: { b: Booking; onPress?: () => void })
         </View>
       </View>
     </Pressable>
+  );
+}
+
+/* ───────────────────────── travelling together ─────────────────────────
+ * Home family card: overlapping avatar stack (you first, then members) with a
+ * dashed Add button. With no members the stack shows placeholder circles for
+ * the kinds of people you can add, never made-up photos. */
+
+/** Initials tints so a stack of photo-less members still reads as people. */
+const MEMBER_TINTS: readonly (readonly [string, string])[] = [
+  [C.amberWash, C.amberInk],
+  [C.greenWash, C.greenInk],
+  ['#EEEAFB', '#4B3B8F'],
+  [C.redWash, C.redInk],
+];
+
+const STACK_SIZE = 50;
+const STACK_MAX = 3;
+
+/** `z` keeps earlier avatars on top so each status dot stays visible. */
+function StackSlot({ first, z, children }: { first?: boolean; z: number; children: ReactNode }) {
+  return (
+    <View
+      style={{
+        zIndex: z,
+        marginLeft: first ? 0 : -14,
+        borderRadius: STACK_SIZE / 2 + 3,
+        borderWidth: 3,
+        borderColor: C.surface,
+        backgroundColor: C.surface,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function GhostCircle({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <View
+      style={{
+        width: STACK_SIZE,
+        height: STACK_SIZE,
+        borderRadius: STACK_SIZE / 2,
+        borderWidth: 1.5,
+        borderStyle: 'dashed',
+        borderColor: C.ink4,
+        backgroundColor: C.canvas,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Icon size={19} color={C.ink3} />
+    </View>
+  );
+}
+
+export function TogetherCard({
+  members,
+  you,
+  onOpen,
+  onAdd,
+  onMember,
+}: {
+  members: FamilyMember[];
+  you: { name?: string | null; uri?: string | null; faceEnrolled: boolean };
+  onOpen: () => void;
+  onAdd: () => void;
+  onMember: (id: string) => void;
+}) {
+  const enrolled = members.filter((m) => m.faceEnrolled).length;
+  const pending = members.filter((m) => !m.faceEnrolled);
+  const shown = members.slice(0, STACK_MAX);
+  const extra = members.length - shown.length;
+  const empty = members.length === 0;
+
+  const stackLabel = empty
+    ? 'Family, no members yet'
+    : `Family, ${members.length} member${members.length === 1 ? '' : 's'}, ${enrolled} face enrolled`;
+
+  return (
+    <Card pad={18}>
+      <Row between>
+        <Press onPress={onOpen} label={stackLabel} role="button" style={{ flexShrink: 1 }}>
+          <Row gap={0}>
+            <StackSlot first z={9}>
+              <Avatar uri={you.uri} name={you.name} size={STACK_SIZE} status={you.faceEnrolled ? 'verified' : 'pending'} />
+            </StackSlot>
+            {empty ? (
+              <>
+                <StackSlot z={3}>
+                  <GhostCircle icon={Heart} />
+                </StackSlot>
+                <StackSlot z={2}>
+                  <GhostCircle icon={Baby} />
+                </StackSlot>
+                <StackSlot z={1}>
+                  <GhostCircle icon={UserRound} />
+                </StackSlot>
+              </>
+            ) : (
+              shown.map((m, i) => (
+                <StackSlot key={m.id} z={8 - i}>
+                  <Avatar
+                    name={m.name}
+                    size={STACK_SIZE}
+                    tint={MEMBER_TINTS[i % MEMBER_TINTS.length]}
+                    status={m.faceEnrolled ? 'verified' : 'pending'}
+                  />
+                </StackSlot>
+              ))
+            )}
+            {extra > 0 && (
+              <StackSlot z={0}>
+                <View
+                  style={{
+                    width: STACK_SIZE,
+                    height: STACK_SIZE,
+                    borderRadius: STACK_SIZE / 2,
+                    backgroundColor: C.navy,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ fontFamily: F.bold, fontSize: 15, color: C.white }}>+{extra}</Text>
+                </View>
+              </StackSlot>
+            )}
+          </Row>
+        </Press>
+        <Press onPress={onAdd} label="Add family member" role="button">
+          <View
+            style={{
+              width: STACK_SIZE,
+              height: STACK_SIZE,
+              borderRadius: STACK_SIZE / 2,
+              backgroundColor: C.skyWash,
+              borderWidth: 1.5,
+              borderStyle: 'dashed',
+              borderColor: C.sky,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <UserPlus size={20} color={C.skyPressed} />
+          </View>
+        </Press>
+      </Row>
+
+      <View style={{ height: 1, backgroundColor: C.line, marginVertical: 16 }} />
+
+      {empty ? (
+        <Row between gap={12}>
+          <View style={{ gap: 2, flex: 1 }}>
+            <Txt v="bodyStrong">Add your family</Txt>
+            <Txt v="small">Check in together: kids, partner and parents.</Txt>
+          </View>
+          <Button label="Add" icon={UserPlus} size="sm" tone="soft" full={false} onPress={onAdd} />
+        </Row>
+      ) : (
+        <View style={{ gap: 12 }}>
+          <Row between gap={12}>
+            <View style={{ gap: 2, flex: 1 }}>
+              <Txt v="bodyStrong">
+                {members.length} family member{members.length === 1 ? '' : 's'}
+              </Txt>
+              <Txt v="small" lines={2}>
+                {pending.length === 0
+                  ? 'All faces enrolled · ready to go'
+                  : pending.length === 1
+                    ? `${pending[0].name.split(' ')[0]} needs a face scan`
+                    : `${pending.length} members need a face scan`}
+              </Txt>
+            </View>
+            {pending.length === 0 ? (
+              <Badge tone="green" icon={Check} label="Ready" />
+            ) : (
+              <Button label="Finish" size="sm" tone="soft" full={false} onPress={() => onMember(pending[0].id)} />
+            )}
+          </Row>
+          <View style={{ height: 6, borderRadius: 3, backgroundColor: C.sunken, overflow: 'hidden' }}>
+            <View
+              style={{
+                width: `${(enrolled / members.length) * 100}%`,
+                height: '100%',
+                backgroundColor: pending.length === 0 ? C.green : C.sky,
+                borderRadius: 3,
+              }}
+            />
+          </View>
+        </View>
+      )}
+    </Card>
   );
 }
 
