@@ -2,20 +2,18 @@
 /**
  * TRUEPAS PREMIUM — the real bottom tab bar. Same look as blocks.TabBar
  * (floating pill + raised face button) but wired to the navigator:
- * tabPress events + haptics like the original CustomTabBar, and the centre
- * face button explains that venue face check-in isn't live yet instead of
- * routing into the face-update flow (there is no in-app check-in API).
+ * tabPress events + haptics like the original CustomTabBar. The centre face
+ * button opens "Your identity", whose pass shows your face: at venues the
+ * face is the pass (there is no in-app check-in API to trigger instead).
  */
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { CalendarCheck, House, type LucideIcon, ScanFace, Users, Wallet } from 'lucide-react-native';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ComingSoon, ConfirmSheet } from '@/premium/kit';
 import { C, F, G, SH } from '@/premium/theme';
 import { Press } from '@/premium/ui';
 
@@ -36,7 +34,6 @@ type Route = BottomTabBarProps['state']['routes'][number];
 
 export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const [faceInfo, setFaceInfo] = useState(false);
   const activeRoute = state.routes[state.index]?.name;
 
   const press = (it: Item) => {
@@ -95,9 +92,9 @@ export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
             <Press
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                setFaceInfo(true);
+                router.push('/identity' as never);
               }}
-              label="Face check-in (coming soon)"
+              label="Your identity"
               role="button"
               style={[{ borderRadius: 30, marginTop: -30 }, SH.sky]}
             >
@@ -123,23 +120,6 @@ export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
           {RIGHT.map(item)}
         </View>
       </View>
-
-      <ConfirmSheet
-        visible={faceInfo}
-        icon={ScanFace}
-        title="Face check-in at venues"
-        body="Soon you'll check in at hotels, parks and events just by looking at the venue camera — no tickets or cards. We'll let you know when it's live."
-        confirmLabel="View my check-ins"
-        cancelLabel="Close"
-        onConfirm={() => {
-          setFaceInfo(false);
-          const route = state.routes.find((r: Route) => r.name === 'history');
-          if (route) navigation.navigate(route.name as never);
-        }}
-        onCancel={() => setFaceInfo(false)}
-      >
-        <ComingSoon />
-      </ConfirmSheet>
     </>
   );
 }

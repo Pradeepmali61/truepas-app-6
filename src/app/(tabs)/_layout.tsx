@@ -6,7 +6,7 @@ import { C } from '@/premium/theme';
 import { useAppSelector } from '@/store';
 
 /** Floating pill tab bar (Home · Check-ins · face · Wallet · Family). The
- *  centre face button explains venue face check-in (coming soon). */
+ *  centre face button opens Your identity (the face pass). */
 export default function TabsLayout() {
   const { status, faceEnrolled } = useAppSelector((state) => state.auth);
 
