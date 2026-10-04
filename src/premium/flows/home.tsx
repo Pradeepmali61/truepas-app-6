@@ -17,19 +17,23 @@ import {
   BedDouble,
   CalendarDays,
   Check,
+  CircleHelp,
   CircleX,
   FerrisWheel,
   FileCheck,
+  FileText,
   Heart,
+  Info,
+  Lock,
   LogOut,
   type LucideIcon,
   Mail,
   MapPin,
-  Palette,
   Pencil,
   Phone,
   Plane,
   ScanFace,
+  Settings,
   ShieldCheck,
   Ship,
   Sparkles,
@@ -1211,12 +1215,23 @@ export function ProfileDrawer({ visible, onClose }: { visible: boolean; onClose:
 
             <Group title="Account">
               <ListRow icon={Pencil} tone="sky" title="Edit profile" onPress={() => go('/profile/edit')} />
-              <ListRow icon={ShieldCheck} tone="sky" title="Security & sign-in" onPress={() => go('/security')} />
-              <ListRow icon={Palette} tone="sky" title="Appearance" onPress={() => go('/settings')} />
-              <ListRow icon={LogOut} tone="sky" title="Sign out" onPress={() => setConfirmSignOut(true)} />
+              <ListRow icon={ShieldCheck} tone="sky" title="Security & sign-in" sub="Face, PIN, password & consent" onPress={() => go('/security')} />
+              <ListRow icon={Settings} tone="sky" title="Settings" onPress={() => go('/settings')} />
             </Group>
 
-            <Group title="Data">
+            <Group title="Support">
+              <ListRow icon={CircleHelp} tone="sky" title="Help & FAQ" sub="Answers and contact support" onPress={() => go('/help')} />
+              <ListRow icon={Info} tone="sky" title="About Truepas" onPress={() => go('/about')} />
+            </Group>
+
+            <Group title="Legal & privacy">
+              <ListRow icon={ScanFace} tone="sky" title="Biometric data & privacy" sub="How your face data is kept and deleted" onPress={() => go('/legal/data-privacy')} />
+              <ListRow icon={Lock} tone="sky" title="Privacy Policy" onPress={() => go('/legal/privacy-policy')} />
+              <ListRow icon={FileText} tone="sky" title="Terms of Service" onPress={() => go('/legal/terms')} />
+            </Group>
+
+            <Group>
+              <ListRow icon={LogOut} tone="sky" title="Sign out" onPress={() => setConfirmSignOut(true)} />
               <ListRow icon={Trash2} danger title="Delete account" onPress={() => go('/account/delete')} />
             </Group>
 

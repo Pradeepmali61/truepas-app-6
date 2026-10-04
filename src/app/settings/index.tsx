@@ -10,14 +10,19 @@
  * shown as "Light" with the mockup's other preferences, all marked
  * Coming soon until they have a backend / device implementation.
  *
- * Real rows: Your data (data & privacy), Security, Delete account.
+ * Real rows: Help & FAQ, About, Privacy Policy, Terms, Biometric data &
+ * privacy, Security, Delete account.
  */
 import {
   Bell,
+  CircleHelp,
   Database,
+  FileText,
   Fingerprint,
   Globe,
+  Info,
   Languages,
+  Lock,
   Moon,
   ScanFace,
   ShieldCheck,
@@ -49,8 +54,18 @@ export default function SettingsScreen() {
         <ListRow icon={Globe} title="Region" />
       </SoonSection>
 
+      <Group title="Support">
+        <ListRow icon={CircleHelp} title="Help & FAQ" sub="Answers and contact support" onPress={go('/help')} />
+        <ListRow icon={Info} title="About Truepas" onPress={go('/about')} />
+      </Group>
+
+      <Group title="Legal">
+        <ListRow icon={Lock} title="Privacy Policy" onPress={go('/legal/privacy-policy')} />
+        <ListRow icon={FileText} title="Terms of Service" onPress={go('/legal/terms')} />
+      </Group>
+
       <Group title="Privacy">
-        <ListRow icon={Database} title="Your data" sub="Retention, consent and deletion" onPress={go('/legal/data-privacy')} />
+        <ListRow icon={Database} title="Biometric data & privacy" sub="Retention, consent and deletion" onPress={go('/legal/data-privacy')} />
         <ListRow icon={ShieldCheck} title="Security & sign-in" sub="Face, PIN, password & consent" onPress={go('/security')} />
         <ListRow icon={Trash2} danger title="Delete account" onPress={go('/account/delete')} />
       </Group>
