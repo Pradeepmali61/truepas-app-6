@@ -31,6 +31,7 @@ import { useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useDocuments } from '@/features/documents/hooks';
 import { useFamily } from '@/features/family/hooks';
 import { useBookings } from '@/features/history/hooks';
 import { useIdentitySummary } from '@/features/identity/hooks';
@@ -38,9 +39,12 @@ import { useNotifications } from '@/features/notifications/hooks';
 import { useProfilePicture } from '@/features/profile/hooks';
 import { IdentityCard, TAB_BAR_SPACE } from '@/premium/blocks';
 import {
+  ActivityRow,
   BookingCarouselCard,
   BookingHero,
   BookingRow,
+  buildActivity,
+  FirstCheckInRow,
   greeting,
   isTodayIso,
   ProfileDrawer,
@@ -50,7 +54,7 @@ import {
   VENUES,
   VenueCard,
 } from '@/premium/flows/home';
-import { Async, Bone, ComingSoon, EmptyView, SkeletonList } from '@/premium/kit';
+import { Async, Bone, ComingSoon, SkeletonList } from '@/premium/kit';
 import { C, F, R } from '@/premium/theme';
 import { Avatar, Button, Card, Divider, IconCircle, Press, Row, SectionHead, Serif, Tile, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
@@ -66,6 +70,7 @@ export default function HomeScreen() {
   const bookings = useBookings();
   const unread = useNotifications(true);
   const summary = useIdentitySummary();
+  const documents = useDocuments();
 
   const hasUnread = (unread.data?.pages.flat() ?? []).length > 0;
   const past = bookings.data?.filter((b) => b.status !== 'upcoming') ?? [];
@@ -78,8 +83,22 @@ export default function HomeScreen() {
   const noTrips = bookings.data != null && upcoming.length === 0;
   const showCarousel = laterUpcoming.length > 0 || noTrips;
 
-  const refreshing = family.isRefetching || bookings.isRefetching || unread.isRefetching || summary.isRefetching;
+  const firstName = user?.fullName?.trim().split(/\s+/)[0] ?? '';
+
+  /* No check-ins yet: real account activity fills the same rows. */
+  const activity = buildActivity({
+    server: summary.data?.activity ?? [],
+    faceEnrolled: !!user?.faceEnrolled,
+    docs: documents.data ?? [],
+    members: family.data ?? [],
+    firstName,
+  }).slice(0, 3);
+  const showActivity = bookings.data != null && past.length === 0;
+
+  const refreshing =
+    family.isRefetching || bookings.isRefetching || unread.isRefetching || summary.isRefetching || documents.isRefetching;
   const onRefresh = () => {
+    void documents.refetch();
     void family.refetch();
     void bookings.refetch();
     void unread.refetch();
@@ -87,7 +106,6 @@ export default function HomeScreen() {
   };
 
   const open = (href: string) => () => router.push(href as never);
-  const firstName = user?.fullName?.trim().split(/\s+/)[0] ?? '';
 
   /* Identity-card badge: the server-computed summary when we have it,
      otherwise the session's face-enrolment flag. */
@@ -272,19 +290,24 @@ export default function HomeScreen() {
               </Async>
           </View>
 
-          {/* ---------- previous check-ins ---------- */}
+          {/* ---------- previous check-ins (or account activity before the first) ---------- */}
           <View style={{ paddingHorizontal: 20, gap: 8 }}>
-            <SectionHead title="Recent check-ins" action="See all" onAction={open('/(tabs)/history')} />
+            <SectionHead
+              title={showActivity ? 'Recent activity' : 'Recent check-ins'}
+              action="See all"
+              onAction={open(showActivity ? '/identity' : '/(tabs)/history')}
+            />
             <Async q={bookings} compact skeleton={<SkeletonList rows={2} thumb={62} />}>
               {() =>
                 past.length === 0 ? (
-                  <Card>
-                    <EmptyView
-                      compact
-                      icon={CalendarDays}
-                      title="No check-ins yet"
-                      body="When you check in at a venue with Truepas, it shows up here."
-                    />
+                  <Card pad={0} style={{ paddingHorizontal: 14, paddingVertical: 4 }}>
+                    <FirstCheckInRow />
+                    {activity.map((e) => (
+                      <View key={e.id}>
+                        <Divider inset={76} />
+                        <ActivityRow e={e} onPress={open(e.href)} />
+                      </View>
+                    ))}
                   </Card>
                 ) : (
                   <Card pad={0} style={{ paddingHorizontal: 14, paddingVertical: 4 }}>

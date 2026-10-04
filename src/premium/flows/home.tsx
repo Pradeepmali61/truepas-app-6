@@ -17,7 +17,9 @@ import {
   BedDouble,
   CalendarDays,
   Check,
+  CircleX,
   FerrisWheel,
+  FileCheck,
   Heart,
   LogOut,
   type LucideIcon,
@@ -30,10 +32,13 @@ import {
   ScanFace,
   ShieldCheck,
   Ship,
+  Sparkles,
   Ticket,
   Trash2,
+  TriangleAlert,
   UserPlus,
   UserRound,
+  Users,
   X,
 } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -59,9 +64,9 @@ import { Guilloche } from '@/premium/blocks';
 import { IMG, type ImgKey } from '@/premium/images';
 import { ComingSoon, ConfirmSheet } from '@/premium/kit';
 import { C, F, G, R, SH } from '@/premium/theme';
-import { Avatar, Badge, type BadgeTone, Button, Card, Group, IconCircle, ListRow, Press, Row, Txt } from '@/premium/ui';
+import { Avatar, Badge, type BadgeTone, Button, Card, Group, IconCircle, ListRow, Press, Row, Tile, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
-import type { Booking, DocumentType, FamilyMember, IdentityDocument } from '@/types/domain';
+import type { ActivityItem, Booking, DocumentType, FamilyMember, IdentityDocument, VerificationStatus } from '@/types/domain';
 
 /* ───────────────────────── formatting ───────────────────────── */
 
@@ -777,6 +782,162 @@ export function TogetherCard({
         </View>
       )}
     </Card>
+  );
+}
+
+/* ───────────────────────── recent activity ─────────────────────────
+ * Before the first check-in, "Recent check-ins" shows the account's real
+ * activity (server identity activity, documents, family) in the same row
+ * look as BookingRow, under a "Your first check-in" placeholder row. */
+
+type TileTone = 'sky' | 'green' | 'amber' | 'red' | 'neutral';
+
+export type ActivityEntry = {
+  id: string;
+  icon: LucideIcon;
+  tone: TileTone;
+  title: string;
+  sub: string;
+  badge: { label: string; tone: BadgeTone };
+  href: string;
+};
+
+const SERVER_TONE: Record<ActivityItem['tone'], { icon: LucideIcon; tone: TileTone; badge: { label: string; tone: BadgeTone } }> = {
+  success: { icon: ShieldCheck, tone: 'green', badge: { label: 'Done', tone: 'green' } },
+  warning: { icon: TriangleAlert, tone: 'amber', badge: { label: 'Review', tone: 'amber' } },
+  error: { icon: CircleX, tone: 'red', badge: { label: 'Failed', tone: 'red' } },
+};
+
+const DOC_ACTIVITY: Partial<Record<VerificationStatus, { verb: string; tone: TileTone; badge: { label: string; tone: BadgeTone } }>> = {
+  verified: { verb: 'verified', tone: 'green', badge: { label: 'Verified', tone: 'green' } },
+  pending: { verb: 'in review', tone: 'amber', badge: { label: 'In review', tone: 'amber' } },
+  failed: { verb: 'check failed', tone: 'red', badge: { label: 'Failed', tone: 'red' } },
+};
+
+/** Real account events, newest sources first; never invents a check-in. */
+export function buildActivity({
+  server,
+  faceEnrolled,
+  docs,
+  members,
+  firstName,
+}: {
+  server: ActivityItem[];
+  faceEnrolled: boolean;
+  docs: IdentityDocument[];
+  members: FamilyMember[];
+  firstName: string;
+}): ActivityEntry[] {
+  const out: ActivityEntry[] = server.map((a) => ({
+    id: `srv-${a.id}`,
+    ...SERVER_TONE[a.tone],
+    title: a.title,
+    sub: a.timestamp,
+    href: '/identity',
+  }));
+  if (server.length === 0 && faceEnrolled) {
+    out.push({
+      id: 'face',
+      icon: ScanFace,
+      tone: 'green',
+      title: 'Face enrolled',
+      sub: 'Your face is your key',
+      badge: { label: 'Done', tone: 'green' },
+      href: '/identity',
+    });
+  }
+  [...docs]
+    .sort((a, b) => (b.addedAt ?? '').localeCompare(a.addedAt ?? ''))
+    .forEach((d) => {
+      const meta = DOC_ACTIVITY[d.status];
+      if (!meta) return;
+      out.push({
+        id: `doc-${d.id}`,
+        icon: FileCheck,
+        tone: meta.tone,
+        title: `${docStyle(d.type).title} ${meta.verb}`,
+        sub: d.addedAt ? `Added ${fmtDate(d.addedAt)}` : 'Identity document',
+        badge: meta.badge,
+        href: `/document/${d.id}`,
+      });
+    });
+  members.forEach((m) => {
+    out.push({
+      id: `fam-${m.id}`,
+      icon: Users,
+      tone: 'sky',
+      title: `${m.name.split(' ')[0]} added to family`,
+      sub: `${m.relationship} · ${m.age} yrs`,
+      badge: m.faceEnrolled ? { label: 'Face enrolled', tone: 'green' } : { label: 'Face pending', tone: 'amber' },
+      href: `/family/${m.id}`,
+    });
+  });
+  // Oldest event: every signed-in user has it.
+  out.push({
+    id: 'joined',
+    icon: Sparkles,
+    tone: 'sky',
+    title: 'Joined Truepas',
+    sub: firstName ? `Welcome aboard, ${firstName}` : 'Welcome aboard',
+    badge: { label: 'Welcome', tone: 'sky' },
+    href: '/identity',
+  });
+  return out;
+}
+
+/** Same layout as BookingRow: 62px tile, two lines, badge on the right. */
+export function ActivityRow({ e, onPress }: { e: ActivityEntry; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${e.title}, ${e.badge.label}`}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12 }}>
+        <Tile icon={e.icon} tone={e.tone} size={62} radius={16} />
+        <View style={{ flex: 1, gap: 3 }}>
+          <Txt v="bodyStrong" lines={2}>
+            {e.title}
+          </Txt>
+          <Txt v="small" lines={1}>
+            {e.sub}
+          </Txt>
+        </View>
+        <Badge label={e.badge.label} tone={e.badge.tone} />
+      </View>
+    </Pressable>
+  );
+}
+
+/** Placeholder for where the first real check-in will land. */
+export function FirstCheckInRow() {
+  return (
+    <View
+      accessible
+      accessibilityLabel="Your first check-in will show up here after your first visit"
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12 }}
+    >
+      <View
+        style={{
+          width: 62,
+          height: 62,
+          borderRadius: 16,
+          borderWidth: 1.5,
+          borderStyle: 'dashed',
+          borderColor: C.ink4,
+          backgroundColor: C.canvas,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <MapPin size={22} color={C.ink3} />
+      </View>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Txt v="bodyStrong" lines={1}>
+          Your first check-in
+        </Txt>
+        <Txt v="small" lines={2}>
+          Shows up here after your first visit
+        </Txt>
+      </View>
+      <Badge label="Waiting" tone="neutral" />
+    </View>
   );
 }
 
