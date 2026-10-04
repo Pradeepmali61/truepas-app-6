@@ -13,7 +13,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import {
   CalendarDays,
-  Camera,
   CarFront,
   Check,
   ChevronDown,
@@ -26,7 +25,6 @@ import {
   Loader,
   type LucideIcon,
   Plane,
-  ScanFace,
   ScrollText,
   X,
 } from 'lucide-react-native';
@@ -105,76 +103,54 @@ function tintFor(id: string) {
   return TINTS[h % TINTS.length];
 }
 
-function GlassTag({ icon: Icon, label }: { icon?: LucideIcon; label: string }) {
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        height: 22,
-        paddingHorizontal: 8,
-        borderRadius: R.full,
-        backgroundColor: 'rgba(255,255,255,0.14)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.22)',
-      }}>
-      {Icon && <Icon size={11} color={C.white} strokeWidth={2.4} />}
-      <Text style={{ fontFamily: F.semibold, fontSize: 11, color: C.white }}>{label}</Text>
-    </View>
-  );
-}
-
-/** Portrait card — the approved "party" grid look; the enrolment photo when
- *  this device has it, otherwise initials.
- *  Carries everything the old FamilyCard showed: relationship, age, status,
- *  capture mode, age band and allowed cameras. */
+/** Portrait card — the approved "party" grid look: a full-bleed photo when
+ *  this device has the member's enrolment photo, otherwise initials on a
+ *  tinted card. Front shows only name, relationship, age and status; the
+ *  capture details live on the member page. */
 export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPress: () => void }) {
   const verified = member.verification === 'verified' || !!member.faceEnrolled;
-  const photo = member.faceCaptureMode !== 'liveness';
   const photoUri = useMemberPhoto(member.id);
   return (
     <Press onPress={onPress} label={member.name} role="button" style={[{ flex: 1, borderRadius: R.xl }, SH.md]}>
-      <View style={{ minHeight: 236, borderRadius: R.xl, overflow: 'hidden', padding: 14, justifyContent: 'space-between', gap: 10 }}>
-        <LinearGradient colors={tintFor(member.id)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-        <Guilloche size={300} opacity={0.08} style={{ right: -150, top: -110 }} />
+      <View style={{ minHeight: 228, borderRadius: R.xl, overflow: 'hidden', padding: 14, justifyContent: 'space-between', gap: 10 }}>
+        {photoUri ? (
+          <>
+            <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+            <LinearGradient colors={['rgba(1,27,39,0)', 'rgba(1,27,39,0.85)']} locations={[0.45, 1]} style={StyleSheet.absoluteFill} />
+          </>
+        ) : (
+          <>
+            <LinearGradient colors={tintFor(member.id)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <Guilloche size={300} opacity={0.08} style={{ right: -150, top: -110 }} />
+          </>
+        )}
         <View style={{ alignSelf: 'flex-end' }}>
-          {verified ? <Badge label="Verified" tone="green" dot /> : <Badge label="Action needed" tone="amber" dot />}
+          {verified ? <Badge label="Verified" tone="green" dot /> : <Badge label="Face pending" tone="amber" dot />}
         </View>
-        <View style={{ alignItems: 'center' }}>
-          <View
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: 36,
-              backgroundColor: 'rgba(255,255,255,0.14)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.28)',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-            }}>
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={{ width: 72, height: 72 }} contentFit="cover" />
-            ) : (
-              <Text style={{ fontFamily: F.bold, fontSize: 25, letterSpacing: 0.5, color: C.white }}>{initials(member.name)}</Text>
-            )}
+        {!photoUri && (
+          <View style={{ alignItems: 'center' }}>
+            <View
+              style={{
+                width: 76,
+                height: 76,
+                borderRadius: 38,
+                backgroundColor: 'rgba(255,255,255,0.14)',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.28)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+              <Text style={{ fontFamily: F.bold, fontSize: 26, letterSpacing: 0.5, color: C.white }}>{initials(member.name)}</Text>
+            </View>
           </View>
-        </View>
-        <View style={{ gap: 8 }}>
-          <View>
-            <Text numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 17, color: C.white }}>
-              {member.name.split(' ')[0]}
-            </Text>
-            <Text numberOfLines={1} style={{ fontFamily: F.medium, fontSize: 12.5, color: 'rgba(255,255,255,0.72)' }}>
-              {member.relationship} · {member.age} yrs
-            </Text>
-          </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
-            <GlassTag icon={photo ? Camera : ScanFace} label={photo ? 'Photo' : 'Liveness'} />
-            <GlassTag label={`${member.ageBand} yrs`} />
-            <GlassTag label={`${(member.allowedCameras ?? ['front']).join(' + ')} cam`} />
-          </View>
+        )}
+        <View>
+          <Text numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 17, color: C.white }}>
+            {member.name.split(' ')[0]}
+          </Text>
+          <Text numberOfLines={1} style={{ fontFamily: F.medium, fontSize: 12.5, color: 'rgba(255,255,255,0.72)' }}>
+            {member.relationship} · {member.age} yrs
+          </Text>
         </View>
       </View>
     </Press>
