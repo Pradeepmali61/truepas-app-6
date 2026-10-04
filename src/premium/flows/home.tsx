@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import {
   BedDouble,
   CalendarDays,
+  Check,
   FerrisWheel,
   LogOut,
   type LucideIcon,
@@ -270,71 +271,243 @@ function checkedIn(b: Booking) {
   return { n, progress: Math.min(1, n / Math.max(b.guests, 1)) };
 }
 
+/** Shared photo shell for the Home hero — the booking hero and the
+ *  no-trips "get ready" hero render inside the same card. */
+function HeroFrame({
+  backdrop,
+  top,
+  children,
+  onPress,
+  label,
+  role,
+}: {
+  backdrop: ReactNode;
+  top: ReactNode;
+  children: ReactNode;
+  onPress?: () => void;
+  label: string;
+  role?: 'button';
+}) {
+  const body = (
+    <View style={{ minHeight: 420, borderRadius: R.xxl, overflow: 'hidden', justifyContent: 'space-between', padding: 18, gap: 24 }}>
+      {backdrop}
+      <LinearGradient colors={G.photoFade} locations={[0, 0.35, 1]} style={StyleSheet.absoluteFill} />
+      {top}
+      <View style={{ gap: 14 }}>{children}</View>
+    </View>
+  );
+  if (!onPress) {
+    return <View style={[{ borderRadius: R.xxl }, SH.lg]}>{body}</View>;
+  }
+  return (
+    <Press onPress={onPress} scaleTo={0.985} label={label} role={role} style={[{ borderRadius: R.xxl }, SH.lg]}>
+      {body}
+    </Press>
+  );
+}
+
+/** Soft shadow so hero copy stays legible over bright photos. */
+const HERO_SHADOW = { textShadowColor: 'rgba(1,27,39,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 8 } as const;
+
+function HeroTitle({ eyebrow, title, sub, pin }: { eyebrow: string; title: string; sub: string; pin?: boolean }) {
+  return (
+    <View style={{ gap: 4 }}>
+      <Text style={{ fontFamily: F.bold, fontSize: 13, color: C.skyLight, ...HERO_SHADOW }}>{eyebrow}</Text>
+      <Text style={{ fontFamily: F.extrabold, fontSize: 30, letterSpacing: -0.9, color: C.white, ...HERO_SHADOW }} numberOfLines={2}>
+        {title}
+      </Text>
+      <Row gap={6}>
+        {pin && <MapPin size={14} color="rgba(255,255,255,0.78)" />}
+        <Text
+          style={{ fontFamily: F.medium, fontSize: 14, lineHeight: 20, color: 'rgba(255,255,255,0.85)', flexShrink: 1, ...HERO_SHADOW }}
+          numberOfLines={pin ? 1 : 3}
+        >
+          {sub}
+        </Text>
+      </Row>
+    </View>
+  );
+}
+
+function GlassPanel({ children }: { children: ReactNode }) {
+  return (
+    <View
+      style={{
+        borderRadius: R.lg,
+        padding: 14,
+        gap: 12,
+        backgroundColor: 'rgba(10,30,42,0.42)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.16)',
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function GlassProgress({ label, value, progress }: { label: string; value: string; progress: number }) {
+  return (
+    <View style={{ gap: 6 }}>
+      <Row between>
+        <Text style={{ fontFamily: F.medium, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{label}</Text>
+        <Text style={{ fontFamily: F.mono, fontSize: 13, color: C.white }}>{value}</Text>
+      </Row>
+      <View style={{ height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' }}>
+        <View style={{ width: `${progress * 100}%`, height: '100%', borderRadius: 3, backgroundColor: C.sky }} />
+      </View>
+    </View>
+  );
+}
+
 /** Hero journey for the next upcoming booking (Home "Today" / "Next"). */
 export function BookingHero({ b, onPress, cta }: { b: Booking; onPress?: () => void; cta?: ReactNode }) {
   const Icon = bookingIcon(b.type);
   const { n, progress } = checkedIn(b);
   return (
-    <Press
+    <HeroFrame
       onPress={onPress}
-      scaleTo={0.985}
       label={`Next check-in at ${b.venue}, ${b.location}`}
       // No button role when the card hosts its own action: on web a role=button
       // renders <button>, and a nested <button> is invalid HTML.
       role={cta ? undefined : 'button'}
-      style={[{ borderRadius: R.xxl }, SH.lg]}
-    >
-      <View style={{ minHeight: 420, borderRadius: R.xxl, overflow: 'hidden', justifyContent: 'space-between', padding: 18, gap: 24 }}>
-        <BookingBackdrop b={b} iconSize={64} />
-        <LinearGradient colors={G.photoFade} locations={[0, 0.35, 1]} style={StyleSheet.absoluteFill} />
+      backdrop={<BookingBackdrop b={b} iconSize={64} />}
+      top={
         <Row between>
           <GlassChip icon={Icon} label={bookingTypeLabel(b.type)} />
           <StatusBadge status={b.status} dot />
         </Row>
-        <View style={{ gap: 14 }}>
-          <View style={{ gap: 4 }}>
-            <Text style={{ fontFamily: F.semibold, fontSize: 13, color: C.skyLight }}>{whenLabel(b.checkIn)}</Text>
-            <Text style={{ fontFamily: F.extrabold, fontSize: 30, letterSpacing: -0.9, color: C.white }} numberOfLines={2}>
-              {b.venue}
-            </Text>
-            <Row gap={6}>
-              <MapPin size={14} color="rgba(255,255,255,0.78)" />
-              <Text style={{ fontFamily: F.medium, fontSize: 14, color: 'rgba(255,255,255,0.78)', flexShrink: 1 }} numberOfLines={1}>
-                {b.location}
-              </Text>
-            </Row>
+      }
+    >
+      <HeroTitle eyebrow={whenLabel(b.checkIn)} title={b.venue} sub={b.location} pin />
+      <GlassPanel>
+        <Row between>
+          <GlassFact k="Check-in" v={fmtDate(b.checkIn)} />
+          <GlassFact k="Guests" v={String(b.guests)} />
+          <GlassFact k="Total" v={money(b.amount)} end />
+        </Row>
+        <GlassProgress label="Checked in" value={`${n}/${b.guests}`} progress={progress} />
+      </GlassPanel>
+      {cta}
+    </HeroFrame>
+  );
+}
+
+/* ───────────────────────── no-trips home ─────────────────────────
+ * A new user has no bookings, so Today / Coming up would be empty. The same
+ * photo cards carry the user's real setup progress and what Truepas is for,
+ * never a made-up booking. Real bookings replace them as soon as they exist. */
+
+export type ReadyStep = { label: string; done: boolean };
+
+/** Same card as BookingHero, filled with the user's setup progress. */
+export function ReadyHero({
+  photo,
+  chip,
+  eyebrow,
+  title,
+  body,
+  steps,
+  cta,
+}: {
+  photo: ImgKey;
+  chip: { icon: LucideIcon; label: string };
+  eyebrow: string;
+  title: string;
+  body: string;
+  steps: ReadyStep[];
+  cta?: ReactNode;
+}) {
+  const done = steps.filter((x) => x.done).length;
+  const all = done === steps.length;
+  return (
+    <HeroFrame
+      label={title}
+      backdrop={<Image source={IMG[photo]} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />}
+      top={
+        <Row between>
+          <GlassChip icon={chip.icon} label={chip.label} />
+          <Badge tone={all ? 'green' : 'sky'} dot label={all ? 'All set' : `${done} of ${steps.length} done`} />
+        </Row>
+      }
+    >
+      <HeroTitle eyebrow={eyebrow} title={title} sub={body} />
+      <GlassPanel>
+        <Row between>
+          {steps.map((x) => (
+            <GlassStep key={x.label} {...x} />
+          ))}
+        </Row>
+        <GlassProgress label="Ready to travel" value={`${done}/${steps.length}`} progress={done / Math.max(steps.length, 1)} />
+      </GlassPanel>
+      {cta}
+    </HeroFrame>
+  );
+}
+
+function GlassStep({ label, done }: ReadyStep) {
+  return (
+    <View
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 1 }}
+      accessible
+      accessibilityLabel={`${label}, ${done ? 'done' : 'not done'}`}
+    >
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 10,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: done ? C.sky : 'transparent',
+          borderWidth: done ? 0 : 1.5,
+          borderColor: 'rgba(255,255,255,0.45)',
+        }}
+      >
+        {done && <Check size={12} color={C.white} strokeWidth={3} />}
+      </View>
+      <Text style={{ fontFamily: F.semibold, fontSize: 13, color: done ? C.white : 'rgba(255,255,255,0.7)' }} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+export type Venue = { photo: ImgKey; icon: LucideIcon; kind: string; title: string; body: string };
+
+/** Where Truepas works — informational cards for the no-trips Home. */
+export const VENUES: Venue[] = [
+  { photo: 'hotelPool', icon: BedDouble, kind: 'Hotels', title: 'Skip the front desk', body: 'Check in with a look, not a form.' },
+  { photo: 'themepark', icon: FerrisWheel, kind: 'Theme parks', title: 'Walk through the gate', body: 'No tickets to dig out at the turnstile.' },
+  { photo: 'flight', icon: Plane, kind: 'Flights', title: 'Board without the fuss', body: 'Your verified ID travels with you.' },
+  { photo: 'concert', icon: Ticket, kind: 'Events', title: 'Straight to your seat', body: 'Entry for you and your family together.' },
+  { photo: 'cruise', icon: Ship, kind: 'Cruises', title: 'Board in seconds', body: 'One identity for the whole voyage.' },
+];
+
+/** Same card as BookingCarouselCard, with a venue category instead of a booking. */
+export function VenueCard({ v, width = 248 }: { v: Venue; width?: number }) {
+  return (
+    <View accessible accessibilityLabel={`${v.kind}: ${v.title}. ${v.body}`} style={[{ width, borderRadius: R.xl }, SH.md]}>
+      <View style={{ borderRadius: R.xl, overflow: 'hidden', backgroundColor: C.surface }}>
+        <View style={{ height: 150 }}>
+          <Image source={IMG[v.photo]} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+          <View style={{ position: 'absolute', left: 12, top: 12 }}>
+            <GlassChip icon={v.icon} label={v.kind} />
           </View>
-          <View
-            style={{
-              borderRadius: R.lg,
-              padding: 14,
-              gap: 12,
-              backgroundColor: 'rgba(10,30,42,0.42)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.16)',
-            }}
-          >
-            <Row between>
-              <GlassFact k="Check-in" v={fmtDate(b.checkIn)} />
-              <GlassFact k="Guests" v={String(b.guests)} />
-              <GlassFact k="Total" v={money(b.amount)} end />
-            </Row>
-            <View style={{ gap: 6 }}>
-              <Row between>
-                <Text style={{ fontFamily: F.medium, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>Checked in</Text>
-                <Text style={{ fontFamily: F.mono, fontSize: 13, color: C.white }}>
-                  {n}/{b.guests}
-                </Text>
-              </Row>
-              <View style={{ height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' }}>
-                <View style={{ width: `${progress * 100}%`, height: '100%', borderRadius: 3, backgroundColor: C.sky }} />
-              </View>
-            </View>
-          </View>
-          {cta}
+        </View>
+        <View style={{ padding: 14, gap: 3 }}>
+          <Txt v="small" color={C.skyPressed} style={{ fontFamily: F.semibold }}>
+            With Truepas
+          </Txt>
+          <Txt v="h3" lines={1}>
+            {v.title}
+          </Txt>
+          <Txt v="small" lines={2}>
+            {v.body}
+          </Txt>
         </View>
       </View>
-    </Press>
+    </View>
   );
 }
 

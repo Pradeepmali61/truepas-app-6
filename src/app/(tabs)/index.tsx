@@ -8,9 +8,25 @@
  * sign out / delete account); bell shows the unread dot; next upcoming
  * booking is the hero; family strip (Add / You / members with face status);
  * the two most recent past check-ins; pull-to-refresh refetches everything.
+ *
+ * No upcoming bookings (every new user): the hero and carousel keep their
+ * photo cards but show the user's real setup progress (face / ID / family),
+ * where Truepas works and how it works, instead of disappearing.
  */
 import { useRouter } from 'expo-router';
-import { Bell, CalendarDays, FileScan, KeyRound, type LucideIcon, QrCode, ScanFace, UserPlus } from 'lucide-react-native';
+import {
+  Bell,
+  CalendarDays,
+  FileScan,
+  KeyRound,
+  type LucideIcon,
+  MapPin,
+  QrCode,
+  ScanFace,
+  ShieldCheck,
+  UserPlus,
+  Users,
+} from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,12 +44,16 @@ import {
   greeting,
   isTodayIso,
   ProfileDrawer,
+  ReadyHero,
   SoonAction,
+  VENUES,
+  VenueCard,
 } from '@/premium/flows/home';
 import { Async, Bone, ComingSoon, EmptyView, SkeletonList } from '@/premium/kit';
 import { C, F, R } from '@/premium/theme';
 import { Avatar, Button, Card, Divider, IconCircle, Press, Row, SectionHead, Serif, Tile, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
+import type { VerificationStatus } from '@/types/domain';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -52,6 +72,10 @@ export default function HomeScreen() {
     a.checkIn.localeCompare(b.checkIn),
   );
   const [nextUpcoming, ...laterUpcoming] = upcoming;
+
+  /* No trips yet: the hero shows real setup progress instead of a booking. */
+  const noTrips = bookings.data != null && upcoming.length === 0;
+  const showCarousel = laterUpcoming.length > 0 || noTrips;
 
   const refreshing = family.isRefetching || bookings.isRefetching || unread.isRefetching || summary.isRefetching;
   const onRefresh = () => {
@@ -139,7 +163,55 @@ export default function HomeScreen() {
                 }
               />
             </View>
+          ) : noTrips ? (
+            <View style={{ paddingHorizontal: 20, gap: 16 }}>
+              {summary.isPending && summary.data == null ? (
+                <>
+                  <Bone w="38%" h={20} />
+                  <Bone h={320} r={R.xxl} />
+                </>
+              ) : (
+                <GetReady
+                  faceDone={summary.data ? summary.data.face === 'verified' : !!user?.faceEnrolled}
+                  doc={summary.data?.document}
+                  familyCount={family.data?.length ?? 0}
+                  open={open}
+                />
+              )}
+            </View>
           ) : null}
+
+          {/* ---------- no trips: where Truepas works ---------- */}
+          {noTrips && (
+            <View style={{ gap: 16 }}>
+              <View style={{ paddingHorizontal: 20 }}>
+                <SectionHead title="Use Truepas at" />
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20, gap: 14, paddingBottom: 16 }}
+              >
+                {VENUES.map((v) => (
+                  <VenueCard key={v.kind} v={v} />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* ---------- no trips: how it works ---------- */}
+          {noTrips && (
+            <View style={{ paddingHorizontal: 20, gap: 16, marginTop: -14 }}>
+              <SectionHead title="How it works" />
+              <Card pad={18}>
+                <Row gap={10} align="flex-start">
+                  <HowStep n={1} icon={CalendarDays} title="Book" sub="Stay, ride or show at a partner venue" />
+                  <HowStep n={2} icon={MapPin} title="Arrive" sub="No queue, no forms to fill" />
+                  <HowStep n={3} icon={ScanFace} title="Look & walk in" sub="Your face is your key" />
+                </Row>
+              </Card>
+            </View>
+          )}
 
           {/* ---------- coming up ---------- */}
           {laterUpcoming.length > 0 && (
@@ -160,7 +232,7 @@ export default function HomeScreen() {
           )}
 
           {/* ---------- quick actions ---------- */}
-          <View style={{ paddingHorizontal: 20, gap: 16, marginTop: laterUpcoming.length > 0 ? -14 : 0 }}>
+          <View style={{ paddingHorizontal: 20, gap: 16, marginTop: showCarousel && !noTrips ? -14 : 0 }}>
             <SectionHead title="Quick actions" />
             <Row gap={10} align="stretch">
               <QuickAction icon={FileScan} label={'Add\ndocument'} onPress={open('/document/select-type')} />
@@ -283,6 +355,105 @@ export default function HomeScreen() {
       </SafeAreaView>
 
       <ProfileDrawer visible={drawer} onClose={() => setDrawer(false)} />
+    </View>
+  );
+}
+
+/**
+ * No-trips hero: the next setup step, from the same checks the Identity
+ * screen uses (face → document → family). Nothing here is a made-up booking.
+ */
+function GetReady({
+  faceDone,
+  doc,
+  familyCount,
+  open,
+}: {
+  faceDone: boolean;
+  doc?: VerificationStatus;
+  familyCount: number;
+  open: (href: string) => () => void;
+}) {
+  const docDone = doc === 'verified';
+  const steps = [
+    { label: 'Face', done: faceDone },
+    { label: 'ID', done: docDone },
+    { label: 'Family', done: familyCount > 0 },
+  ];
+  const allDone = steps.every((x) => x.done);
+
+  const hero = !faceDone
+    ? {
+        photo: 'stadium' as const,
+        chip: { icon: ScanFace, label: 'Face ID' },
+        eyebrow: 'Next step',
+        title: 'Your face is your key',
+        body: 'Enrol your face once, then check in at partner venues with just a look.',
+        cta: <Button label="Set up face ID" icon={ScanFace} onPress={open('/face-update/pin')} />,
+      }
+    : doc === 'pending'
+      ? {
+          photo: 'room' as const,
+          chip: { icon: FileScan, label: 'Document' },
+          eyebrow: 'In review',
+          title: 'Your ID is being checked',
+          body: "We'll let you know as soon as it's verified. Nothing else to do for now.",
+          cta: <Button label="View document status" tone="glass" onPress={open('/(tabs)/documents')} />,
+        }
+      : !docDone
+        ? {
+            photo: 'hotelNight' as const,
+            chip: { icon: FileScan, label: 'Document' },
+            eyebrow: 'Next step',
+            title: 'Add your ID once',
+            body: 'Scan your passport or ID card and travel everywhere with one verified identity.',
+            cta: <Button label="Add a document" icon={FileScan} onPress={open('/document/select-type')} />,
+          }
+        : familyCount === 0
+          ? {
+              photo: 'hotelDusk' as const,
+              chip: { icon: Users, label: 'Family' },
+              eyebrow: 'Almost there',
+              title: 'Travelling with family?',
+              body: 'Add them now and check in together, kids included.',
+              cta: <Button label="Add family member" icon={UserPlus} onPress={open('/family/add')} />,
+            }
+          : {
+              photo: 'hotelPool' as const,
+              chip: { icon: ShieldCheck, label: 'Verified' },
+              eyebrow: "You're all set",
+              title: 'Ready for your first check-in',
+              body: 'Book with a Truepas partner venue and your trip will show up right here.',
+              cta: undefined,
+            };
+
+  return (
+    <>
+      <SectionHead
+        title={allDone ? 'Next check-in' : 'Get ready to travel'}
+        action="Identity"
+        onAction={open('/identity')}
+      />
+      <ReadyHero {...hero} steps={steps} />
+    </>
+  );
+}
+
+function HowStep({ n, icon, title, sub }: { n: number; icon: LucideIcon; title: string; sub: string }) {
+  return (
+    <View style={{ flex: 1, gap: 10 }}>
+      <Tile icon={icon} tone="sky" size={44} radius={22} />
+      <View style={{ gap: 3 }}>
+        <Txt v="small" color={C.skyPressed} style={{ fontFamily: F.semibold }}>
+          Step {n}
+        </Txt>
+        <Txt v="bodyStrong" style={{ fontSize: 14.5, lineHeight: 19 }}>
+          {title}
+        </Txt>
+        <Txt v="small" style={{ fontSize: 12.5, lineHeight: 17 }}>
+          {sub}
+        </Txt>
+      </View>
     </View>
   );
 }
