@@ -1,22 +1,30 @@
 /** @jsxImportSource react */
 /**
- * Add family — step 2: document. 5-9/10+ → doc + liveness; 0-4 → doc + photo.
- * Hands off to /document/scan in family mode with the member basics.
+ * Family member document — step 3 of 3, AFTER the face (backend §1.2/§7.1:
+ * passport, ID card, licence, green card and US visa are checked against
+ * the member's enrolled face; a birth certificate needs no face). Also the
+ * "Continue setup" document step on the member page. The picker comes from
+ * GET /documents/types/supported filtered by the member's age (§6.1), with
+ * a fixed list when that fails. Hands off to /document/scan in family mode
+ * with the member's personId → family/add/processing verifies it.
  */
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Camera, Check, ScanFace, ScanLine, Upload } from 'lucide-react-native';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Check, ScanFace, ScanLine } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
+import { allowedDocumentTypes, useSupportedDocumentTypes } from '@/features/documents/hooks';
+import { ageBandFromAge, memberCaptureMode, useFamilyMember } from '@/features/family/hooks';
 import { DOC_ICON } from '@/premium/flows/family';
-import { Banner } from '@/premium/kit';
+import { Banner, SkeletonList } from '@/premium/kit';
 import { C } from '@/premium/theme';
-import { Badge, Button, Card, Heading, Steps, Tile, TopBar, Txt, Screen } from '@/premium/ui';
+import { Badge, Button, Card, Heading, Screen, Steps, Tile, TopBar, Txt } from '@/premium/ui';
 import type { DocumentType, FamilyAgeBand } from '@/types/domain';
 
 type DocOption = { id: DocumentType; label: string };
 
-// Minors can't hold a driving license.
+// Fallback when the supported-types call fails. Minors can't hold a
+// driving license.
 const OPTIONS_MINOR: DocOption[] = [
   { id: 'passport', label: 'Passport' },
   { id: 'idCard', label: 'ID Card' },
@@ -24,9 +32,7 @@ const OPTIONS_MINOR: DocOption[] = [
   { id: 'birthCertificate', label: 'Birth Certificate' },
   { id: 'usVisa', label: 'US Visa' },
 ];
-
-// 10+ covers adults too — they can hold any document type, including driving license.
-const OPTIONS_10_PLUS: DocOption[] = [
+const OPTIONS_ADULT: DocOption[] = [
   { id: 'passport', label: 'Passport' },
   { id: 'drivingLicense', label: "Driver's License" },
   { id: 'idCard', label: 'ID Card' },
@@ -36,38 +42,43 @@ const OPTIONS_10_PLUS: DocOption[] = [
 
 export default function FamilyDocumentScreen() {
   const router = useRouter();
-  const { name, band, dob, relationship } = useLocalSearchParams<{
-    name?: string;
-    band?: FamilyAgeBand;
-    dob?: string;
-    relationship?: string;
-  }>();
-  const needsFace = band !== '0-4';
-  const firstName = (name ?? 'Member').split(' ')[0];
+  const params = useLocalSearchParams<{ personId?: string; name?: string; age?: string; band?: FamilyAgeBand }>();
+  const personId = params.personId || undefined;
+  const { data: member } = useFamilyMember(personId);
+  const supported = useSupportedDocumentTypes();
 
-  const docOptions = band === '10+' ? OPTIONS_10_PLUS : OPTIONS_MINOR;
-  const [selectedDocType, setSelectedDocType] = useState<DocOption>(docOptions[0]);
-  // Flow: basics (1) → document (2) → capture (3) — three steps for every band.
-  const stepDone = 2;
-  const stepTotal = 3;
+  const ageParam = params.age != null && params.age !== '' ? Number(params.age) : NaN;
+  const age = Number.isFinite(ageParam) ? ageParam : member?.age;
+  const band: FamilyAgeBand | undefined =
+    params.band || member?.ageBand || (age != null && Number.isFinite(age) ? ageBandFromAge(age) : undefined);
+  const first = (params.name || member?.name || 'Member').trim().split(' ')[0];
+  const faceDone = !!member && (member.faceEnrolled || member.verification === 'verified');
 
-  const handleComplete = () => {
-    if (!name || !dob || !relationship) {
-      router.dismissTo('/(tabs)');
-      return;
-    }
+  const options: DocOption[] | null = supported.data
+    ? allowedDocumentTypes(supported.data, age).map((t) => ({ id: t.type, label: t.label }))
+    : supported.isError
+      ? age != null && age >= 18
+        ? OPTIONS_ADULT
+        : OPTIONS_MINOR
+      : null;
+  const [selectedId, setSelectedId] = useState<DocumentType | null>(null);
+  const selected = options?.find((o) => o.id === selectedId) ?? options?.[0] ?? null;
+
+  if (!personId) return <Redirect href="/family/add" />;
+
+  const scan = () => {
+    if (!selected) return;
     router.push({
       pathname: '/document/scan',
-      params: {
-        type: selectedDocType.id,
-        family: '1',
-        name: name,
-        dob: dob,
-        relationship: relationship,
-        band: band ?? '',
-      },
+      params: { type: selected.id, family: '1', personId, name: first, band: band ?? '' },
     });
   };
+
+  const setUpFace = () =>
+    router.replace({
+      pathname: memberCaptureMode(member, age) === 'photo' ? '/family/add/photo-capture' : '/family/add/face-capture',
+      params: { personId, name: first, ...(age != null ? { age: String(age) } : {}), next: 'document' },
+    });
 
   return (
     <Screen
@@ -76,88 +87,87 @@ export default function FamilyDocumentScreen() {
           title="Add member"
           right={
             <Txt v="smallStrong" color={C.ink3}>
-              {stepDone}/{stepTotal}
+              3/3
             </Txt>
           }
         />
       }
       contentStyle={{ paddingTop: 8 }}
-      footer={
-        <Button
-          label={needsFace ? 'Scan document' : 'Upload document'}
-          icon={needsFace ? ScanLine : Upload}
-          onPress={handleComplete}
-        />
-      }>
+      footer={<Button label="Scan document" icon={ScanLine} disabled={!selected} onPress={scan} />}>
       <View style={{ gap: 10 }}>
-        <Steps total={stepTotal} current={stepDone - 1} />
-        <Txt v="small">Step {stepDone} of {stepTotal} · Document</Txt>
+        <Steps total={3} current={2} />
+        <Txt v="small">Step 3 of 3 · Document</Txt>
       </View>
 
       <View style={{ gap: 14 }}>
         <Heading
-          title={needsFace ? `Scan ${firstName}'s` : `Upload ${firstName}'s`}
+          title={`Scan ${first}'s`}
           accent="ID."
           sub="Choose a document. Make sure all corners are visible and text is readable."
         />
-        {band === '0-4' ? (
-          <Badge label="Age 0-4 · Document + Photo" tone="neutral" icon={Camera} />
-        ) : band === '5-9' ? (
-          <Badge label="Age 5-9 · Doc + Liveness · any camera" tone="sky" icon={ScanFace} />
-        ) : (
-          <Badge label="Age 10+ · Doc + Liveness · front camera" tone="sky" icon={ScanFace} />
-        )}
+        {faceDone ? <Badge label="Face enrolled" tone="green" icon={ScanFace} /> : null}
       </View>
 
-      {!needsFace ? (
-        <Banner tone="info" body="Children under 5 need a document and one photo — no liveness scan required." />
-      ) : null}
+      {member && !faceDone ? (
+        <Banner
+          tone="warning"
+          title={`Set up ${first}'s face first`}
+          body="Photo documents are checked against their face. A birth certificate works without it."
+          action={<Button label="Set up face" tone="soft" size="sm" full={false} icon={ScanFace} onPress={setUpFace} />}
+        />
+      ) : (
+        <Banner tone="info" body={`The photo on ${first}'s document is checked against their face.`} />
+      )}
 
       <View style={{ gap: 10 }}>
         <Txt v="micro" style={{ marginLeft: 4 }}>
           Document type
         </Txt>
-        <Card pad={0} style={{ paddingHorizontal: 16 }}>
-          {docOptions.map((o, i) => {
-            const selected = o.id === selectedDocType.id;
-            return (
-              <Pressable
-                key={o.id}
-                accessibilityRole="radio"
-                accessibilityLabel={o.label}
-                accessibilityState={{ selected, checked: selected }}
-                onPress={() => setSelectedDocType(o)}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 14,
-                    paddingVertical: 14,
-                    borderTopWidth: i ? 1 : 0,
-                    borderTopColor: C.lineSoft,
-                  }}>
-                  <Tile icon={DOC_ICON[o.id]} tone={selected ? 'sky' : 'neutral'} size={40} />
-                  <Txt v="bodyStrong" color={selected ? C.ink : C.ink2} style={{ flex: 1 }}>
-                    {o.label}
-                  </Txt>
+        {options == null ? (
+          <SkeletonList rows={4} thumb={40} />
+        ) : (
+          <Card pad={0} style={{ paddingHorizontal: 16 }}>
+            {options.map((o, i) => {
+              const isSelected = o.id === selected?.id;
+              return (
+                <Pressable
+                  key={o.id}
+                  accessibilityRole="radio"
+                  accessibilityLabel={o.label}
+                  accessibilityState={{ selected: isSelected, checked: isSelected }}
+                  onPress={() => setSelectedId(o.id)}>
                   <View
                     style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 12,
+                      flexDirection: 'row',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: selected ? C.sky : 'transparent',
-                      borderWidth: selected ? 0 : 2,
-                      borderColor: C.line,
+                      gap: 14,
+                      paddingVertical: 14,
+                      borderTopWidth: i ? 1 : 0,
+                      borderTopColor: C.lineSoft,
                     }}>
-                    {selected && <Check size={14} color={C.white} strokeWidth={3.2} />}
+                    <Tile icon={DOC_ICON[o.id]} tone={isSelected ? 'sky' : 'neutral'} size={40} />
+                    <Txt v="bodyStrong" color={isSelected ? C.ink : C.ink2} style={{ flex: 1 }}>
+                      {o.label}
+                    </Txt>
+                    <View
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: isSelected ? C.sky : 'transparent',
+                        borderWidth: isSelected ? 0 : 2,
+                        borderColor: C.line,
+                      }}>
+                      {isSelected && <Check size={14} color={C.white} strokeWidth={3.2} />}
+                    </View>
                   </View>
-                </View>
-              </Pressable>
-            );
-          })}
-        </Card>
+                </Pressable>
+              );
+            })}
+          </Card>
+        )}
       </View>
     </Screen>
   );

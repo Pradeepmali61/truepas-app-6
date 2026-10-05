@@ -29,7 +29,7 @@ import {
     Typography
 } from '@/components/ui';
 import { useEnrollFace, useUpdateFace } from '@/features/auth/mutations';
-import { useRememberMemberPhoto } from '@/features/family/hooks';
+import { type ReauthReason, useRefreshAfterFaceChange, useRememberMemberPhoto } from '@/features/family/hooks';
 // Premium (Truepas 3.0) stage UIs — same props as LivenessStages; camera stays mounted per AGENTS.md.
 import {
   PremiumChallengeStage as ChallengeStage,
@@ -38,6 +38,7 @@ import {
 } from '@/premium/flows/face';
 import { useLivenessSession } from '@/features/liveness/useLivenessSession';
 import { flowGuards } from '@/services/flowGuards';
+import { hasReauthToken } from '@/services/reauth';
 import { useThemeTokens } from '@/theme';
 import { errorHaptic, successHaptic, tapHaptic } from '@/services/haptics';
 
@@ -56,6 +57,14 @@ interface LivenessCameraProps {
    *  while the child faces it). When true, a front/back toggle shows in the
    *  challenge header. Default: front camera only (ages 10+). */
   allowBackCamera?: boolean;
+  /** Update mode: PUT /face needs the single-use PIN token (backend §5).
+   *  Called — instead of a generic failure — when the token is missing or
+   *  expired, or the server answers 403 REAUTH_REQUIRED ('expired'), and when
+   *  the user retries after a failed update that used the token up
+   *  ('retry'). The screen sends the user back to the PIN step. */
+  onReauthRequired?: (reason: ReauthReason) => void;
+  /** Passed-stage button label (default: Done for members, else Continue). */
+  nextLabel?: string;
 }
 
 // Calibration thresholds (per guide §4.5 — tune on real devices)
@@ -80,7 +89,15 @@ const STEP_GRACE_MS = 2000;
  *
  * NO manual button press — detection is fully automatic.
  */
-export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCamera }: LivenessCameraProps) {
+export function LivenessCamera({
+  mode,
+  personId,
+  onSuccess,
+  onError,
+  allowBackCamera,
+  onReauthRequired,
+  nextLabel,
+}: LivenessCameraProps) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const theme = useThemeTokens();
   const [capturing, setCapturing] = useState(false);
@@ -96,9 +113,14 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
   const liveness = useLivenessSession();
   const enrollFace = useEnrollFace();
   const rememberMemberPhoto = useRememberMemberPhoto();
+  const refreshAfterFaceChange = useRefreshAfterFaceChange();
   /** Finalize frame, kept so a family member's enrolment can become their avatar. */
   const capturedUri = useRef<string | null>(null);
   const updateFace = useUpdateFace();
+  // Update mode: the PIN token goes with the first PUT /face attempt and is
+  // single use — after a failed update, a retry needs the PIN again.
+  const [pinSpent, setPinSpent] = useState(false);
+  const reauthGated = mode === 'update' && !!onReauthRequired;
 
   // Under-10 members may flip to the rear camera (parent holds the phone);
   // everyone else stays front-only per the age-band spec.
@@ -169,10 +191,26 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
     return () => clearInterval(t);
   }, [liveness.phase, cooldownLeft]);
 
+  // Stop the preview, let the native camera settle, then navigate. Prevents
+  // the Fabric "Unsupported top level event type topCameraReady" crash that
+  // happens when an active Camera unmounts mid-event-dispatch.
+  const settleCameraThen = useCallback(async (navigate: () => void) => {
+    setCameraActive(false);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    navigate();
+  }, []);
+
   // Start liveness challenge when permission is granted, and restart after
   // reset (Try Again) — depends on phase so idle→start works every time.
+  // Update mode first checks the PIN token is still held (5 min, single
+  // use): without it PUT /face would fail after the whole challenge.
   useEffect(() => {
     if (hasPermission && liveness.phase === 'idle') {
+      if (reauthGated && !hasReauthToken()) {
+        // Microtask: settleCameraThen sets state (react-hooks/set-state-in-effect).
+        queueMicrotask(() => void settleCameraThen(() => onReauthRequired?.('expired')));
+        return;
+      }
       liveness.startSession(personId).catch((err) => {
         failWithCooldown(err, 'Failed to start liveness challenge');
       });
@@ -184,15 +222,6 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
     stepStartedAt.current = Date.now();
     eyesWereClosed.current = false;
     submittingRef.current = false;
-  }, []);
-
-  // Stop the preview, let the native camera settle, then navigate. Prevents
-  // the Fabric "Unsupported top level event type topCameraReady" crash that
-  // happens when an active Camera unmounts mid-event-dispatch.
-  const settleCameraThen = useCallback(async (navigate: () => void) => {
-    setCameraActive(false);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    navigate();
   }, []);
 
   // Begin step when challenge phase starts or step advances
@@ -422,16 +451,33 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
           await rememberMemberPhoto(personId, capturedUri.current);
         }
       } else {
+        // PIN token expired while the challenge ran or the result sat on
+        // screen: ask for the PIN again rather than send a doomed PUT /face.
+        if (reauthGated && !hasReauthToken()) {
+          await settleCameraThen(() => onReauthRequired?.('expired'));
+          return;
+        }
         await updateFace.mutateAsync(facePayload);
         // Family member face update: the new frame replaces their avatar too.
         if (personId && capturedUri.current) {
           await rememberMemberPhoto(personId, capturedUri.current);
         }
       }
+      refreshAfterFaceChange();
       console.log('[Liveness] Face enrollment SUCCESS');
       await settleCameraThen(onSuccess);
     } catch (err: any) {
       console.error('[Liveness] Face enrollment failed:', err?.message);
+      if (mode === 'update') {
+        // 403 REAUTH_REQUIRED (no, expired or used PIN token): straight back
+        // to the PIN step with a short explanation, not a generic failure.
+        if (reauthGated && toApiError(err).code === 'REAUTH_REQUIRED') {
+          await settleCameraThen(() => onReauthRequired?.('expired'));
+          return;
+        }
+        // Any other failed PUT /face still used the token up (§5).
+        setPinSpent(true);
+      }
       // The liveness session is single-use — consumed whether enroll
       // succeeded or not — so the failed screen's Try Again starts a NEW
       // challenge rather than retrying a dead credential.
@@ -439,7 +485,21 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
     } finally {
       setEnrolling(false);
     }
-  }, [enrolling, liveness, mode, personId, enrollFace, updateFace, rememberMemberPhoto, onSuccess, settleCameraThen, failWithCooldown]);
+  }, [
+    enrolling,
+    liveness,
+    mode,
+    personId,
+    enrollFace,
+    updateFace,
+    rememberMemberPhoto,
+    refreshAfterFaceChange,
+    onSuccess,
+    onReauthRequired,
+    reauthGated,
+    settleCameraThen,
+    failWithCooldown,
+  ]);
 
   // Auto-finalize when phase becomes 'finalizing'
   useEffect(() => {
@@ -600,14 +660,17 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
 
   // Error state — friendly message (from toApiError) + retry cooldown so a
   // 429 isn't hammered (each immediate retry burns more rate-limit quota).
+  // Update mode after a failed PUT /face: the PIN token is used up, so the
+  // retry goes through the PIN step (no camera is mounted on this stage).
   if (liveness.phase === 'failed') {
+    const needsPin = reauthGated && pinSpent;
     return (
       <LivenessResultStage
         outcome="failed"
         error={liveness.error}
-        primaryLabel={cooldownLeft > 0 ? `Try again in ${cooldownLeft}s` : 'Try again'}
-        primaryDisabled={cooldownLeft > 0}
-        onPrimary={() => liveness.reset()}
+        primaryLabel={needsPin ? 'Enter PIN again' : cooldownLeft > 0 ? `Try again in ${cooldownLeft}s` : 'Try again'}
+        primaryDisabled={!needsPin && cooldownLeft > 0}
+        onPrimary={() => (needsPin ? onReauthRequired?.('retry') : liveness.reset())}
         onBack={() => router.back()}
       />
     );
@@ -632,7 +695,7 @@ export function LivenessCamera({ mode, personId, onSuccess, onError, allowBackCa
         outcome="passed"
         personId={personId}
         score={liveness.result.antispoof_score}
-        primaryLabel={personId ? 'Done' : 'Continue'}
+        primaryLabel={nextLabel ?? (personId ? 'Done' : 'Continue')}
         primaryLoading={enrolling}
         onPrimary={enrollFaceNow}
         onBack={() => router.back()}

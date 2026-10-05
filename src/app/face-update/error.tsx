@@ -9,8 +9,8 @@ import { ResultView } from '@/premium/views';
 
 /** Update face — retry error. Never marks success on failure (PRD).
  *  `retry` param (when set) routes Retry back to the flow that failed —
- *  registration passes '/(onboarding)/face-scan', the default is the
- *  face-update camera. */
+ *  registration passes '/(onboarding)/face-scan'. The default is the PIN
+ *  step: a face change needs a new single-use PIN check for every try. */
 export default function FaceUpdateErrorScreen() {
   const router = useRouter();
   const { message, retry } = useLocalSearchParams<{ message?: string; retry?: string }>();
@@ -28,7 +28,7 @@ export default function FaceUpdateErrorScreen() {
         <Button
           label="Retry now"
           icon={RotateCcw}
-          onPress={() => router.replace((retry ?? '/face-update/camera') as Href)}
+          onPress={() => router.replace((retry ?? '/face-update/pin') as Href)}
         />
       }
       secondary={<Button label="Try again later" tone="ghost" onPress={() => router.dismissTo('/(tabs)')} />}>

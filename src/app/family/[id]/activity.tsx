@@ -1,13 +1,27 @@
 /** @jsxImportSource react */
 /**
- * Member activity — GET /cb/family/{personId}/activity. The projection isn't
- * connected yet so this usually returns []. The timeline is never empty
- * though: a "first check-in" placeholder and the member's next milestone
- * (turning 18) lead, then the server events, or — while there are none —
- * events derived from real member data (face, documents, joined the family).
+ * Member activity — GET /cb/family/{personId}/activity (§7.3): that
+ * member's events, newest first, normalized to { id, title, date (ISO),
+ * type, tone, ref }. Server events show with an icon by `type`, `title`
+ * as-is and `date` formatted locally; a document/booking `ref` opens it.
+ * The member's next milestone (turning 18) and — until a check-in event
+ * arrives — a "first check-in" placeholder lead the list. Only while the
+ * server list is empty, events derived from real member data (face,
+ * documents, joined the family) fill it in.
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Cake, FileCheck, History, type LucideIcon, MapPin, ScanFace, UserPlus } from 'lucide-react-native';
+import {
+  Cake,
+  FileCheck,
+  FilePlus,
+  FileX,
+  History,
+  KeyRound,
+  type LucideIcon,
+  MapPin,
+  ScanFace,
+  UserPlus,
+} from 'lucide-react-native';
 import { Pressable, View } from 'react-native';
 
 import { useDocuments } from '@/features/documents/hooks';
@@ -16,14 +30,41 @@ import { docStyle, fmtDate } from '@/premium/flows/home';
 import { Bone, ErrorView } from '@/premium/kit';
 import { C } from '@/premium/theme';
 import { Avatar, Badge, type BadgeTone, Card, Heading, Row, Screen, Tile, TopBar, Txt } from '@/premium/ui';
-import type { ActivityLogItem, FamilyMember, IdentityDocument } from '@/types/domain';
+import type { ActivityLogItem, ActivityType, FamilyMember, IdentityDocument } from '@/types/domain';
 
+/** ISO date → local "Oct 5, 2026, 9:41 AM" (date only when there's no time). */
 function when(date: string): string {
   const d = new Date(date);
-  return Number.isNaN(d.getTime()) ? date : d.toLocaleString();
+  if (!date || Number.isNaN(d.getTime())) return date;
+  return /T\d{2}:\d{2}/.test(date)
+    ? d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-type TileTone = 'sky' | 'navy' | 'green' | 'amber' | 'neutral';
+type TileTone = 'sky' | 'navy' | 'green' | 'amber' | 'red' | 'neutral';
+
+const EVENT_STYLE: Record<ActivityType, { icon: LucideIcon; tone: TileTone }> = {
+  face_enrolled: { icon: ScanFace, tone: 'green' },
+  family_face_enrolled: { icon: ScanFace, tone: 'green' },
+  document_added: { icon: FilePlus, tone: 'sky' },
+  document_verified: { icon: FileCheck, tone: 'green' },
+  document_failed: { icon: FileX, tone: 'amber' },
+  family_member_added: { icon: UserPlus, tone: 'sky' },
+  check_in: { icon: MapPin, tone: 'navy' },
+  password_changed: { icon: KeyRound, tone: 'neutral' },
+};
+
+/** Server tone wins when it signals something (success/warning/error). */
+const TONE_TILE: Partial<Record<NonNullable<ActivityLogItem['tone']>, TileTone>> = {
+  success: 'green',
+  warning: 'amber',
+  error: 'red',
+};
+
+function eventStyle(e: ActivityLogItem): { icon: LucideIcon; tone: TileTone } {
+  const base = (e.type && EVENT_STYLE[e.type]) || { icon: History, tone: 'sky' as TileTone };
+  return { icon: base.icon, tone: (e.tone && TONE_TILE[e.tone]) || base.tone };
+}
 
 type Entry = {
   id: string;
@@ -56,25 +97,28 @@ function buildTimeline(
   events: ActivityLogItem[],
   docs: IdentityDocument[],
   openMember: () => void,
+  openRef: (e: ActivityLogItem) => (() => void) | undefined,
 ): Entry[] {
-  const out: Entry[] = [
-    {
+  const out: Entry[] = [];
+  if (!events.some((e) => e.type === 'check_in')) {
+    out.push({
       id: 'first-checkin',
       icon: MapPin,
       tone: 'neutral',
       title: `${first}'s first check-in`,
       sub: 'Shows up here after their first visit',
       badge: { label: 'Waiting', tone: 'neutral' },
-    },
-  ];
+    });
+  }
   const adult = m ? eighteenth(m) : null;
   if (adult) {
     out.push({ id: 'turns-18', icon: Cake, tone: 'sky', title: `Turns 18 on ${fmtDate(adult)}`, sub: 'Upcoming milestone' });
   }
   if (events.length > 0) {
-    events.forEach((e, i) =>
-      out.push({ id: e.id, icon: History, tone: i === 0 ? 'navy' : 'sky', title: e.title, sub: when(e.date) }),
-    );
+    events.forEach((e) => {
+      const style = eventStyle(e);
+      out.push({ id: e.id, icon: style.icon, tone: style.tone, title: e.title, sub: when(e.date), onPress: openRef(e) });
+    });
     return out;
   }
   if (!m) return out;
@@ -129,14 +173,22 @@ export default function FamilyMemberActivityScreen() {
   const router = useRouter();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const { data: member } = useFamilyMember(id);
-  const photoUri = useMemberPhoto(id);
+  const photoUri = useMemberPhoto(id, member?.profileImageUrl);
   const memberDocs = useDocuments(id);
   const activity = useFamilyActivity(id);
   const { data: events, isPending, isError, refetch } = activity;
 
   const fullName = name ?? member?.name;
   const first = (fullName ?? 'Member').split(' ')[0];
-  const timeline = buildTimeline(member ?? undefined, first, events ?? [], memberDocs.data ?? [], () => router.back());
+  // A document / booking event opens it (ref, §10.1).
+  const openRef = (e: ActivityLogItem) => {
+    const docId = e.ref?.documentId;
+    const bookingId = e.ref?.bookingId;
+    if (docId) return () => router.push(`/document/${docId}` as never);
+    if (bookingId) return () => router.push(`/booking/${bookingId}` as never);
+    return undefined;
+  };
+  const timeline = buildTimeline(member ?? undefined, first, events ?? [], memberDocs.data ?? [], () => router.back(), openRef);
 
   return (
     <Screen

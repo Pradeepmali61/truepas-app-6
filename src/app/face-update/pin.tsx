@@ -5,28 +5,34 @@ import { View } from 'react-native';
 import { isMockApi } from '@/api';
 import { MOCK_PIN } from '@/api/mock';
 import { PIN_LENGTH, usePinVerification } from '@/features/auth/usePinVerification';
-import { MEMBER_FACE_UPDATE_GUARD } from '@/features/family/hooks';
+import { MEMBER_FACE_UPDATE_GUARD, type ReauthReason } from '@/features/family/hooks';
 import { formatCountdown } from '@/hooks/useCountdown';
 import { Keypad } from '@/premium/blocks';
 import { Banner, CodeInput } from '@/premium/kit';
 import { C } from '@/premium/theme';
-import { Button, Heading, Screen, TopBar, Txt } from '@/premium/ui';
+import { Button, Heading, Screen, TextLink, TopBar, Txt } from '@/premium/ui';
 import { flowGuards } from '@/services/flowGuards';
 
-/** Update face — PIN verification (PRD FR-04: PIN required for face updates).
+/** Update face — PIN verification (PRD FR-04; backend §5: PUT /face needs
+ *  the single-use, 5-minute reauthToken that POST /auth/verify-pin returns —
+ *  api.verifyPin keeps it for the API layer). Runs right before the capture,
+ *  so the order is PIN → liveness/photo → PUT /face inside the 5 minutes.
  *  Forwards `personId` (when present) so the face update targets the family
  *  member instead of the authenticated main user. With `capture` (from the
  *  member page) it opens the member's own capture screen in update mode —
- *  liveness (5+, PUT /face) or one photo (under 5) — which lands back on the
- *  member page. Shares attempts/lockout logic with confirm-pin via
+ *  liveness (5+) or one photo (under 5), both PUT /face — which lands back
+ *  on the member page. Capture screens come back here with `reason` when the
+ *  PIN check expired, was refused (403 REAUTH_REQUIRED) or was used up by a
+ *  failed update. Shares attempts/lockout logic with confirm-pin via
  *  usePinVerification. */
 export default function FaceUpdatePinScreen() {
   const router = useRouter();
-  const { personId, age, name, capture } = useLocalSearchParams<{
+  const { personId, age, name, capture, reason } = useLocalSearchParams<{
     personId?: string;
     age?: string;
     name?: string;
     capture?: 'liveness' | 'photo';
+    reason?: ReauthReason;
   }>();
   const gate = usePinVerification();
   const busy = gate.locked || gate.isPending;
@@ -34,9 +40,11 @@ export default function FaceUpdatePinScreen() {
   const handleComplete = async (value?: string) => {
     const code = await gate.submit(value);
     if (!code) return;
+    // Replace on both paths: back from the capture screen returns to where
+    // the PIN step was opened from, and a "PIN again" round trip doesn't
+    // stack PIN screens.
     if (personId && (capture === 'liveness' || capture === 'photo')) {
       flowGuards.grant(MEMBER_FACE_UPDATE_GUARD);
-      // Replace: back from the capture screen returns to the member page.
       router.replace({
         pathname: capture === 'photo' ? '/family/add/photo-capture' : '/family/add/face-capture',
         params: { personId, update: '1', ...(name ? { name } : {}), ...(age ? { age } : {}) },
@@ -44,7 +52,7 @@ export default function FaceUpdatePinScreen() {
       return;
     }
     flowGuards.grant('face-update:camera');
-    router.push({
+    router.replace({
       pathname: '/face-update/camera',
       params: personId ? { personId, ...(age ? { age } : {}) } : {},
     });
@@ -116,6 +124,10 @@ export default function FaceUpdatePinScreen() {
           }
           body={gate.error}
         />
+      ) : reason === 'expired' ? (
+        <Banner tone="warning" title="Enter your PIN again" body="Your PIN check expired before the face was saved." />
+      ) : reason === 'retry' ? (
+        <Banner tone="warning" title="Enter your PIN again" body="Each try at changing a face needs a new PIN check." />
       ) : null}
 
       {__DEV__ && isMockApi() && (
@@ -123,6 +135,11 @@ export default function FaceUpdatePinScreen() {
           Demo PIN: {MOCK_PIN}
         </Txt>
       )}
+
+      {/* Resets the PIN by email code and comes back here. */}
+      <View style={{ alignItems: 'center' }}>
+        <TextLink label="Forgot PIN?" onPress={() => router.push('/security/forgot-pin' as never)} />
+      </View>
 
       <View style={{ flex: 1 }} />
       <Keypad onKey={onKey} disabled={busy} />

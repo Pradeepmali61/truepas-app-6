@@ -54,7 +54,6 @@ const STATUS: Record<string, [string, BadgeTone]> = {
   pending: ['Pending', 'amber'],
   pending_document: ['Document needed', 'amber'],
   pending_liveness: ['Liveness needed', 'amber'],
-  review: ['In review', 'amber'],
   missing: ['Not added yet', 'neutral'],
   incomplete: ['Incomplete', 'neutral'],
   cancelled: ['Cancelled', 'neutral'],
@@ -90,7 +89,7 @@ export function formatDate(iso?: string | null): string {
 
 /* ───────────────────────── member portraits (family list) ───────────────────────── */
 
-/** Members carry no photo URL — each portrait gets a stable brand tint instead. */
+/** Members without a photo get a stable brand tint instead. */
 const TINTS = [
   ['#0A9BE0', '#034965'],
   ['#045A7C', '#011B27'],
@@ -105,12 +104,13 @@ function tintFor(id: string) {
 }
 
 /** Portrait card — the approved "party" grid look: a full-bleed photo when
- *  this device has the member's enrolment photo, otherwise initials on a
- *  tinted card. Front shows only name, relationship, age and status; the
- *  capture details live on the member page. */
+ *  the member has one (their profile photo, else the one kept on this
+ *  phone), otherwise initials on a tinted card. Front shows only name,
+ *  relationship, age and status; the capture details live on the member
+ *  page. */
 export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPress: () => void }) {
   const verified = member.verification === 'verified' || !!member.faceEnrolled;
-  const photoUri = useMemberPhoto(member.id);
+  const photoUri = useMemberPhoto(member.id, member.profileImageUrl);
   return (
     <Press onPress={onPress} label={member.name} role="button" style={[{ flex: 1, borderRadius: R.xl }, SH.md]}>
       <View style={{ minHeight: 228, borderRadius: R.xl, overflow: 'hidden', padding: 14, justifyContent: 'space-between', gap: 10 }}>
@@ -202,7 +202,7 @@ export interface ChecklistStep {
   done: boolean;
 }
 
-/** Numbered setup checklist (Document → Face → Enrolled). */
+/** Numbered setup checklist (Face → Document → Done). */
 export function ChecklistCard({ title, steps }: { title: string; steps: ChecklistStep[] }) {
   return (
     <View style={{ gap: 10 }}>

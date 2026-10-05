@@ -1,10 +1,12 @@
 /** @jsxImportSource react */
 /**
  * FamilyDetailScreen — a single family member. Hero, setup checklist derived
- * from verification state, the member's documents and the remove flow.
- * "Continue setup" routes to our real next step (document capture, then
- * photo/liveness capture). Once set up, "Update face" re-runs the member's
- * capture (PIN first) and "Add a document" adds extra documents without
+ * from verification state, the member's documents, permissions and the
+ * remove flow. Setup is FACE FIRST (backend §1.2/§7.1: photo documents are
+ * checked against the enrolled face): "Continue setup" opens the face
+ * capture (then the document step) until the face is enrolled, then the
+ * document step. Once set up, "Update face" re-runs the member's capture
+ * (PIN first, PUT /face) and "Add a document" adds extra documents without
  * repeating the face step. Premium skin over the original (0483c76) behaviour.
  */
 import { Image } from 'expo-image';
@@ -31,34 +33,43 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useToast } from '@/components/composite/Toast';
 import { documentKeys, useDocuments } from '@/features/documents/hooks';
-import { familyKeys, useFamilyMember, useMemberPhoto, useRemoveFamilyMember, useSetMemberPhoto } from '@/features/family/hooks';
+import {
+  familyKeys,
+  memberCaptureMode,
+  useFamilyMember,
+  useMemberPhoto,
+  useRemoveFamilyMember,
+  useSetMemberPhoto,
+  useUpdateFamilyPermissions,
+} from '@/features/family/hooks';
 import { Glow, Guilloche } from '@/premium/blocks';
 import { ChecklistCard, DocRow, formatDate, statusBadge, type ChecklistStep } from '@/premium/flows/family';
-import { Async, Bone, ConfirmSheet, EmptyView, SkeletonList, SoonOverlay } from '@/premium/kit';
+import { Async, Bone, ComingSoon, ConfirmSheet, EmptyView, SkeletonList } from '@/premium/kit';
 import { useHeroStatusBar } from '@/premium/statusBar';
 import { C, F, SH } from '@/premium/theme';
 import { Badge, Button, Group, initials, ListRow, Screen, Toggle, TopBar, Txt, VerifiedTick } from '@/premium/ui';
 import type { FamilyMember } from '@/types/domain';
 
+/** Face → Document → Done: the document is checked against the face. */
 function stepsFor(m: FamilyMember, docDone: boolean): ChecklistStep[] {
-  const isPhoto = m.faceCaptureMode === 'photo';
+  const isPhoto = memberCaptureMode(m) === 'photo';
   const faceDone = isFaceDone(m);
   return [
     {
-      icon: FileText,
-      label: 'Document',
-      sub: 'Birth certificate, passport, or ID',
-      done: docDone,
-    },
-    {
       icon: isPhoto ? Camera : ScanFace,
-      label: isPhoto ? 'Face photo' : 'Liveness check',
-      sub: isPhoto ? 'One clear photo — no liveness under 5' : 'Short challenge prompts on the front camera',
+      label: 'Face',
+      sub: isPhoto ? 'One clear photo — no liveness under 5' : 'A short liveness check',
       done: faceDone,
     },
     {
+      icon: FileText,
+      label: 'Document',
+      sub: 'Checked against their face',
+      done: docDone,
+    },
+    {
       icon: BadgeCheck,
-      label: 'Enrolled',
+      label: 'Done',
       sub: 'Ready for venue check-in',
       done: docDone && faceDone,
     },
@@ -102,7 +113,8 @@ export default function FamilyMemberScreen() {
       void queryClient.invalidateQueries({ queryKey: documentKeys.member(id) });
     }, [queryClient, id]),
   );
-  const photoUri = useMemberPhoto(id);
+  // Server photo (profileImageUrl) first, then the one kept on this phone.
+  const photoUri = useMemberPhoto(id, m?.profileImageUrl);
   const setPhoto = useSetMemberPhoto(id);
   // Opened from the Family "Add photos" nudge: start on the source sheet.
   const [photoSheet, setPhotoSheet] = useState(photo === '1');
@@ -110,36 +122,58 @@ export default function FamilyMemberScreen() {
     setPhotoSheet(false);
     const r = await setPhoto.pick(source);
     if (r === 'saved') toast({ variant: 'success', title: 'Photo added' });
+    else if (r === 'saved-local')
+      toast({ variant: 'warning', title: 'Photo saved on this phone', description: "We couldn't upload it. Try again later." });
     else if (r === 'denied')
       toast({ variant: 'error', title: source === 'camera' ? 'Camera access is needed' : 'Photo access is needed' });
     else if (r === 'failed') toast({ variant: 'error', title: "Couldn't add the photo" });
   };
-  const first = m?.name.split(' ')[0] ?? '';
-  const isPhoto = (m?.faceCaptureMode ?? (m && m.age < 5 ? 'photo' : 'liveness')) === 'photo';
-  // Member docs may stay 'pending' when backend verification isn't run for
-  // them — any captured (non-failed) document completes this step.
-  const doneDoc = memberDocs.data?.find((d) => d.status !== 'failed' && d.status !== 'missing');
-  const docDone = doneDoc != null || m?.verification === 'pending_liveness' || m?.verification === 'verified';
-  const setupDone = !!m && docDone && isFaceDone(m);
 
-  const continueSetup = m
-    ? !docDone
-      ? () =>
-          router.push({
-            pathname: '/document/select-type',
-            params: { family: '1', personId: id, memberName: m.name, band: m.ageBand },
-          } as never)
-      : () =>
-          router.push({
-            pathname: isPhoto ? '/family/add/photo-capture' : '/family/add/face-capture',
-            params: { personId: id, name: first, age: String(m.age) },
-          } as never)
-    : undefined;
-  const continueLabel = !docDone
-    ? `Add ${first}'s document`
-    : isPhoto
+  // Permissions (§7.2). notifyOnCheckIn is live; while a change saves, the
+  // toggle shows the new value and is disabled — a failure reverts it.
+  const permissions = useUpdateFamilyPermissions(id);
+  const savedNotify = m?.permissions?.notifyOnCheckIn ?? true;
+  const notifyOn =
+    permissions.isPending && permissions.variables?.notifyOnCheckIn != null
+      ? permissions.variables.notifyOnCheckIn
+      : savedNotify;
+  const setNotify = (value: boolean) =>
+    permissions.mutate(
+      { notifyOnCheckIn: value },
+      { onError: () => toast({ variant: 'error', title: "Couldn't save the setting", description: 'Please try again.' }) },
+    );
+
+  const first = m?.name.split(' ')[0] ?? '';
+  const isPhoto = memberCaptureMode(m) === 'photo';
+  // Results are approved or rejected only — a document counts once verified.
+  // 'pending_liveness' / 'verified' cover members whose document was done
+  // before this order (doc first) changed.
+  const docDone =
+    !!memberDocs.data?.some((d) => d.status === 'verified') ||
+    m?.verification === 'pending_liveness' ||
+    m?.verification === 'verified';
+  const faceDone = !!m && isFaceDone(m);
+  const setupDone = !!m && docDone && faceDone;
+
+  const openDocumentStep = () =>
+    m &&
+    router.push({
+      pathname: '/family/add/document',
+      params: { personId: id, name: first, age: String(m.age), band: m.ageBand },
+    } as never);
+  // Face first; the document step follows when it's still missing.
+  const openFaceStep = () =>
+    m &&
+    router.push({
+      pathname: isPhoto ? '/family/add/photo-capture' : '/family/add/face-capture',
+      params: { personId: id, name: first, age: String(m.age), ...(docDone ? {} : { next: 'document' }) },
+    } as never);
+  const continueSetup = !faceDone ? openFaceStep : openDocumentStep;
+  const continueLabel = !faceDone
+    ? isPhoto
       ? `Take ${first}'s face photo`
-      : `Complete ${first}'s face scan`;
+      : `Scan ${first}'s face`
+    : `Add ${first}'s document`;
 
   // Extra documents any time — processing sees personId and returns here
   // without re-running face capture.
@@ -150,9 +184,9 @@ export default function FamilyMemberScreen() {
       params: { family: '1', personId: id, memberName: m.name, band: m.ageBand },
     } as never);
 
-  // Redo an enrolled member's face: PIN first (as for your own face), then
-  // their own capture — liveness 5+ (PUT /face with personId), one photo under
-  // 5 (POST /face/enroll) — which pops back here.
+  // Redo an enrolled member's face: PIN first (as for your own face, §5),
+  // then their own capture — liveness 5+ or one photo under 5, both PUT
+  // /face with personId and the PIN token — which pops back here.
   const updateFace = () =>
     m &&
     router.push({
@@ -296,13 +330,13 @@ export default function FamilyMemberScreen() {
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               <Badge label={`${m.relationship} · ${m.age} yrs`} tone="neutral" />
               <Badge label={status.label} tone={status.tone} dot />
-              <Badge label={m.faceCaptureMode === 'photo' ? 'Photo' : 'Liveness'} tone="sky" icon={m.faceCaptureMode === 'photo' ? Camera : ScanFace} />
+              <Badge label={isPhoto ? 'Photo' : 'Liveness'} tone="sky" icon={isPhoto ? Camera : ScanFace} />
               {cameras ? <Badge label={cameras} tone="neutral" /> : null}
             </View>
           </View>
 
-          {!setupDone && continueSetup && (
-            <Button label={continueLabel} icon={!docDone ? FileText : isPhoto ? Camera : ScanFace} onPress={continueSetup} />
+          {!setupDone && (
+            <Button label={continueLabel} icon={!faceDone ? (isPhoto ? Camera : ScanFace) : FileText} onPress={continueSetup} />
           )}
           {setupDone && <Button label="Go to Family" icon={Users} onPress={goToFamily} />}
 
@@ -340,8 +374,10 @@ export default function FamilyMemberScreen() {
                   compact
                   icon={FileText}
                   title="No documents yet"
-                  body={`Add a document to verify ${first}.`}
-                  action={<Button label="Add a document" tone="soft" size="md" icon={FilePlus} onPress={addDocument} />}
+                  body={faceDone ? `Add a document to verify ${first}.` : `Set up ${first}'s face first, then add a document.`}
+                  action={
+                    faceDone ? <Button label="Add a document" tone="soft" size="md" icon={FilePlus} onPress={addDocument} /> : undefined
+                  }
                 />
               }>
               {(docs) => (
@@ -365,7 +401,7 @@ export default function FamilyMemberScreen() {
           </View>
 
           {/* ---------- manage (enrolled members) ---------- */}
-          {isFaceDone(m) && (
+          {faceDone && (
             <Group title="Manage">
               <ListRow
                 icon={isPhoto ? Camera : ScanFace}
@@ -377,13 +413,34 @@ export default function FamilyMemberScreen() {
             </Group>
           )}
 
-          {/* ---------- permissions (approved design, no backend yet) ---------- */}
-          <SoonOverlay>
-            <Group title="Permissions">
-              <ListRow icon={UserCheck} title="Check in independently" sub="Without you present" trailing={<Toggle on={false} />} />
-              <ListRow icon={BellRing} title="Notify me on every check-in" sub="Real-time alerts to your phone" trailing={<Toggle on={false} />} />
-            </Group>
-          </SoonOverlay>
+          {/* ---------- permissions (§7.2) ---------- */}
+          <Group title="Permissions">
+            <ListRow
+              icon={BellRing}
+              tone="sky"
+              title={`Notify me when ${first} checks in`}
+              sub="An alert on your phone"
+              chevron={false}
+              trailing={
+                <Toggle
+                  on={notifyOn}
+                  disabled={permissions.isPending}
+                  onChange={setNotify}
+                  label={`Notify me when ${first} checks in`}
+                />
+              }
+            />
+            {/* Stored by the backend but not enforced yet (consent review). */}
+            <View style={{ opacity: 0.55 }} accessibilityState={{ disabled: true }} accessibilityHint="Coming soon">
+              <ListRow
+                icon={UserCheck}
+                title="Check in independently"
+                sub="Without you present"
+                chevron={false}
+                trailing={<ComingSoon />}
+              />
+            </View>
+          </Group>
 
           <Button
             label="Remove from family"
@@ -400,7 +457,7 @@ export default function FamilyMemberScreen() {
         visible={photoSheet}
         icon={Camera}
         title={photoUri ? `Change ${first}'s photo` : `Add ${first}'s photo`}
-        body="Use a clear photo of their face. It is kept on this phone and only shown to you."
+        body="Use a clear photo of their face. It's saved to their profile and shown on their family card."
         confirmLabel="Take photo"
         onConfirm={() => void choosePhoto('camera')}
         onCancel={() => setPhotoSheet(false)}>

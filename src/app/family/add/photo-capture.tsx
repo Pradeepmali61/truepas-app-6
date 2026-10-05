@@ -4,12 +4,13 @@ import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useMemberFaceUpdateGate } from '@/features/family/hooks';
 import { CameraUnavailableView, loadFamilyPhotoCapture } from '@/premium/flows/family';
 
-/** Add family — photo enrollment for under-5 members. The premium camera
- *  screen (src/premium/flows/familyPhotoCapture, a 1:1 behaviour port of
- *  features/liveness/PhotoCapture) is lazy-required: it statically imports
- *  react-native-vision-camera, which throws on builds without NitroModules.
- *  `update=1` (member page → PIN screen) retakes an enrolled member's photo;
- *  without the PIN flag it bounces to /face-update/pin. */
+/** Family member face — photo enrollment for under-5 members (step 2 of 3
+ *  when adding a member, `next=document`). The premium camera screen
+ *  (src/premium/flows/familyPhotoCapture) is lazy-required: it statically
+ *  imports react-native-vision-camera, which throws on builds without
+ *  NitroModules. `update=1` (member page → PIN screen) retakes an enrolled
+ *  member's photo with PUT /face; without the PIN flag/token it bounces to
+ *  /face-update/pin. */
 const Photo = loadFamilyPhotoCapture();
 
 export default function FamilyPhotoCaptureScreen() {

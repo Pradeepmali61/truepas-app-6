@@ -1,11 +1,14 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { api } from '@/api';
+import { accountKeys } from '@/features/account/hooks';
+import { notificationKeys } from '@/features/notifications/hooks';
 import { flowGuards } from '@/services/flowGuards';
 import { deleteMemberProfileImage, getMemberProfileImage, saveMemberFacePhoto } from '@/services/profileImageStore';
+import { hasReauthToken } from '@/services/reauth';
 import { ageFromDob } from '@/utils/age';
 import type { AddFamilyMemberRequest, FamilyAgeBand, FamilyMember } from '@/types/domain';
 
@@ -75,9 +78,8 @@ export function useRemoveFamilyMember() {
 const memberPhotoKey = (personId: string) => ['member-photo', personId] as const;
 
 /**
- * A member's avatar photo: the face photo saved on this device at enrolment
- * (the API has no member photo URL yet). Null on web, on another device, or
- * before enrolment, so callers fall back to initials.
+ * The face photo saved on this phone (enrolment capture or a picked photo).
+ * Null on web, on another device, or before one was taken.
  */
 const memberPhotoQuery = (personId: string) => ({
   queryKey: memberPhotoKey(personId),
@@ -89,23 +91,57 @@ const memberPhotoQuery = (personId: string) => ({
   staleTime: Infinity,
 });
 
-export function useMemberPhoto(personId?: string): string | null {
-  const query = useQuery({ ...memberPhotoQuery(personId ?? ''), enabled: !!personId });
-  return query.data ?? null;
+/** The member's server photo URL (persons API) from whichever family query is
+ *  already cached — read-only observers, so no extra request per avatar. */
+function useCachedServerPhoto(personId?: string): string | null {
+  const id = personId ?? '';
+  const fromDetail = useQuery({
+    queryKey: familyKeys.detail(id),
+    queryFn: () => api.getFamilyMember(id),
+    enabled: false,
+    select: (m: FamilyMember | null) => m?.profileImageUrl ?? null,
+  });
+  const fromList = useQuery({
+    queryKey: familyKeys.all,
+    queryFn: api.getFamily,
+    enabled: false,
+    select: (list: FamilyMember[]) => list?.find((m) => m.id === id)?.profileImageUrl ?? null,
+  });
+  return fromDetail.data ?? fromList.data ?? null;
 }
-
-/** Members with no photo on this device (resolved checks only). */
-export function useMembersWithoutPhoto(members: FamilyMember[]): FamilyMember[] {
-  const results = useQueries({ queries: members.map((m) => memberPhotoQuery(m.id)) });
-  return members.filter((_m, i) => results[i]?.isSuccess && !results[i]?.data);
-}
-
-export type PickPhotoResult = 'saved' | 'cancelled' | 'denied' | 'failed';
 
 /**
- * Set a member's avatar from the camera or the gallery (members whose photo
- * wasn't captured on this phone). Square crop, shrunk and kept on this device
- * like the enrolment photo, until the backend stores member photos.
+ * A member's avatar: the server photo (FamilyMember.profileImageUrl) first,
+ * then the photo kept on this phone, else null (callers show initials).
+ * Pass `serverUrl` when the caller already has the member record.
+ */
+export function useMemberPhoto(personId?: string, serverUrl?: string | null): string | null {
+  const cached = useCachedServerPhoto(personId);
+  const local = useQuery({ ...memberPhotoQuery(personId ?? ''), enabled: !!personId });
+  return serverUrl || cached || local.data || null;
+}
+
+/** Members with no photo yet — none on their profile and none on this phone
+ *  (resolved checks only). */
+export function useMembersWithoutPhoto(members: FamilyMember[]): FamilyMember[] {
+  const results = useQueries({ queries: members.map((m) => memberPhotoQuery(m.id)) });
+  return members.filter((m, i) => !m.profileImageUrl && results[i]?.isSuccess && !results[i]?.data);
+}
+
+/** Upload a member photo to their profile (persons API), then refresh the
+ *  family reads so profileImageUrl comes back. Throws on failure. */
+async function uploadMemberPhoto(queryClient: QueryClient, personId: string, uri: string): Promise<void> {
+  await api.uploadProfilePicture(uri, personId);
+  await queryClient.invalidateQueries({ queryKey: familyKeys.all });
+}
+
+/** 'saved-local': kept on this phone, but the upload to their profile failed. */
+export type PickPhotoResult = 'saved' | 'saved-local' | 'cancelled' | 'denied' | 'failed';
+
+/**
+ * Set a member's avatar from the camera or the gallery. Square crop, shrunk
+ * to 480px and kept on this phone, then uploaded to their profile (best
+ * effort — the phone copy stays when the upload fails).
  */
 export function useSetMemberPhoto(personId: string) {
   const queryClient = useQueryClient();
@@ -127,9 +163,14 @@ export function useSetMemberPhoto(personId: string) {
         source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
       const uri = result.canceled ? null : result.assets[0]?.uri;
       if (!uri) return 'cancelled';
-      await saveMemberFacePhoto(personId, uri);
+      const small = await saveMemberFacePhoto(personId, uri);
       await queryClient.invalidateQueries({ queryKey: memberPhotoKey(personId) });
-      return 'saved';
+      try {
+        await uploadMemberPhoto(queryClient, personId, small);
+        return 'saved';
+      } catch {
+        return 'saved-local';
+      }
     } catch {
       return 'failed';
     } finally {
@@ -139,17 +180,37 @@ export function useSetMemberPhoto(personId: string) {
   return { pick, busy };
 }
 
-/** Save the enrolment capture as the member's avatar. Best effort: a failure
- *  here must never fail the enrolment itself. */
+/** Save the enrolment capture as the member's avatar (480px, on this phone)
+ *  and upload it to their profile in the background. Best effort: a failure
+ *  here must never fail or delay the enrolment itself. */
 export function useRememberMemberPhoto() {
   const queryClient = useQueryClient();
   return async (personId: string, captureUri: string) => {
+    let small: string;
     try {
-      await saveMemberFacePhoto(personId, captureUri);
+      small = await saveMemberFacePhoto(personId, captureUri);
       await queryClient.invalidateQueries({ queryKey: memberPhotoKey(personId) });
     } catch {
-      // keep initials
+      return; // keep initials
     }
+    void uploadMemberPhoto(queryClient, personId, small).catch(() => {
+      // The phone copy still shows; the next photo change uploads again.
+    });
+  };
+}
+
+/** After a face was enrolled or updated (member or self): refresh the
+ *  family reads (list, member, member activity), the account activity feed
+ *  and the notification inbox (the backend posts an "identity" notification).
+ *  useEnrollFace / useUpdateFace already refresh user + identity. */
+export function useRefreshAfterFaceChange() {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: familyKeys.all });
+    // GET /user/me (useMe mirrors it into the session user: faceEnrolledAt…).
+    void queryClient.invalidateQueries({ queryKey: accountKeys.me });
+    void queryClient.invalidateQueries({ queryKey: accountKeys.activity });
+    void queryClient.invalidateQueries({ queryKey: notificationKeys.all });
   };
 }
 
@@ -190,16 +251,29 @@ export function isDuplicateMemberError(err: any): boolean {
 export const MEMBER_FACE_UPDATE_GUARD = 'family:face-update';
 
 /**
- * PIN gate for a member's face update (PRD FR-04: PIN before any face
- * update). /face-update/pin grants the flag and opens the member capture
- * screen with update=1; the screen consumes it on mount, so a deep link or a
- * replay can't skip the PIN. First-time enrolment (isUpdate false) is never
- * gated. Returns false when the screen must bounce to the PIN step.
+ * PIN gate for a member's face update (PRD FR-04, backend §5: PUT /face needs
+ * a fresh verify-pin token). /face-update/pin grants the flag and opens the
+ * member capture screen with update=1; the screen consumes it on mount, so a
+ * deep link or a replay can't skip the PIN — and the single-use token from
+ * that PIN check must still be held (5 minutes). First-time enrolment
+ * (isUpdate false) is never gated. Returns false when the screen must bounce
+ * to the PIN step.
  */
 export function useMemberFaceUpdateGate(isUpdate: boolean): boolean {
-  const [granted] = useState(() => !isUpdate || flowGuards.has(MEMBER_FACE_UPDATE_GUARD));
+  const [granted] = useState(() => !isUpdate || (flowGuards.has(MEMBER_FACE_UPDATE_GUARD) && hasReauthToken()));
   useEffect(() => {
     if (isUpdate && granted) flowGuards.consume(MEMBER_FACE_UPDATE_GUARD);
   }, [isUpdate, granted]);
   return granted;
+}
+
+/** Why the PIN screen is shown again during a face change: the PIN check
+ *  expired / was refused (403 REAUTH_REQUIRED), or a failed update used it up. */
+export type ReauthReason = 'expired' | 'retry';
+
+/** Capture screen for a member: one photo under 5, liveness otherwise. */
+export function memberCaptureMode(m: Pick<FamilyMember, 'faceCaptureMode' | 'age'> | null | undefined, fallbackAge?: number): 'photo' | 'liveness' {
+  if (m?.faceCaptureMode) return m.faceCaptureMode;
+  const age = m?.age ?? fallbackAge;
+  return age != null && Number.isFinite(age) && age < 5 ? 'photo' : 'liveness';
 }

@@ -10,21 +10,28 @@
  * a route. Load it through loadFamilyPhotoCapture() (./family), which falls
  * back to <CameraUnavailableView /> on builds without NitroModules.
  *
- * `update=1` (member page → PIN): retakes an enrolled member's photo. Under-5
- * members have no liveness session, and PUT /face requires one, so the update
- * re-sends POST /face/enroll { selfieBase64, personId }; on success it pops
- * back to the member page instead of replacing it.
+ * Setup (`next=document`): step 2 of 3 of adding a member — face first, then
+ * the document step (backend §7.1). Without `next` it pops back to the
+ * member page.
+ *
+ * `update=1` (member page → PIN): retakes an enrolled member's photo with
+ * PUT /face { personId, selfieBase64 } — that carries the single-use PIN
+ * token (X-Reauth-Token, backend §5). An expired/refused token (403
+ * REAUTH_REQUIRED) goes straight back to the PIN step; after any other
+ * failure the token is used up, so the retry asks for the PIN again. On
+ * success it pops back to the member page.
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Baby, Camera as CameraIcon, SwitchCamera } from 'lucide-react-native';
+import { Baby, Camera as CameraIcon, KeyRound, SwitchCamera } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput, type CameraRef } from 'react-native-vision-camera';
 
 import { toApiError } from '@/api/errors';
 import { useToast } from '@/components/composite/Toast';
-import { useEnrollFace } from '@/features/auth/mutations';
-import { useRememberMemberPhoto } from '@/features/family/hooks';
+import { useEnrollFace, useUpdateFace } from '@/features/auth/mutations';
+import { type ReauthReason, useRefreshAfterFaceChange, useRememberMemberPhoto } from '@/features/family/hooks';
+import { hasReauthToken } from '@/services/reauth';
 
 import { FaceRing } from '../blocks';
 import { Banner } from '../kit';
@@ -34,13 +41,15 @@ import { GlassPill, NightStage } from './family';
 
 export function FamilyPhotoCapture() {
   const router = useRouter();
-  const { name, age, personId, update } = useLocalSearchParams<{
+  const { name, age, personId, update, next } = useLocalSearchParams<{
     name?: string;
     age?: string;
     personId?: string;
     update?: string;
+    next?: string;
   }>();
   const isUpdate = update === '1' && !!personId;
+  const inSetup = !isUpdate && next === 'document' && !!personId;
   const { toast } = useToast();
 
   const { hasPermission, requestPermission } = useCameraPermission();
@@ -51,9 +60,13 @@ export function FamilyPhotoCapture() {
   const photoOutput = usePhotoOutput();
   const cameraRef = useRef<CameraRef>(null);
   const enrollFace = useEnrollFace();
+  const updateFace = useUpdateFace();
   const rememberMemberPhoto = useRememberMemberPhoto();
+  const refreshAfterFaceChange = useRefreshAfterFaceChange();
   const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Update: the PIN token went with the failed PUT /face — retry needs a new one.
+  const [pinSpent, setPinSpent] = useState(false);
   // Stop the preview and let the native camera settle before leaving —
   // unmounting an ACTIVE Camera on Fabric crashes (see LivenessCamera
   // settleCameraThen).
@@ -71,16 +84,35 @@ export function FamilyPhotoCapture() {
   }, [hasPermission, requestPermission]);
 
   const goToMemberDetail = () => {
-    if (isUpdate && personId) {
-      // The member page is already under us — pop back to it.
-      toast({ variant: 'success', title: 'Face photo updated' });
-      router.dismissTo({ pathname: '/family/[id]', params: { id: personId } });
+    if (inSetup && personId) {
+      // Face first, document next (step 3 of 3).
+      router.replace({
+        pathname: '/family/add/document',
+        params: { personId, ...(name ? { name } : {}), ...(age ? { age } : {}) },
+      });
     } else if (personId) {
-      router.replace({ pathname: '/family/[id]', params: { id: personId } });
+      // The member page sits under every entry to this screen — pop back to it.
+      toast({ variant: 'success', title: isUpdate ? 'Face photo updated' : 'Face photo enrolled' });
+      router.dismissTo({ pathname: '/family/[id]', params: { id: personId } });
     } else {
       router.dismissTo('/(tabs)');
     }
   };
+
+  /** Update: back to the PIN step (the token expired, was refused or is used up). */
+  const backToPin = (reason: ReauthReason) =>
+    void settleCameraThen(() =>
+      router.replace({
+        pathname: '/face-update/pin',
+        params: {
+          personId: personId ?? '',
+          capture: 'photo',
+          reason,
+          ...(name ? { name } : {}),
+          ...(age ? { age } : {}),
+        },
+      }),
+    );
 
   const capture = async () => {
     if (capturing) return;
@@ -88,19 +120,39 @@ export function FamilyPhotoCapture() {
       setError('Missing family member reference. Please go back and try again.');
       return;
     }
+    // The 5-minute PIN token can run out while the camera is open.
+    if (isUpdate && !hasReauthToken()) {
+      backToPin(pinSpent ? 'retry' : 'expired');
+      return;
+    }
     setCapturing(true);
     setError(null);
+    let sentUpdate = false;
     try {
       const photoFile = await photoOutput.capturePhotoToFile({ flashMode: 'off' }, {});
       if (!photoFile) throw new Error('Failed to capture photo');
       const { File } = await import('expo-file-system');
       const filePath = photoFile.filePath.startsWith('file://') ? photoFile.filePath : `file://${photoFile.filePath}`;
       const selfieBase64 = await new File(filePath).base64();
-      await enrollFace.mutateAsync({ selfieBase64, personId });
+      if (isUpdate) {
+        // PUT /face with the PIN token — not a second POST /face/enroll.
+        sentUpdate = true;
+        await updateFace.mutateAsync({ personId, selfieBase64 });
+      } else {
+        await enrollFace.mutateAsync({ selfieBase64, personId });
+      }
       await rememberMemberPhoto(personId, filePath);
+      refreshAfterFaceChange();
       await settleCameraThen(goToMemberDetail);
     } catch (err) {
-      setError(toApiError(err).message || 'Could not enroll the photo. Please try again.');
+      const apiErr = toApiError(err);
+      if (isUpdate && apiErr.code === 'REAUTH_REQUIRED') {
+        backToPin('expired');
+        return;
+      }
+      // A sent PUT /face used the single-use token up, whatever the outcome.
+      if (sentUpdate) setPinSpent(true);
+      setError(apiErr.message || 'Could not save the photo. Please try again.');
     } finally {
       setCapturing(false);
     }
@@ -110,8 +162,8 @@ export function FamilyPhotoCapture() {
     topTitle: isUpdate ? 'Update face' : 'Face enrollment',
     subtitle: age ? `Age ${age} · photo enrollment` : 'Photo enrollment',
     onBack: () => void settleCameraThen(router.back),
-    step: isUpdate ? undefined : 3,
-    total: isUpdate ? undefined : 3,
+    step: inSetup ? 2 : undefined,
+    total: inSetup ? 3 : undefined,
     right: (
       <IconCircle
         icon={SwitchCamera}
@@ -152,16 +204,22 @@ export function FamilyPhotoCapture() {
       instruction={
         isUpdate
           ? 'Take one clear photo. It replaces the current face photo.'
-          : 'Members under 5 enroll with one clear photo — no liveness check needed.'
+          : inSetup
+            ? 'One clear photo — no liveness check under 5. Their document comes next.'
+            : 'Members under 5 enroll with one clear photo — no liveness check needed.'
       }
       footer={
-        <Button
-          label="Capture photo"
-          icon={CameraIcon}
-          loading={capturing}
-          disabled={capturing}
-          onPress={() => void capture()}
-        />
+        isUpdate && pinSpent ? (
+          <Button label="Enter PIN again" icon={KeyRound} onPress={() => backToPin('retry')} />
+        ) : (
+          <Button
+            label="Capture photo"
+            icon={CameraIcon}
+            loading={capturing}
+            disabled={capturing}
+            onPress={() => void capture()}
+          />
+        )
       }>
       <View style={{ alignItems: 'center' }}>
         <FaceRing dark size={250} mode={capturing ? 'scan' : 'idle'} progress={0.5}>
@@ -181,7 +239,7 @@ export function FamilyPhotoCapture() {
         <GlassPill icon={Baby} label="Under 5 · photo" />
         <GlassPill label={cameraPosition === 'front' ? 'Front camera' : 'Back camera'} active />
       </Row>
-      {error ? <Banner tone="error" title="Photo enrollment failed" body={error} /> : null}
+      {error ? <Banner tone="error" title={isUpdate ? 'Photo update failed' : 'Photo enrollment failed'} body={error} /> : null}
     </NightStage>
   );
 }

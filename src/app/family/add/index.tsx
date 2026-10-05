@@ -1,9 +1,13 @@
 /** @jsxImportSource react */
 /**
- * Add family — step 1: member basics. Nothing is created here (POST
- * /cb/family runs in processing, after the document scan). Any age is
- * accepted; the flow branches on computed age: 0-4 photo, 5-9 liveness
- * (any camera), 10+ front-camera liveness.
+ * Add family — step 1 of 3: member basics. Continue creates the member
+ * (POST /cb/family) and goes FACE FIRST: step 2 is the face (liveness 5+,
+ * one photo under 5 — POST /face/enroll), step 3 the document, which the
+ * backend then checks against that enrolled face (backend §1.2/§7.1:
+ * verifying a photo document for a member without a face is rejected with
+ * FACE_NOT_ENROLLED). The member page goes under the capture screen, so
+ * backing out of a later step lands on it with "Continue setup".
+ * A duplicate (same name + DOB) is caught here, before anything is created.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -12,7 +16,15 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { api } from '@/api';
-import { ageBandFromAge, ageFromDob, familyKeys, findMatchingMember } from '@/features/family/hooks';
+import { toApiError } from '@/api/errors';
+import {
+  ageFromDob,
+  familyKeys,
+  findMatchingMember,
+  isDuplicateMemberError,
+  memberCaptureMode,
+  useAddFamilyMember,
+} from '@/features/family/hooks';
 import { DateField } from '@/premium/flows/family';
 import { Banner, ConfirmSheet } from '@/premium/kit';
 import { C } from '@/premium/theme';
@@ -29,6 +41,7 @@ function todayIso(): string {
 export default function AddFamilyScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const addMember = useAddFamilyMember();
 
   const [fullName, setFullName] = useState('');
   const [dob, setDob] = useState('');
@@ -36,6 +49,18 @@ export default function AddFamilyScreen() {
   const [errors, setErrors] = useState<{ name?: string; dob?: string; relationship?: string }>({});
   const [checking, setChecking] = useState(false);
   const [existing, setExisting] = useState<FamilyMember | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  /** Member page underneath, the face capture on top (step 2 of 3). */
+  const openFaceStep = (member: FamilyMember, name: string) => {
+    const age = Number.isFinite(member.age) ? member.age : ageFromDob(dob);
+    const mode = memberCaptureMode(member, ageFromDob(dob));
+    router.replace({ pathname: '/family/[id]', params: { id: member.id } });
+    router.push({
+      pathname: mode === 'photo' ? '/family/add/photo-capture' : '/family/add/face-capture',
+      params: { personId: member.id, name: name.split(' ')[0], age: String(age), next: 'document' },
+    });
+  };
 
   const submit = async () => {
     const trimmed = fullName.trim();
@@ -50,35 +75,42 @@ export default function AddFamilyScreen() {
     }
     if (!relationship) next.relationship = 'Choose a relationship';
     setErrors(next);
+    setSubmitError(null);
     if (Object.keys(next).length > 0) return;
 
-    // Catch a duplicate HERE, before the user spends a document scan on it —
-    // the backend rejects the same name + DOB at the end of the flow.
     setChecking(true);
     try {
-      const list = await queryClient.fetchQuery({
-        queryKey: familyKeys.all,
-        queryFn: api.getFamily,
-        staleTime: 30_000,
-      });
-      const match = findMatchingMember(list, trimmed, dob);
-      if (match) {
-        setExisting(match);
+      // Catch a duplicate before creating anything — the backend rejects the
+      // same name + DOB anyway.
+      try {
+        const list = await queryClient.fetchQuery({
+          queryKey: familyKeys.all,
+          queryFn: api.getFamily,
+          staleTime: 30_000,
+        });
+        const match = findMatchingMember(list, trimmed, dob);
+        if (match) {
+          setExisting(match);
+          return;
+        }
+      } catch {
+        // List unavailable — the create call below still rejects duplicates.
+      }
+
+      const member = await addMember.mutateAsync({ name: trimmed, dateOfBirth: dob, relationship });
+      openFaceStep(member, trimmed);
+    } catch (err) {
+      if (isDuplicateMemberError(err)) {
+        // The backend knows this member but our list missed them — offer theirs.
+        const match = findMatchingMember(await api.getFamily().catch(() => undefined), trimmed, dob);
+        if (match) setExisting(match);
+        else setSubmitError(`${trimmed} was added to your account before. Check your Family list, or contact support if they were removed.`);
         return;
       }
-    } catch {
-      // List unavailable — let the flow continue; processing handles the
-      // backend's duplicate rejection.
+      setSubmitError(toApiError(err).message || "Couldn't add this member. Please try again.");
     } finally {
       setChecking(false);
     }
-
-    const age = ageFromDob(dob);
-    const band = ageBandFromAge(age);
-    router.push({
-      pathname: '/family/add/document',
-      params: { name: trimmed, band, dob, relationship },
-    } as never);
   };
 
   return (
@@ -144,11 +176,15 @@ export default function AddFamilyScreen() {
         />
       </View>
 
-      <Banner
-        tone="info"
-        title="Verification depends on age"
-        body="Under 5: document + photo. Ages 5–9: document + liveness (any camera). 10+: document + front-camera liveness."
-      />
+      {submitError ? (
+        <Banner tone="error" title="Couldn't add member" body={submitError} />
+      ) : (
+        <Banner
+          tone="info"
+          title="Face first, then a document"
+          body="Under 5: one photo. Ages 5–9: liveness, any camera. 10+: liveness, front camera. Their document is then checked against that face."
+        />
+      )}
 
       <ConfirmSheet
         visible={!!existing}
