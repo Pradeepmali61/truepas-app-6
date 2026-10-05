@@ -5,9 +5,7 @@ import {
     ChevronDown,
     ChevronRight,
     FileText,
-    RefreshCw,
     ScanLine,
-    Share2,
     ShieldCheck,
     Trash2,
 } from 'lucide-react-native';
@@ -18,7 +16,6 @@ import { useDocument, useDocumentImages, useRemoveDocument } from '@/features/do
 import { useToast } from '@/hooks/useToast';
 import {
     DocumentCard,
-    DocumentImageGrid,
     FlipCard,
     MatchRing,
     docMeta,
@@ -27,7 +24,7 @@ import {
     prettyDate,
     statusBadge,
 } from '@/premium/flows/documents';
-import { Async, Bone, ComingSoon, ConfirmSheet, EmptyView, SkeletonList } from '@/premium/kit';
+import { Async, Bone, ConfirmSheet, EmptyView, SkeletonList } from '@/premium/kit';
 import { C, R } from '@/premium/theme';
 import { Badge, Button, Card, Group, ListRow, Row, Screen, TopBar, Txt } from '@/premium/ui';
 import { getDocumentImageUri } from '@/services/documentImageStore';
@@ -174,14 +171,11 @@ export default function DocumentDetailScreen() {
                         onPress={() => setIsFlipped((f) => !f)}
                       />
                     </View>
-                    {/* Sharing is deferred by the backend (§13 #15). */}
-                    <View style={{ flex: 1 }} accessible accessibilityLabel="Share" accessibilityHint="Coming soon" accessibilityState={{ disabled: true }}>
-                      <View pointerEvents="none" style={{ opacity: 0.5 }}>
-                        <Button label="Share" icon={Share2} size="md" />
-                      </View>
-                      <View pointerEvents="none" style={{ position: 'absolute', top: -12, right: 6 }}>
-                        <ComingSoon />
-                      </View>
+                    {/* Sharing is deferred by the backend (§13 #15) — the second
+                        action rescans the document instead (renewed card, a
+                        better photo, or a failed check). */}
+                    <View style={{ flex: 1 }}>
+                      <Button label="Rescan" icon={ScanLine} size="md" onPress={() => reverify(d)} />
                     </View>
                   </Row>
                 </View>
@@ -192,17 +186,9 @@ export default function DocumentDetailScreen() {
                     value={pct}
                     label="Document match"
                     sub={d.verifiedAt ? `${meta.label} · verified ${localDay(d.verifiedAt)}` : `${meta.label} · added ${prettyDate(d.addedAt)}`}
-                    right={<Badge label={badge.label} tone={badge.tone} icon={badge.icon} dot={badge.dot} />}>
-                    <Button label="Re-verify" icon={RefreshCw} tone="soft" size="md" onPress={() => reverify(d)} />
-                  </MatchRing>
+                    right={<Badge label={badge.label} tone={badge.tone} icon={badge.icon} dot={badge.dot} />}
+                  />
                 )}
-
-                <View style={{ gap: 10 }}>
-                  <Txt v="micro" style={{ marginLeft: 4 }}>
-                    Images
-                  </Txt>
-                  <DocumentImageGrid images={imagesQuery.data} loading={imagesQuery.isPending} />
-                </View>
 
                 <Group title="Details">
                   <ListRow title="Holder" value={d.extractedName ?? '—'} chevron={false} />

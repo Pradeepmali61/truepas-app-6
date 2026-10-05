@@ -269,7 +269,7 @@ export default function HomeScreen() {
             <Row gap={10} align="stretch">
               <QuickAction icon={FileScan} label={'Add\ndocument'} onPress={open('/document/select-type')} />
               <QuickAction icon={UserPlus} label={'Add\nfamily'} onPress={open('/family/add')} />
-              <QuickAction icon={CalendarPlus} label={'Add\nreservation'} onPress={open('/booking/new')} />
+              <QuickAction icon={CalendarPlus} label={'Add\nbooking'} onPress={open('/booking/new')} />
               <QuickAction icon={IdCard} label={'Your\nidentity'} onPress={open('/identity')} />
             </Row>
           </View>
@@ -445,11 +445,17 @@ function HowStep({ n, icon, title, sub }: { n: number; icon: LucideIcon; title: 
 function QuickAction({ icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
   return (
     <Press onPress={onPress} label={label.replace('\n', ' ')} role="button" style={{ flex: 1 }}>
-      <Card pad={14} style={{ alignItems: 'center', gap: 10, borderRadius: R.lg, flex: 1 }}>
+      <Card pad={0} style={{ alignItems: 'center', gap: 10, borderRadius: R.lg, flex: 1, paddingVertical: 14, paddingHorizontal: 4 }}>
         <Tile icon={icon} tone="sky" size={44} radius={22} />
-        <Txt v="smallStrong" center style={{ fontSize: 12.5, lineHeight: 16 }}>
+        {/* Two lines at most: long words ("reservation") shrink a little
+            instead of breaking mid-word on narrow phones. */}
+        <Text
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          style={{ fontFamily: F.semibold, fontSize: 12, lineHeight: 16, color: C.ink, textAlign: 'center', alignSelf: 'stretch' }}>
           {label}
-        </Txt>
+        </Text>
       </Card>
     </Press>
   );
