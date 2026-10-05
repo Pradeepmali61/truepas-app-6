@@ -29,6 +29,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
   type StyleProp,
@@ -605,6 +606,8 @@ export function PasswordField({
 
 /* ───────────────────────── segmented switch ───────────────────────── */
 
+const SEG_H = 42;
+
 export function Segmented<T extends string>({
   options,
   value,
@@ -620,7 +623,7 @@ export function Segmented<T extends string>({
     <View
       accessibilityRole="tablist"
       accessibilityLabel={label}
-      style={{ flexDirection: 'row', backgroundColor: C.sunken, borderRadius: R.full, padding: 4 }}>
+      style={{ flexDirection: 'row', backgroundColor: C.sunken, borderRadius: (SEG_H + 8) / 2, padding: 4 }}>
       {options.map((o) => {
         const on = o.value === value;
         const Icon = o.icon;
@@ -631,11 +634,20 @@ export function Segmented<T extends string>({
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
             style={{ flex: 1 }}>
-            <View
-              style={[
-                { height: 42, borderRadius: R.full, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
-                on && { backgroundColor: C.surface, boxShadow: '0px 2px 8px rgba(10,30,42,0.08)' },
-              ]}>
+            <View style={{ height: SEG_H, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 }}>
+              {/* The pill is its own view, mounted when selected. Adding the fill
+                  and shadow to an existing view on Android dropped the rounded
+                  corners (see BUG_REPORT_ANDROID_RADIUS_FILL.md); the radius is
+                  capped at h/2 for the same reason. */}
+              {on && (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    StyleSheet.absoluteFill,
+                    { borderRadius: SEG_H / 2, backgroundColor: C.surface, boxShadow: '0px 2px 8px rgba(10,30,42,0.08)' },
+                  ]}
+                />
+              )}
               {Icon != null && <Icon size={16} color={on ? C.ink : C.ink3} strokeWidth={2.2} />}
               <Text style={{ fontFamily: F.bold, fontSize: 14, color: on ? C.ink : C.ink3 }}>{o.label}</Text>
             </View>
