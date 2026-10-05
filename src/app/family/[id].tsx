@@ -47,7 +47,7 @@ import { ChecklistCard, DocRow, formatDate, statusBadge, type ChecklistStep } fr
 import { Async, Bone, ComingSoon, ConfirmSheet, EmptyView, SkeletonList } from '@/premium/kit';
 import { useHeroStatusBar } from '@/premium/statusBar';
 import { C, F, SH } from '@/premium/theme';
-import { Badge, Button, Group, initials, ListRow, Screen, Toggle, TopBar, Txt, VerifiedTick } from '@/premium/ui';
+import { Badge, Button, Group, IconCircle, initials, ListRow, Screen, Toggle, TopBar, Txt, VerifiedTick } from '@/premium/ui';
 import type { FamilyMember } from '@/types/domain';
 
 /** Face → Document → Done: the document is checked against the face. */
@@ -94,9 +94,11 @@ export default function FamilyMemberScreen() {
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   const m = member.data;
-  // Navy hero: light status bar icons until the canvas scrolls under them
-  // (the hero fades into the canvas from about two-thirds down).
-  const heroStatusBar = useHeroStatusBar(230, !!m);
+  // Server photo (profileImageUrl) first, then the one kept on this phone.
+  const photoUri = useMemberPhoto(id, m?.profileImageUrl);
+  // Dark hero top (photo with a dark fade, or the navy monogram hero): light
+  // status bar icons until the canvas scrolls under them.
+  const heroStatusBar = useHeroStatusBar(photoUri ? 140 : 230, !!m);
 
   // Coming back from a capture/document flow (which pops back to this
   // screen): refresh the member and their documents. Skips the first focus —
@@ -113,8 +115,6 @@ export default function FamilyMemberScreen() {
       void queryClient.invalidateQueries({ queryKey: documentKeys.member(id) });
     }, [queryClient, id]),
   );
-  // Server photo (profileImageUrl) first, then the one kept on this phone.
-  const photoUri = useMemberPhoto(id, m?.profileImageUrl);
   const setPhoto = useSetMemberPhoto(id);
   // Opened from the Family "Add photos" nudge: start on the source sheet.
   const [photoSheet, setPhotoSheet] = useState(photo === '1');
@@ -257,67 +257,85 @@ export default function FamilyMemberScreen() {
         contentContainerStyle={{ paddingBottom: 40 }}
         {...heroStatusBar}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.sky} />}>
-        {/* ---------- hero (members have no photo — monogram on the identity gradient) ---------- */}
-        <View style={{ height: 340, overflow: 'hidden' }}>
-          {/* Dark at the top (glass back button), lighter toward the fade so the
-              hero melts into the canvas like the approved photo hero. */}
-          <LinearGradient colors={[C.navyNight, C.navy, '#0A86B8']} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
-          <Glow size={380} opacity={0.45} style={{ top: -150, right: -140 }} />
-          <Guilloche size={520} style={{ alignSelf: 'center', top: -60 }} />
-          <LinearGradient
-            colors={['rgba(246,248,250,0)', 'rgba(246,248,250,0.7)', C.canvas]}
-            locations={[0.5, 0.82, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-          <SafeAreaView edges={['top']}>
-            <TopBar tone="glass" />
-          </SafeAreaView>
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 70 }}>
-            <View
-              style={{
-                width: 128,
-                height: 128,
-                borderRadius: 64,
-                backgroundColor: 'rgba(255,255,255,0.12)',
-                borderWidth: 1.5,
-                borderColor: 'rgba(255,255,255,0.3)',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-              }}>
-              {photoUri ? (
-                <Image source={{ uri: photoUri }} style={{ width: 128, height: 128 }} contentFit="cover" />
-              ) : (
-                <Text style={{ fontFamily: F.bold, fontSize: 44, letterSpacing: 1, color: C.white }}>{initials(m.name)}</Text>
-              )}
-            </View>
-            <Pressable
-              onPress={() => setPhotoSheet(true)}
-              disabled={setPhoto.busy}
-              accessibilityRole="button"
-              accessibilityLabel={photoUri ? `Change ${first}'s photo` : `Add ${first}'s photo`}
-              style={{ marginTop: -22, marginLeft: 92 }}>
-              <View
-                style={[
-                  {
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: C.sky,
-                    borderWidth: 3,
-                    borderColor: C.white,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  },
-                  SH.sky,
-                ]}>
-                <Camera size={17} color={C.white} strokeWidth={2.4} />
-              </View>
-            </Pressable>
+        {photoUri ? (
+          /* ---------- hero: full-bleed portrait, as in the approved design ---------- */
+          <View style={{ height: 420 }}>
+            <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+            <LinearGradient
+              colors={['rgba(1,27,39,0.35)', 'rgba(1,27,39,0)', 'rgba(246,248,250,0.6)', C.canvas]}
+              locations={[0, 0.3, 0.82, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <SafeAreaView edges={['top']}>
+              <TopBar
+                tone="glass"
+                right={
+                  <IconCircle
+                    icon={Camera}
+                    tone="glass"
+                    label={`Change ${first}'s photo`}
+                    onPress={() => !setPhoto.busy && setPhotoSheet(true)}
+                  />
+                }
+              />
+            </SafeAreaView>
           </View>
-        </View>
+        ) : (
+          /* ---------- hero: no photo yet — monogram on the identity gradient ---------- */
+          <View style={{ height: 340, overflow: 'hidden' }}>
+            <LinearGradient colors={[C.navyNight, C.navy, '#0A86B8']} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
+            <Glow size={380} opacity={0.45} style={{ top: -150, right: -140 }} />
+            <Guilloche size={520} style={{ alignSelf: 'center', top: -60 }} />
+            <LinearGradient
+              colors={['rgba(246,248,250,0)', 'rgba(246,248,250,0.7)', C.canvas]}
+              locations={[0.5, 0.82, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <SafeAreaView edges={['top']}>
+              <TopBar tone="glass" />
+            </SafeAreaView>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 70 }}>
+              <View
+                style={{
+                  width: 128,
+                  height: 128,
+                  borderRadius: 64,
+                  backgroundColor: 'rgba(255,255,255,0.12)',
+                  borderWidth: 1.5,
+                  borderColor: 'rgba(255,255,255,0.3)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <Text style={{ fontFamily: F.bold, fontSize: 44, letterSpacing: 1, color: C.white }}>{initials(m.name)}</Text>
+              </View>
+              <Pressable
+                onPress={() => setPhotoSheet(true)}
+                disabled={setPhoto.busy}
+                accessibilityRole="button"
+                accessibilityLabel={`Add ${first}'s photo`}
+                style={{ marginTop: -22, marginLeft: 92 }}>
+                <View
+                  style={[
+                    {
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      backgroundColor: C.sky,
+                      borderWidth: 3,
+                      borderColor: C.white,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    },
+                    SH.sky,
+                  ]}>
+                  <Camera size={17} color={C.white} strokeWidth={2.4} />
+                </View>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
-        <View style={{ paddingHorizontal: 20, marginTop: -44, gap: 26 }}>
+        <View style={{ paddingHorizontal: 20, marginTop: photoUri ? -64 : -44, gap: 26 }}>
           <View style={{ gap: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Text
