@@ -193,15 +193,22 @@ export default function DocumentProcessingScreen() {
           return;
         }
 
-        // Rejected. If another document of this type exists, discard the
-        // failed attempt so the existing one stays the only one; otherwise
-        // keep it so the wallet shows it as not verified.
+        // Rejected. A VERIFIED document of this type stays the only one, so
+        // this failed attempt is discarded. Otherwise this attempt is the one
+        // worth keeping (it has the reason and what was read) — older
+        // unverified ones of the type (e.g. the old "PENDING" placeholders)
+        // are removed instead.
         try {
-          const existing = await api.getDocuments();
-          if ((existing ?? []).some((d) => d.type === docType && d.id !== doc.id)) {
-            await api.removeDocument(doc.id);
-            await clearDocumentImages(doc.id);
-            createdDocRef.current = null;
+          const sameType = (await api.getDocuments() ?? []).filter((d) => d.type === docType && d.id !== doc.id);
+          const stale = sameType.some((d) => d.status === 'verified') ? [doc] : sameType;
+          for (const old of stale) {
+            try {
+              await api.removeDocument(old.id);
+              await clearDocumentImages(old.id);
+              if (old.id === doc.id) createdDocRef.current = null;
+            } catch (e) {
+              console.warn('[DocProcessing] Failed to remove document:', old.id, e);
+            }
           }
         } catch (e) {
           console.warn('[DocProcessing] Failed-attempt cleanup error:', e);
