@@ -554,7 +554,8 @@ export const realApi = {
     // portrait URL, document number) which must not land in device logs.
     console.log('[API] /document-verification-sessions/:id/verify response:', JSON.stringify({
       status: data.status, outcome: data.outcome, reasonCode: data.reasonCode,
-      matchScore: data.matchScore, documentId: data.documentId,
+      reasonMessage: data.reasonMessage, matchScore: data.matchScore, documentId: data.documentId,
+      hasPortrait: !!data.portraitImageUrl,
     }));
     return data;
   },

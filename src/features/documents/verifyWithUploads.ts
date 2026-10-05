@@ -119,10 +119,13 @@ export async function verifyDocumentWithUploads(input: VerifyDocumentWithUploads
   } catch (err) {
     if (!input.frontBase64 || !presignUnavailable(err, phase)) throw err;
     const status = err instanceof AxiosError ? err.response?.status : undefined;
+    // The server's error body ({ code, message, trace_id }) is what the
+    // backend team needs to find the failure in their logs.
     console.warn('[DocUpload] Presigned upload failed — verifying with inline images:', {
       phase,
       status,
       message: err instanceof Error ? err.message : String(err),
+      server: err instanceof AxiosError ? err.response?.data : undefined,
     });
     inline = true;
   } finally {

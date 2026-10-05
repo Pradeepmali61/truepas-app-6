@@ -183,12 +183,21 @@ function extractImage(results: any, fieldType: number): Promise<string | null> {
   });
 }
 
-/** Extract the raw camera frame (source=3) — the original unprocessed photo. */
+/** eRPRM_ResultType.RPRM_RESULT_TYPE_RAW_UNCROPPED_IMAGE. This used to be 3,
+ *  which is MRZ_OCR_EXTENDED (no image), so the raw frame never came back
+ *  and the backend always got the cropped document image instead. */
+const RAW_UNCROPPED_IMAGE = 16;
+/** Above this (base64 chars, ~7.5 MB of JPEG) send the cropped image instead —
+ *  the backend caps each base64 field at ~14 MB. */
+const MAX_RAW_BASE64 = 10_000_000;
+
+/** Extract the raw uncropped camera frame (needs processParams.returnUncroppedImage). */
 function extractRawFrame(results: any): Promise<string | null> {
+  const source = Enum?.eRPRM_ResultType?.RPRM_RESULT_TYPE_RAW_UNCROPPED_IMAGE ?? RAW_UNCROPPED_IMAGE;
   return new Promise((resolve) => {
     results.graphicFieldImageByTypeSource(
       207, // GF_DOCUMENT_IMAGE
-      3, // raw camera source
+      source,
       (b64: string) => resolve(b64 || null),
       () => resolve(null),
     );
@@ -273,7 +282,8 @@ export function scanDocument(): Promise<RegulaScanResult> {
         // backend OCR per the KYC guide. Falls back to the cropped image
         // (and generic fields) when the raw frame isn't produced.
         let imageBase64: string | null = await extractRawFrame(completion.results);
-        if (!imageBase64) imageBase64 = previewBase64;
+        const rawFrame = !!imageBase64 && imageBase64.length <= MAX_RAW_BASE64;
+        if (!rawFrame) imageBase64 = previewBase64;
         if (!imageBase64) imageBase64 = await extractImage(completion.results, 250);
 
         if (!imageBase64) {
@@ -281,7 +291,10 @@ export function scanDocument(): Promise<RegulaScanResult> {
           return;
         }
 
-        console.log('[Regula] Scan complete — raw length:', imageBase64.length, '| preview length:', previewBase64?.length ?? 0);
+        console.log(
+          '[Regula] Scan complete — upload:', rawFrame ? 'raw frame' : 'cropped',
+          '| upload length:', imageBase64.length, '| preview length:', previewBase64?.length ?? 0,
+        );
         resolve({ imageBase64, previewBase64: previewBase64 ?? imageBase64 });
       } catch (e: any) {
         settled = true;
