@@ -10,6 +10,7 @@
  * (family/add/processing). The caller creates the document first (without a
  * number — the server reads it from the scan).
  */
+import { AxiosError } from 'axios';
 import { EncodingType, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
@@ -64,15 +65,34 @@ function toUploadUri(uri: string | undefined, base64: string | undefined, name: 
 }
 
 /**
+ * Whether a failed presigned upload should fall back to inline base64.
+ * - Asking for the upload URLs: only when the server can't do it (5xx, or
+ *   the route missing) — a network error there means the device is offline.
+ * - The PUT itself: any failure. The storage host differs from the API host,
+ *   so it can be unreachable or reject the signature while the API is fine.
+ */
+function presignUnavailable(err: unknown, phase: 'urls' | 'put'): boolean {
+  if (phase === 'put') return true;
+  const status = err instanceof AxiosError ? err.response?.status : undefined;
+  return status != null && (status >= 500 || status === 404 || status === 405);
+}
+
+/**
  * Upload the captured images and verify the document. Resolves with the
  * synchronous verify result (approved | rejected — see isApproved /
  * rejectionAction); throws on network/API errors so the caller can offer Retry.
+ *
+ * If the presigned upload isn't available (see presignUnavailable) and the
+ * images were given as base64, it verifies with the images inline instead —
+ * the pre-Oct-2026 path, which the backend still accepts.
  */
 export async function verifyDocumentWithUploads(input: VerifyDocumentWithUploadsInput): Promise<VerifyDocumentResponse> {
   const { documentId, livenessSessionId, sessionToken, onStep } = input;
   const temps: File[] = [];
-  let frontObjectKey: string;
+  let frontObjectKey: string | undefined;
   let backObjectKey: string | undefined;
+  let inline = false;
+  let phase: 'urls' | 'put' = 'urls';
   try {
     const frontUri = toUploadUri(input.frontUri, input.frontBase64, `doc-${documentId}-front`, temps);
     if (!frontUri) throw new Error('No document image captured. Please scan again.');
@@ -86,6 +106,7 @@ export async function verifyDocumentWithUploads(input: VerifyDocumentWithUploads
       files.map(([part]) => part),
       CONTENT_TYPE,
     );
+    phase = 'put';
     await Promise.all(
       files.map(([part, uri]) => {
         const target = uploads[part];
@@ -95,6 +116,15 @@ export async function verifyDocumentWithUploads(input: VerifyDocumentWithUploads
     );
     frontObjectKey = uploads.front!.objectKey;
     backObjectKey = backUri ? uploads.back?.objectKey : undefined;
+  } catch (err) {
+    if (!input.frontBase64 || !presignUnavailable(err, phase)) throw err;
+    const status = err instanceof AxiosError ? err.response?.status : undefined;
+    console.warn('[DocUpload] Presigned upload failed — verifying with inline images:', {
+      phase,
+      status,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    inline = true;
   } finally {
     for (const f of temps) {
       try {
@@ -107,14 +137,21 @@ export async function verifyDocumentWithUploads(input: VerifyDocumentWithUploads
 
   onStep?.('creating_session');
   const session = await api.createVerificationSession(documentId, {
-    frontObjectKey,
+    ...(frontObjectKey ? { frontObjectKey } : {}),
     ...(backObjectKey ? { backObjectKey } : {}),
     ...(livenessSessionId ? { livenessSessionId } : {}),
     requestId: input.requestId ?? `req-${documentId}-${Date.now()}`,
   });
 
   onStep?.('verifying');
-  return api.startVerificationWithImages(session.id, sessionToken ? { sessionToken } : {}, {
+  const images =
+    inline && input.frontBase64
+      ? {
+          frontImageBase64: stripDataUri(input.frontBase64),
+          ...(input.backBase64 ? { backImageBase64: stripDataUri(input.backBase64) } : {}),
+        }
+      : {};
+  return api.startVerificationWithImages(session.id, { ...images, ...(sessionToken ? { sessionToken } : {}) }, {
     timeout: input.timeoutMs ?? 90_000,
   });
 }
