@@ -19,6 +19,7 @@ import {
   Check,
   CircleHelp,
   CircleX,
+  Clapperboard,
   FerrisWheel,
   FileCheck,
   FileText,
@@ -29,6 +30,7 @@ import {
   type LucideIcon,
   Mail,
   MapPin,
+  Music,
   Pencil,
   Phone,
   Plane,
@@ -40,6 +42,7 @@ import {
   Ticket,
   Trash2,
   TriangleAlert,
+  Trophy,
   UserPlus,
   UserRound,
   Users,
@@ -70,7 +73,16 @@ import { ComingSoon, ConfirmSheet } from '@/premium/kit';
 import { C, F, G, R, SH } from '@/premium/theme';
 import { Avatar, Badge, type BadgeTone, Button, Card, Group, IconCircle, ListRow, Press, Row, Tile, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
-import type { ActivityItem, Booking, DocumentType, FamilyMember, IdentityDocument, VerificationStatus } from '@/types/domain';
+import type {
+  ActivityItem,
+  ActivityType,
+  Booking,
+  BookingKind,
+  DocumentType,
+  FamilyMember,
+  IdentityDocument,
+  VerificationStatus,
+} from '@/types/domain';
 
 /* ───────────────────────── formatting ───────────────────────── */
 
@@ -165,7 +177,6 @@ const STATUS: Record<string, [BadgeTone, string]> = {
   pending: ['amber', 'Pending'],
   pending_document: ['amber', 'Document needed'],
   pending_liveness: ['amber', 'Liveness needed'],
-  review: ['amber', 'In review'],
   missing: ['neutral', 'Not added yet'],
   incomplete: ['neutral', 'Incomplete'],
   failed: ['red', 'Failed'],
@@ -194,44 +205,99 @@ export function statusTileTone(status: string): 'green' | 'amber' | 'red' | 'neu
 
 /* ───────────────────────── bookings ───────────────────────── */
 
-type BookingKind = 'hotel' | 'event' | 'flight' | 'park' | 'cruise' | 'other';
+/** Venue kinds the API sends in Booking.kind — label, icon and the bundled
+ *  category photo. Also the chips of the reservation form. */
+export const KIND_META: Record<BookingKind, { label: string; icon: LucideIcon; photo: ImgKey | null }> = {
+  hotel: { label: 'Hotel', icon: BedDouble, photo: 'hotelDusk' },
+  park: { label: 'Theme park', icon: FerrisWheel, photo: 'themepark' },
+  flight: { label: 'Flight', icon: Plane, photo: 'flight' },
+  cinema: { label: 'Cinema', icon: Clapperboard, photo: 'cinema' },
+  cruise: { label: 'Cruise', icon: Ship, photo: 'cruise' },
+  stadium: { label: 'Stadium', icon: Trophy, photo: 'stadium' },
+  concert: { label: 'Concert', icon: Music, photo: 'concert' },
+  other: { label: 'Other', icon: CalendarDays, photo: null },
+};
 
-/** Booking.type is a free string ("hotel", "Hotel", "Theme Park"…) — match
- *  loosely, never invent a kind the API didn't send. */
-export function bookingKind(type: string): BookingKind {
+export const BOOKING_KINDS = Object.keys(KIND_META) as BookingKind[];
+
+/** Older payloads sent the venue type as a free string in `type` ("Hotel",
+ *  "Theme Park"…) — match loosely, never invent a kind the API didn't send. */
+function kindFromType(type: string | null | undefined): BookingKind {
   const t = (type ?? '').toLowerCase();
   if (t.includes('hotel')) return 'hotel';
   if (t.includes('flight')) return 'flight';
-  if (t.includes('event')) return 'event';
   if (t.includes('park')) return 'park';
   if (t.includes('cruise')) return 'cruise';
+  if (t.includes('cinema') || t.includes('movie')) return 'cinema';
+  if (t.includes('stadium')) return 'stadium';
+  if (t.includes('concert') || t.includes('event')) return 'concert';
   return 'other';
 }
 
-const KIND_META: Record<BookingKind, { icon: LucideIcon; photo: ImgKey | null }> = {
-  hotel: { icon: BedDouble, photo: 'hotelDusk' },
-  event: { icon: Ticket, photo: 'concert' },
-  flight: { icon: Plane, photo: 'flight' },
-  park: { icon: FerrisWheel, photo: 'themepark' },
-  cruise: { icon: Ship, photo: 'cruise' },
-  other: { icon: CalendarDays, photo: null },
-};
-
-export function bookingIcon(type: string): LucideIcon {
-  return KIND_META[bookingKind(type)].icon;
+/** `kind` on Oct 2026 payloads (where `type` is reservation/checkin);
+ *  older payloads carried the venue type in `type`. */
+export function bookingKind(b: Pick<Booking, 'kind' | 'type'>): BookingKind {
+  return b.kind && b.kind in KIND_META ? b.kind : kindFromType(b.type);
 }
 
-/** Icon for a booking type as an element (avoids creating components in render). */
-export function BookingTypeIcon({ type, size = 16, color = C.ink }: { type: string; size?: number; color?: string }) {
-  const meta = KIND_META[bookingKind(type)];
-  const Icon = meta.icon;
+export function bookingIcon(b: Pick<Booking, 'kind' | 'type'>): LucideIcon {
+  return KIND_META[bookingKind(b)].icon;
+}
+
+/** Icon for a booking kind as an element (avoids creating components in render). */
+export function BookingKindIcon({ b, size = 16, color = C.ink }: { b: Pick<Booking, 'kind' | 'type'>; size?: number; color?: string }) {
+  const Icon = KIND_META[bookingKind(b)].icon;
   return <Icon size={size} color={color} />;
 }
 
-/** The API's own type string, capitalised ("theme park" → "Theme park"). */
-export function bookingTypeLabel(type: string): string {
-  const t = (type ?? '').trim();
-  return t ? t[0].toUpperCase() + t.slice(1) : 'Booking';
+const ROW_TYPES = ['reservation', 'checkin', 'check-in', 'check_in'];
+
+/** "Hotel", "Theme park"… For kind `other`: an older payload's own venue
+ *  type, else what the row is (reservation or kiosk check-in). */
+export function bookingKindLabel(b: Pick<Booking, 'kind' | 'type' | 'source'>): string {
+  const kind = bookingKind(b);
+  if (kind !== 'other') return KIND_META[kind].label;
+  const t = (b.type ?? '').trim();
+  if (t && !ROW_TYPES.includes(t.toLowerCase())) return t[0].toUpperCase() + t.slice(1);
+  return b.source === 'customer' || t.toLowerCase() === 'reservation' ? 'Reservation' : 'Check-in';
+}
+
+/** "Venue, Location" — location is optional on reservations. */
+export function bookingPlace(b: Pick<Booking, 'venue' | 'location'>): string {
+  return [b.venue, b.location].filter((s) => !!s?.trim()).join(', ');
+}
+
+/** When the visit happened (kiosk time) or is planned (check-in day) —
+ *  for sorting and month grouping. */
+export function bookingWhen(b: Pick<Booking, 'checkedInAt' | 'checkIn'>): string {
+  return b.checkedInAt || b.checkIn;
+}
+
+/** Bookings use a neutral "Expired" (a reservation nobody checked in to),
+ *  unlike an expired document. */
+export function bookingStatusTone(status: string): BadgeTone {
+  return status === 'expired' ? 'neutral' : statusTone(status);
+}
+
+export function BookingStatusBadge({ status, dot }: { status: string; dot?: boolean }) {
+  return <Badge label={statusLabel(status)} tone={bookingStatusTone(status)} dot={dot} />;
+}
+
+/** Local calendar day as YYYY-MM-DD (reservation dates are local days). */
+export function isoDay(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** "2:05 PM" in the user's time zone. */
+export function fmtTime(iso: string | null | undefined): string {
+  const d = toDate(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Kiosk timing: 820 → "0.8 s", 12400 → "12 s". */
+export function fmtSeconds(ms: number): string {
+  const s = ms / 1000;
+  return `${s < 10 ? s.toFixed(1) : Math.round(s)} s`;
 }
 
 const isUrl = (s?: string | null): s is string => !!s && /^https?:\/\//.test(s);
@@ -241,7 +307,7 @@ const isUrl = (s?: string | null): s is string => !!s && /^https?:\/\//.test(s);
  * a category photo for known kinds; otherwise a navy gradient + icon.
  */
 export function BookingBackdrop({ b, iconSize = 44 }: { b: Booking; iconSize?: number }) {
-  const meta = KIND_META[bookingKind(b.type)];
+  const meta = KIND_META[bookingKind(b)];
   if (isUrl(b.image)) {
     return <Image source={{ uri: b.image }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />;
   }
@@ -332,15 +398,17 @@ function HeroTitle({ eyebrow, title, sub, pin }: { eyebrow: string; title: strin
       <Text style={{ fontFamily: F.extrabold, fontSize: 30, letterSpacing: -0.9, color: C.white, ...HERO_SHADOW }} numberOfLines={2}>
         {title}
       </Text>
-      <Row gap={6}>
-        {pin && <MapPin size={14} color="rgba(255,255,255,0.78)" />}
-        <Text
-          style={{ fontFamily: F.medium, fontSize: 14, lineHeight: 20, color: 'rgba(255,255,255,0.85)', flexShrink: 1, ...HERO_SHADOW }}
-          numberOfLines={pin ? 1 : 3}
-        >
-          {sub}
-        </Text>
-      </Row>
+      {!!sub && (
+        <Row gap={6}>
+          {pin && <MapPin size={14} color="rgba(255,255,255,0.78)" />}
+          <Text
+            style={{ fontFamily: F.medium, fontSize: 14, lineHeight: 20, color: 'rgba(255,255,255,0.85)', flexShrink: 1, ...HERO_SHADOW }}
+            numberOfLines={pin ? 1 : 3}
+          >
+            {sub}
+          </Text>
+        </Row>
+      )}
     </View>
   );
 }
@@ -376,35 +444,47 @@ function GlassProgress({ label, value, progress }: { label: string; value: strin
   );
 }
 
-/** Hero journey for the next upcoming booking (Home "Today" / "Next"). */
-export function BookingHero({ b, onPress, cta }: { b: Booking; onPress?: () => void; cta?: ReactNode }) {
-  const Icon = bookingIcon(b.type);
+/** Hero journey for the next upcoming booking (Home "Today" / "Next").
+ *  Check-in happens only at the venue kiosk, so the card carries a plain
+ *  hint, never a check-in button. Reservations have no amount; the third
+ *  fact is then the check-out day (when set). */
+export function BookingHero({ b, onPress }: { b: Booking; onPress?: () => void }) {
+  const Icon = bookingIcon(b);
   const { n, progress } = checkedIn(b);
+  const facts: { k: string; v: string }[] = [{ k: 'Check-in', v: fmtDate(b.checkIn) }];
+  if (b.amount == null && b.checkOut) facts.push({ k: 'Check-out', v: fmtDate(b.checkOut) });
+  facts.push({ k: 'Guests', v: String(b.guests) });
+  if (b.amount != null) facts.push({ k: 'Total', v: money(b.amount) });
   return (
     <HeroFrame
       onPress={onPress}
-      label={`Next check-in at ${b.venue}, ${b.location}`}
-      // No button role when the card hosts its own action: on web a role=button
-      // renders <button>, and a nested <button> is invalid HTML.
-      role={cta ? undefined : 'button'}
+      label={`Next check-in at ${bookingPlace(b)}`}
+      role="button"
       backdrop={<BookingBackdrop b={b} iconSize={64} />}
       top={
         <Row between>
-          <GlassChip icon={Icon} label={bookingTypeLabel(b.type)} />
-          <StatusBadge status={b.status} dot />
+          <GlassChip icon={Icon} label={bookingKindLabel(b)} />
+          <BookingStatusBadge status={b.status} dot />
         </Row>
       }
     >
       <HeroTitle eyebrow={whenLabel(b.checkIn)} title={b.venue} sub={b.location} pin />
       <GlassPanel>
         <Row between>
-          <GlassFact k="Check-in" v={fmtDate(b.checkIn)} />
-          <GlassFact k="Guests" v={String(b.guests)} />
-          <GlassFact k="Total" v={money(b.amount)} end />
+          {facts.map((f, i) => (
+            <GlassFact key={f.k} k={f.k} v={f.v} end={i === facts.length - 1 && facts.length > 1} />
+          ))}
         </Row>
         <GlassProgress label="Checked in" value={`${n}/${b.guests}`} progress={progress} />
       </GlassPanel>
-      {cta}
+      {b.status === 'upcoming' && (
+        <Row gap={8} style={{ paddingHorizontal: 4 }}>
+          <ScanFace size={16} color={C.skyLight} />
+          <Text style={{ fontFamily: F.semibold, fontSize: 13.5, color: 'rgba(255,255,255,0.88)', flexShrink: 1, ...HERO_SHADOW }}>
+            Check in at the venue kiosk
+          </Text>
+        </Row>
+      )}
     </HeroFrame>
   );
 }
@@ -540,14 +620,17 @@ function GlassFact({ k, v, end }: { k: string; v: string; end?: boolean }) {
 
 /** Horizontal carousel card for further upcoming bookings. */
 export function BookingCarouselCard({ b, onPress, width = 248 }: { b: Booking; onPress?: () => void; width?: number }) {
-  const Icon = bookingIcon(b.type);
+  const Icon = bookingIcon(b);
+  const guests = `${b.guests} ${b.guests === 1 ? 'guest' : 'guests'}`;
+  const extra =
+    b.amount != null ? money(b.amount) : b.checkOut && b.checkOut !== b.checkIn ? `Until ${fmtDay(b.checkOut)}` : null;
   return (
-    <Press onPress={onPress} label={`${b.venue}, ${b.location}`} role="button" style={[{ width, borderRadius: R.xl }, SH.md]}>
+    <Press onPress={onPress} label={bookingPlace(b)} role="button" style={[{ width, borderRadius: R.xl }, SH.md]}>
       <View style={{ borderRadius: R.xl, overflow: 'hidden', backgroundColor: C.surface }}>
         <View style={{ height: 150 }}>
           <BookingBackdrop b={b} />
           <View style={{ position: 'absolute', left: 12, top: 12 }}>
-            <GlassChip icon={Icon} label={bookingTypeLabel(b.type)} />
+            <GlassChip icon={Icon} label={bookingKindLabel(b)} />
           </View>
         </View>
         <View style={{ padding: 14, gap: 3 }}>
@@ -558,10 +641,10 @@ export function BookingCarouselCard({ b, onPress, width = 248 }: { b: Booking; o
             {b.venue}
           </Txt>
           <Txt v="small" lines={1}>
-            {b.location}
+            {b.location || bookingKindLabel(b)}
           </Txt>
           <Txt v="small" color={C.ink4} lines={1}>
-            {b.guests} {b.guests === 1 ? 'guest' : 'guests'} · {money(b.amount)}
+            {extra ? `${guests} · ${extra}` : guests}
           </Txt>
         </View>
       </View>
@@ -569,11 +652,19 @@ export function BookingCarouselCard({ b, onPress, width = 248 }: { b: Booking; o
   );
 }
 
+/** Third line of a BookingRow: what happened (or is planned) for the visit. */
+function rowDetail(b: Booking): string {
+  const day = fmtDate(bookingWhen(b));
+  if (b.status === 'upcoming') return `${day} · ${b.guests} ${b.guests === 1 ? 'guest' : 'guests'}`;
+  if (b.status === 'expired') return `${day} · No check-in`;
+  const { n } = checkedIn(b);
+  return `${day} · ${n}/${b.guests} checked in`;
+}
+
 /** Compact list row with thumbnail — history lists. */
 export function BookingRow({ b, onPress }: { b: Booking; onPress?: () => void }) {
-  const { n } = checkedIn(b);
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${b.venue}, ${b.location}`}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${bookingPlace(b)}, ${statusLabel(b.status)}`}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12 }}>
         <View style={{ width: 62, height: 62, borderRadius: 16, overflow: 'hidden' }}>
           <BookingBackdrop b={b} iconSize={22} />
@@ -583,15 +674,15 @@ export function BookingRow({ b, onPress }: { b: Booking; onPress?: () => void })
             {b.venue}
           </Txt>
           <Txt v="small" lines={1}>
-            {bookingTypeLabel(b.type)} · {b.location}
+            {[bookingKindLabel(b), b.location].filter((s) => !!s?.trim()).join(' · ')}
           </Txt>
           <Txt v="small" color={C.ink4} lines={1}>
-            {fmtDate(b.checkIn)} · {n}/{b.guests} checked in
+            {rowDetail(b)}
           </Txt>
         </View>
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
-          <StatusBadge status={b.status} />
-          <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.ink3 }}>{money(b.amount)}</Text>
+          <BookingStatusBadge status={b.status} />
+          {b.amount != null && <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.ink3 }}>{money(b.amount)}</Text>}
         </View>
       </View>
     </Pressable>
@@ -850,14 +941,62 @@ export type ActivityEntry = {
 
 const SERVER_TONE: Record<ActivityItem['tone'], { icon: LucideIcon; tone: TileTone; badge: { label: string; tone: BadgeTone } }> = {
   success: { icon: ShieldCheck, tone: 'green', badge: { label: 'Done', tone: 'green' } },
-  warning: { icon: TriangleAlert, tone: 'amber', badge: { label: 'Review', tone: 'amber' } },
+  warning: { icon: TriangleAlert, tone: 'amber', badge: { label: 'Needs attention', tone: 'amber' } },
   error: { icon: CircleX, tone: 'red', badge: { label: 'Failed', tone: 'red' } },
   neutral: { icon: ShieldCheck, tone: 'sky', badge: { label: 'Done', tone: 'sky' } },
 };
 
+/** Server feed (GET /user/me/activity): icon + badge copy per event type;
+ *  the colour comes from the server's tone. */
+const FEED_TYPE: Record<ActivityType, { icon: LucideIcon; badge: string }> = {
+  face_enrolled: { icon: ScanFace, badge: 'Done' },
+  document_added: { icon: FileText, badge: 'Added' },
+  document_verified: { icon: FileCheck, badge: 'Verified' },
+  document_failed: { icon: FileText, badge: 'Failed' },
+  family_member_added: { icon: Users, badge: 'Added' },
+  family_face_enrolled: { icon: ScanFace, badge: 'Face enrolled' },
+  check_in: { icon: MapPin, badge: 'Checked in' },
+  password_changed: { icon: Lock, badge: 'Changed' },
+};
+
+const FEED_TONE: Record<ActivityItem['tone'], TileTone & BadgeTone> = {
+  success: 'green',
+  warning: 'amber',
+  error: 'red',
+  neutral: 'sky',
+};
+
+/** Deep link for a feed item's `ref` (document, family member or booking). */
+export function activityHref(a: Pick<ActivityItem, 'ref' | 'type'>): string {
+  if (a.ref?.documentId) return `/document/${a.ref.documentId}`;
+  if (a.ref?.personId) return `/family/${a.ref.personId}`;
+  if (a.ref?.bookingId) return `/booking/${a.ref.bookingId}`;
+  if (a.type === 'password_changed') return '/security';
+  return '/identity';
+}
+
+/** Server activity feed → the same rows as buildActivity. Title and the
+ *  locally formatted time are used as sent. */
+export function feedActivity(items: ActivityItem[]): ActivityEntry[] {
+  return items.map((a) => {
+    const t = a.type ? FEED_TYPE[a.type] : undefined;
+    const fallback = SERVER_TONE[a.tone] ?? SERVER_TONE.neutral;
+    const tone = FEED_TONE[a.tone] ?? 'sky';
+    return {
+      id: `feed-${a.id}`,
+      icon: t?.icon ?? fallback.icon,
+      tone,
+      title: a.title,
+      sub: a.timestamp,
+      badge: t ? { label: t.badge, tone } : fallback.badge,
+      href: activityHref(a),
+    };
+  });
+}
+
 const DOC_ACTIVITY: Partial<Record<VerificationStatus, { verb: string; tone: TileTone; badge: { label: string; tone: BadgeTone } }>> = {
   verified: { verb: 'verified', tone: 'green', badge: { label: 'Verified', tone: 'green' } },
-  pending: { verb: 'in review', tone: 'amber', badge: { label: 'In review', tone: 'amber' } },
+  pending: { verb: 'added', tone: 'sky', badge: { label: 'Added', tone: 'sky' } },
   failed: { verb: 'check failed', tone: 'red', badge: { label: 'Failed', tone: 'red' } },
 };
 
@@ -880,7 +1019,7 @@ export function buildActivity({
     ...SERVER_TONE[a.tone],
     title: a.title,
     sub: a.timestamp,
-    href: '/identity',
+    href: activityHref(a),
   }));
   if (server.length === 0 && faceEnrolled) {
     out.push({
@@ -1052,7 +1191,7 @@ export function WalletCard({ d, onPress, style }: { d: IdentityDocument; onPress
               {d.label}
             </Text>
             <Text style={{ fontFamily: F.mono, fontSize: 12.5, letterSpacing: 1, color: 'rgba(255,255,255,0.72)' }} numberOfLines={1}>
-              {d.number} · {expiry}
+              {d.number?.trim() ? `${d.number} · ${expiry}` : expiry}
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>

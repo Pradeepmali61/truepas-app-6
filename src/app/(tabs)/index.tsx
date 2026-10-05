@@ -1,13 +1,16 @@
 /** @jsxImportSource react */
 /**
- * Home — "my identity + my journey". Premium layout over the real data the
- * original HomeScreen used: useFamily / useBookings / useNotifications(unread)
- * plus the identity summary for the identity-card badge.
+ * Home — "my identity + my journey". Premium layout over the real data:
+ * useFamily / useBookings (kiosk check-ins + the user's own reservations) /
+ * useNotificationCount (bell dot) / useAccountActivity (server feed) plus
+ * the identity summary for the identity-card badge.
  *
  * Header avatar opens the profile drawer (account card + settings menu +
  * sign out / delete account); bell shows the unread dot; next upcoming
- * booking is the hero; stacked family card (you + members, face status);
- * the two most recent past check-ins; pull-to-refresh refetches everything.
+ * booking or reservation is the hero (check-in itself happens only at the
+ * venue kiosk, so the hero has no check-in button); stacked family card
+ * (you + members, face status); the two most recent past check-ins;
+ * pull-to-refresh refetches everything.
  *
  * No upcoming bookings (every new user): the hero and carousel keep their
  * photo cards but show the user's real setup progress (face / ID / family),
@@ -17,11 +20,11 @@ import { useRouter } from 'expo-router';
 import {
   Bell,
   CalendarDays,
+  CalendarPlus,
   FileScan,
-  KeyRound,
+  IdCard,
   type LucideIcon,
   MapPin,
-  QrCode,
   ScanFace,
   ShieldCheck,
   UserPlus,
@@ -31,11 +34,12 @@ import { useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAccountActivity } from '@/features/account/hooks';
 import { useDocuments } from '@/features/documents/hooks';
 import { useFamily } from '@/features/family/hooks';
 import { useBookings } from '@/features/history/hooks';
 import { useIdentitySummary } from '@/features/identity/hooks';
-import { useNotifications } from '@/features/notifications/hooks';
+import { useNotificationCount } from '@/features/notifications/hooks';
 import { useProfilePicture } from '@/features/profile/hooks';
 import { IdentityCard, TAB_BAR_SPACE } from '@/premium/blocks';
 import {
@@ -43,18 +47,19 @@ import {
   BookingCarouselCard,
   BookingHero,
   BookingRow,
+  bookingWhen,
   buildActivity,
+  feedActivity,
   FirstCheckInRow,
   greeting,
   isTodayIso,
   ProfileDrawer,
   ReadyHero,
-  SoonAction,
   TogetherCard,
   VENUES,
   VenueCard,
 } from '@/premium/flows/home';
-import { Async, Bone, ComingSoon, SkeletonList } from '@/premium/kit';
+import { Async, Bone, SkeletonList } from '@/premium/kit';
 import { C, F, R } from '@/premium/theme';
 import { Avatar, Button, Card, Divider, IconCircle, Press, Row, SectionHead, Serif, Tile, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
@@ -68,12 +73,16 @@ export default function HomeScreen() {
 
   const family = useFamily();
   const bookings = useBookings();
-  const unread = useNotifications(true);
+  const unread = useNotificationCount();
   const summary = useIdentitySummary();
   const documents = useDocuments();
+  const feed = useAccountActivity();
 
-  const hasUnread = (unread.data?.pages.flat() ?? []).length > 0;
-  const past = bookings.data?.filter((b) => b.status !== 'upcoming') ?? [];
+  const hasUnread = (unread.data?.unread ?? 0) > 0;
+  /* Kiosk visits only (an expired reservation never became a check-in), newest first. */
+  const past = (bookings.data?.filter((b) => b.status === 'completed' || b.status === 'failed') ?? []).sort((a, b) =>
+    bookingWhen(b).localeCompare(bookingWhen(a)),
+  );
   const upcoming = (bookings.data?.filter((b) => b.status === 'upcoming') ?? []).sort((a, b) =>
     a.checkIn.localeCompare(b.checkIn),
   );
@@ -85,24 +94,36 @@ export default function HomeScreen() {
 
   const firstName = user?.fullName?.trim().split(/\s+/)[0] ?? '';
 
-  /* No check-ins yet: real account activity fills the same rows. */
-  const activity = buildActivity({
-    server: summary.data?.activity ?? [],
-    faceEnrolled: !!user?.faceEnrolled,
-    docs: documents.data ?? [],
-    members: family.data ?? [],
-    firstName,
-  }).slice(0, 3);
+  /* No check-ins yet: real account activity fills the same rows — the
+     server feed, or (while it loads, fails or is empty) the same events
+     derived from documents and family. */
+  const activity = (
+    feed.data && feed.data.length > 0
+      ? feedActivity(feed.data)
+      : buildActivity({
+          server: summary.data?.activity ?? [],
+          faceEnrolled: !!user?.faceEnrolled,
+          docs: documents.data ?? [],
+          members: family.data ?? [],
+          firstName,
+        })
+  ).slice(0, 3);
   const showActivity = bookings.data != null && past.length === 0;
 
   const refreshing =
-    family.isRefetching || bookings.isRefetching || unread.isRefetching || summary.isRefetching || documents.isRefetching;
+    family.isRefetching ||
+    bookings.isRefetching ||
+    unread.isRefetching ||
+    summary.isRefetching ||
+    documents.isRefetching ||
+    feed.isRefetching;
   const onRefresh = () => {
     void documents.refetch();
     void family.refetch();
     void bookings.refetch();
     void unread.refetch();
     void summary.refetch();
+    void feed.refetch();
   };
 
   const open = (href: string) => () => router.push(href as never);
@@ -172,15 +193,7 @@ export default function HomeScreen() {
                 action="Details"
                 onAction={open(`/booking/${nextUpcoming.id}`)}
               />
-              <BookingHero
-                b={nextUpcoming}
-                onPress={open(`/booking/${nextUpcoming.id}`)}
-                cta={
-                  <SoonAction light>
-                    <Button label="Check in with your face" icon={ScanFace} />
-                  </SoonAction>
-                }
-              />
+              <BookingHero b={nextUpcoming} onPress={open(`/booking/${nextUpcoming.id}`)} />
             </View>
           ) : noTrips ? (
             <View style={{ paddingHorizontal: 20, gap: 16 }}>
@@ -256,8 +269,8 @@ export default function HomeScreen() {
             <Row gap={10} align="stretch">
               <QuickAction icon={FileScan} label={'Add\ndocument'} onPress={open('/document/select-type')} />
               <QuickAction icon={UserPlus} label={'Add\nfamily'} onPress={open('/family/add')} />
-              <QuickAction icon={QrCode} label={'Share\nidentity'} soon />
-              <QuickAction icon={KeyRound} label={'Digital\nkeys'} soon />
+              <QuickAction icon={CalendarPlus} label={'Add\nreservation'} onPress={open('/booking/new')} />
+              <QuickAction icon={IdCard} label={'Your\nidentity'} onPress={open('/identity')} />
             </Row>
           </View>
 
@@ -366,10 +379,10 @@ function GetReady({
       ? {
           photo: 'room' as const,
           chip: { icon: FileScan, label: 'Document' },
-          eyebrow: 'In review',
-          title: 'Your ID is being checked',
-          body: "We'll let you know as soon as it's verified. Nothing else to do for now.",
-          cta: <Button label="View document status" tone="glass" onPress={open('/(tabs)/documents')} />,
+          eyebrow: 'Next step',
+          title: 'Verify your ID',
+          body: 'Your document is added. Finish verifying it to travel with one identity.',
+          cta: <Button label="Verify your ID" icon={FileScan} onPress={open('/(tabs)/documents')} />,
         }
       : !docDone
         ? {
@@ -394,8 +407,8 @@ function GetReady({
               chip: { icon: ShieldCheck, label: 'Verified' },
               eyebrow: "You're all set",
               title: 'Ready for your first check-in',
-              body: 'Book with a Truepas partner venue and your trip will show up right here.',
-              cta: undefined,
+              body: 'Add a reservation and your trip shows up right here.',
+              cta: <Button label="Add reservation" icon={CalendarPlus} onPress={open('/booking/new')} />,
             };
 
   return (
@@ -429,30 +442,15 @@ function HowStep({ n, icon, title, sub }: { n: number; icon: LucideIcon; title: 
   );
 }
 
-function QuickAction({ icon, label, onPress, soon }: { icon: LucideIcon; label: string; onPress?: () => void; soon?: boolean }) {
-  const body = (
-    <Card pad={14} style={{ alignItems: 'center', gap: 10, borderRadius: R.lg, flex: 1 }}>
-      <Tile icon={icon} tone="sky" size={44} radius={22} />
-      <Txt v="smallStrong" center style={{ fontSize: 12.5, lineHeight: 16 }}>
-        {label}
-      </Txt>
-    </Card>
-  );
-  if (!soon) {
-    return (
-      <Press onPress={onPress} label={label.replace('\n', ' ')} role="button" style={{ flex: 1 }}>
-        {body}
-      </Press>
-    );
-  }
+function QuickAction({ icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
   return (
-    <View style={{ flex: 1 }} accessible accessibilityLabel={`${label.replace('\n', ' ')}, coming soon`} accessibilityState={{ disabled: true }}>
-      <View pointerEvents="none" style={{ flex: 1, opacity: 0.5 }}>
-        {body}
-      </View>
-      <View pointerEvents="none" style={{ position: 'absolute', top: -10, left: 0, right: 0, alignItems: 'center' }}>
-        <ComingSoon label="Soon" />
-      </View>
-    </View>
+    <Press onPress={onPress} label={label.replace('\n', ' ')} role="button" style={{ flex: 1 }}>
+      <Card pad={14} style={{ alignItems: 'center', gap: 10, borderRadius: R.lg, flex: 1 }}>
+        <Tile icon={icon} tone="sky" size={44} radius={22} />
+        <Txt v="smallStrong" center style={{ fontSize: 12.5, lineHeight: 16 }}>
+          {label}
+        </Txt>
+      </Card>
+    </Press>
   );
 }

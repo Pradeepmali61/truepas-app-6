@@ -12,8 +12,13 @@ export function useBookings() {
   return useQuery({ queryKey: historyKeys.all, queryFn: api.getBookings });
 }
 
-export function useBooking(id: string) {
-  return useQuery({ queryKey: historyKeys.detail(id), queryFn: () => api.getBooking(id) });
+/** GET /bookings/{id}. Pass null/'' to skip (e.g. no linked reservation). */
+export function useBooking(id: string | null | undefined) {
+  return useQuery({
+    queryKey: historyKeys.detail(id ?? ''),
+    queryFn: () => api.getBooking(id as string),
+    enabled: !!id,
+  });
 }
 
 /** Only the customer's own upcoming reservations can be edited or deleted. */
@@ -21,33 +26,54 @@ export function isEditableReservation(b: Booking): boolean {
   return b.source === 'customer' && b.status === 'upcoming';
 }
 
+/** `listOnly`: leave the detail caches alone (a deleted booking's open
+ *  screen would otherwise refetch into "not found" while it closes). */
 function useInvalidateBookings() {
   const qc = useQueryClient();
-  return () => {
-    void qc.invalidateQueries({ queryKey: historyKeys.all });
+  return (listOnly = false) => {
+    void qc.invalidateQueries({ queryKey: historyKeys.all, exact: listOnly });
     void qc.invalidateQueries({ queryKey: ['account'] });
     void qc.invalidateQueries({ queryKey: ['notifications'] });
   };
 }
 
-/** POST /bookings — dates as the user's local YYYY-MM-DD. */
+/** POST /bookings — dates as the user's local YYYY-MM-DD. The new booking is
+ *  primed into the detail cache so its screen opens without a spinner. */
 export function useCreateReservation() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateBookings();
   return useMutation({
     mutationFn: (payload: CreateReservationRequest) => api.createReservation(payload),
-    onSuccess: invalidate,
+    onSuccess: (created) => {
+      if (created?.id) qc.setQueryData(historyKeys.detail(created.id), created);
+      invalidate();
+    },
   });
 }
 
+/** PATCH /bookings/{id} — send only the fields that changed. */
 export function useUpdateReservation() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateBookings();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: UpdateReservationRequest }) => api.updateReservation(id, patch),
-    onSuccess: invalidate,
+    onSuccess: (updated, { id }) => {
+      if (updated) qc.setQueryData(historyKeys.detail(id), updated);
+      invalidate();
+    },
   });
 }
 
+/** DELETE /bookings/{id}. Drops the booking from the list cache at once; its
+ *  detail cache is left to garbage-collect after the screen closes. */
 export function useDeleteReservation() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateBookings();
-  return useMutation({ mutationFn: (id: string) => api.deleteReservation(id), onSuccess: invalidate });
+  return useMutation({
+    mutationFn: (id: string) => api.deleteReservation(id),
+    onSuccess: (_ok, id) => {
+      qc.setQueryData<Booking[]>(historyKeys.all, (list) => list?.filter((b) => b.id !== id));
+      invalidate(true);
+    },
+  });
 }

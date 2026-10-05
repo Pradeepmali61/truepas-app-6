@@ -1,30 +1,35 @@
 /** @jsxImportSource react */
 /**
- * Check-ins tab — GET /cb/bookings filtered by the approved design's
- * category chips (All / Hotels / Travel / Events), Upcoming first and past
- * visits by month, drilling into booking detail. The check-in event producer
- * isn't connected yet so an empty list is a valid production state, not an
- * error: the year card then shows the account's readiness and the list shows
- * how a check-in works for the selected category.
+ * Check-ins tab — GET /cb/bookings (kiosk check-ins + the user's own
+ * reservations) filtered by the approved design's category chips (All /
+ * Hotels / Travel / Events, from `kind`, or `type` on older payloads),
+ * Upcoming first and past visits by month, drilling into booking detail.
+ * "Add reservation" (header + empty state) opens /booking/new. The year
+ * card shows GET /user/me/stats; while the server reports no check-ins
+ * (zeros on dev until check-in events flow) it shows the account's
+ * readiness instead, and the list shows how a check-in works for the
+ * selected category.
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { CalendarPlus } from 'lucide-react-native';
 import { useCallback, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useUserStats } from '@/features/account/hooks';
 import { useDocuments } from '@/features/documents/hooks';
 import { useFamily } from '@/features/family/hooks';
 import { useBookings } from '@/features/history/hooks';
 import { TAB_BAR_SPACE } from '@/premium/blocks';
-import { BookingRow, bookingKind, FirstCheckInRow, fmtMonthLabel, TabTitle, yearOf } from '@/premium/flows/home';
+import { BookingRow, bookingKind, bookingWhen, FirstCheckInRow, fmtMonthLabel, fmtSeconds, TabTitle, yearOf } from '@/premium/flows/home';
 import { IMG, type ImgKey } from '@/premium/images';
-import { Async, ComingSoon, SkeletonList } from '@/premium/kit';
+import { Async, SkeletonList } from '@/premium/kit';
 import { C, F, G, R } from '@/premium/theme';
-import { Badge, Card, Chip, Divider, Row, Txt } from '@/premium/ui';
+import { Badge, Button, Card, Chip, Divider, IconCircle, Row, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
-import type { Booking } from '@/types/domain';
+import type { Booking, UserStats } from '@/types/domain';
 
 type Cat = 'all' | 'hotels' | 'travel' | 'events';
 
@@ -35,12 +40,12 @@ const CATS: { id: Cat; label: string }[] = [
   { id: 'events', label: 'Events' },
 ];
 
-/** Booking.type → chip. Unknown kinds only appear under All. */
+/** Booking kind (kind ?? older `type`) → chip. `other` only appears under All. */
 function catOf(b: Booking): Cat | null {
-  const k = bookingKind(b.type);
+  const k = bookingKind(b);
   if (k === 'hotel') return 'hotels';
   if (k === 'flight' || k === 'cruise') return 'travel';
-  if (k === 'event' || k === 'park') return 'events';
+  if (k === 'park' || k === 'cinema' || k === 'stadium' || k === 'concert') return 'events';
   return null;
 }
 
@@ -50,21 +55,28 @@ export default function HistoryScreen() {
   const bookingsQuery = useBookings();
   const documents = useDocuments();
   const family = useFamily();
+  const year = new Date().getFullYear();
+  const stats = useUserStats(year);
   const [cat, setCat] = useState<Cat>('all');
 
   /* Tabs stay mounted, so switching back would show the cached list. Refetch
      on every re-focus so a check-in completed meanwhile shows up (BUG018);
      the first focus is covered by the query's own mount fetch. */
   const { refetch } = bookingsQuery;
+  const refetchStats = stats.refetch;
   const focusedOnce = useRef(false);
   useFocusEffect(
     useCallback(() => {
-      if (focusedOnce.current) void refetch();
+      if (focusedOnce.current) {
+        void refetch();
+        void refetchStats();
+      }
       focusedOnce.current = true;
-    }, [refetch]),
+    }, [refetch, refetchStats]),
   );
 
   const open = (b: Booking) => () => router.push(`/booking/${b.id}` as never);
+  const addReservation = () => router.push('/booking/new' as never);
 
   const readiness = {
     faceEnrolled: !!user?.faceEnrolled,
@@ -81,14 +93,17 @@ export default function HistoryScreen() {
           refreshControl={
             <RefreshControl
               refreshing={bookingsQuery.isRefetching}
-              onRefresh={() => void bookingsQuery.refetch()}
+              onRefresh={() => {
+                void bookingsQuery.refetch();
+                void stats.refetch();
+              }}
               tintColor={C.sky}
               colors={[C.sky]}
             />
           }
           contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: TAB_BAR_SPACE + 20, gap: 26, flexGrow: 1 }}
         >
-          <TabTitle>Check-ins</TabTitle>
+          <TabTitle right={<IconCircle icon={CalendarPlus} label="Add reservation" onPress={addReservation} />}>Check-ins</TabTitle>
 
           <Async q={bookingsQuery} skeleton={<SkeletonList rows={4} thumb={62} />}>
             {(list) => {
@@ -97,12 +112,15 @@ export default function HistoryScreen() {
               const upcoming = filtered
                 .filter((b) => b.status === 'upcoming')
                 .sort((a, b) => a.checkIn.localeCompare(b.checkIn));
-              const past = filtered.filter((b) => b.status !== 'upcoming');
+              // Newest first: kiosk check-ins by their exact time, reservations by day.
+              const past = filtered
+                .filter((b) => b.status !== 'upcoming')
+                .sort((a, b) => bookingWhen(b).localeCompare(bookingWhen(a)));
 
-              const groups: { label: string; items: Booking[] }[] = [];
-              if (upcoming.length > 0) groups.push({ label: 'Upcoming', items: upcoming });
+              const groups: { label: string; items: Booking[]; upcoming?: boolean }[] = [];
+              if (upcoming.length > 0) groups.push({ label: 'Upcoming', items: upcoming, upcoming: true });
               for (const b of past) {
-                const label = fmtMonthLabel(b.checkIn);
+                const label = fmtMonthLabel(bookingWhen(b));
                 const g = groups.find((x) => x.label === label);
                 if (g) g.items.push(b);
                 else groups.push({ label, items: [b] });
@@ -110,7 +128,7 @@ export default function HistoryScreen() {
 
               return (
                 <>
-                  <YearStats list={list} readiness={readiness} />
+                  <YearStats year={year} list={list} server={stats.data} readiness={readiness} />
 
                   <ScrollView
                     horizontal
@@ -132,11 +150,18 @@ export default function HistoryScreen() {
                   </ScrollView>
 
                   {groups.length === 0 ? (
-                    <CheckInGuide cat={cat} />
+                    <CheckInGuide cat={cat} onAdd={addReservation} />
                   ) : (
                     groups.map((g) => (
                       <View key={g.label} style={{ gap: 10 }}>
-                        <GroupHead title={g.label} note={`${g.items.length} ${g.items.length === 1 ? 'visit' : 'visits'}`} />
+                        <GroupHead
+                          title={g.label}
+                          note={
+                            g.upcoming
+                              ? `${g.items.length} planned`
+                              : `${g.items.length} ${g.items.length === 1 ? 'visit' : 'visits'}`
+                          }
+                        />
                         <Card pad={0} style={{ paddingHorizontal: 14, paddingVertical: 4 }}>
                           {g.items.map((b, i) => (
                             <View key={b.id}>
@@ -181,7 +206,7 @@ const GUIDES: Record<Cat, { title: string; first?: boolean; steps: GuideStep[] }
     first: true,
     steps: [
       { photo: 'hotelPool', title: 'Book a partner venue', sub: 'Hotels, parks, flights and events' },
-      { photo: 'resort', title: 'Look at the camera', sub: 'No ID card, no forms to fill' },
+      { photo: 'resort', title: 'Look at the kiosk camera', sub: 'No ID card, no forms to fill' },
       { photo: 'themepark', title: 'Walk in together', sub: 'Your family checks in with you' },
     ],
   },
@@ -211,7 +236,7 @@ const GUIDES: Record<Cat, { title: string; first?: boolean; steps: GuideStep[] }
   },
 };
 
-function CheckInGuide({ cat }: { cat: Cat }) {
+function CheckInGuide({ cat, onAdd }: { cat: Cat; onAdd: () => void }) {
   const g = GUIDES[cat];
   return (
     <View style={{ gap: 10 }}>
@@ -224,6 +249,13 @@ function CheckInGuide({ cat }: { cat: Cat }) {
             <GuideRow step={s} n={i + 1} />
           </View>
         ))}
+      </Card>
+      <Card pad={16} style={{ marginTop: 6, gap: 12 }}>
+        <View style={{ gap: 2 }}>
+          <Txt v="bodyStrong">Already booked somewhere?</Txt>
+          <Txt v="small">Add the reservation to keep your plans in one place.</Txt>
+        </View>
+        <Button label="Add reservation" icon={CalendarPlus} tone="soft" size="md" onPress={onAdd} />
       </Card>
     </View>
   );
@@ -255,34 +287,45 @@ function GuideRow({ step, n }: { step: GuideStep; n: number }) {
 
 /* ───────────────────────── year card ───────────────────────── */
 
-/** Year-in-numbers header. Check-ins / places / guests come from the real
- *  bookings; timing stats have no backend yet and are marked as such. Before
- *  the year's first check-in it shows the account's real readiness instead. */
+/** Year-in-numbers header from GET /user/me/stats (check-ins, cities, the
+ *  average kiosk time, minutes saved). Until the server has it (loading or
+ *  failed) the numbers come from the bookings list. Before the year's first
+ *  check-in it shows the account's real readiness instead. */
 function YearStats({
+  year,
   list,
+  server,
   readiness,
 }: {
+  year: number;
   list: Booking[];
+  server: UserStats | undefined;
   readiness: { faceEnrolled: boolean; ids: number; travellers: number };
 }) {
-  const year = new Date().getFullYear();
-  const done = list.filter((b) => b.status === 'completed' && yearOf(b.checkIn) === year);
-  const fresh = done.length === 0;
-  const places = new Set(done.map((b) => b.location.trim().toLowerCase())).size;
+  const done = list.filter((b) => b.status === 'completed' && yearOf(bookingWhen(b)) === year);
+  const fresh = (server ? server.checkIns : done.length) === 0;
+  const places = new Set(done.map((b) => (b.location ?? '').trim().toLowerCase()).filter(Boolean)).size;
   const guests = done.reduce((n, b) => n + b.guests, 0);
-  const stats: { v: string; k: string; soon?: boolean }[] = fresh
+  const stats: { v: string; k: string }[] = fresh
     ? [
         { v: readiness.faceEnrolled ? '✓' : '—', k: 'Face ID' },
         { v: String(readiness.ids), k: readiness.ids === 1 ? 'ID' : 'IDs' },
         { v: String(readiness.travellers), k: readiness.travellers === 1 ? 'Traveller' : 'Travellers' },
         { v: '0', k: 'Check-ins' },
       ]
-    : [
-        { v: String(done.length), k: 'Check-ins' },
-        { v: String(places), k: places === 1 ? 'Place' : 'Places' },
-        { v: String(guests), k: 'Guests' },
-        { v: '—', k: 'Avg. time', soon: true },
-      ];
+    : server
+      ? [
+          { v: String(server.checkIns), k: server.checkIns === 1 ? 'Check-in' : 'Check-ins' },
+          { v: String(server.cities), k: server.cities === 1 ? 'City' : 'Cities' },
+          { v: server.avgCheckInMs != null ? fmtSeconds(server.avgCheckInMs) : '—', k: 'Avg. time' },
+          { v: `${server.minutesSaved} min`, k: 'Saved' },
+        ]
+      : [
+          { v: String(done.length), k: done.length === 1 ? 'Check-in' : 'Check-ins' },
+          { v: String(places), k: places === 1 ? 'Place' : 'Places' },
+          { v: String(guests), k: 'Guests' },
+          { v: '—', k: 'Avg. time' },
+        ];
   return (
     <View style={{ borderRadius: R.xl, overflow: 'hidden', padding: 20, gap: 18 }}>
       <LinearGradient colors={G.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -290,11 +333,10 @@ function YearStats({
         <Txt v="micro" color={C.skyLight}>
           {fresh ? `Your ${year} starts here` : `Your ${year} so far`}
         </Txt>
-        {!fresh && <ComingSoon light label="Timing soon" />}
       </Row>
       <Row between>
         {stats.map((s) => (
-          <View key={s.k} style={{ gap: 2, opacity: s.soon ? 0.45 : 1 }}>
+          <View key={s.k} style={{ gap: 2 }}>
             <Text style={{ fontFamily: F.extrabold, fontSize: 26, letterSpacing: -0.8, color: C.white }}>{s.v}</Text>
             <Text style={{ fontFamily: F.medium, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{s.k}</Text>
           </View>
