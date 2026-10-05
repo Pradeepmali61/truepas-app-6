@@ -189,6 +189,8 @@ function localSuggestion(s: IdentitySummary): string {
   return 'Your identity strength is good';
 }
 
+const IDENTITY_SUGGESTIONS = new Set(['enroll_face', 'add_document', 'verify_document', 'renew_document']);
+
 function IdentityStrengthCard({
   server,
   s,
@@ -211,14 +213,17 @@ function IdentityStrengthCard({
 
   const title =
     total > 0 ? `${verifiedDocs} of ${total} document${total === 1 ? '' : 's'} verified` : 'No documents yet';
+  // Only identity steps belong here — 2-step sign-in, devices and password
+  // raise the security score (Security screen), not identity strength.
+  const identityTip = server?.suggestions.find((x) => IDENTITY_SUGGESTIONS.has(String(x.id)));
   const sub =
     score >= 90
       ? 'Your identity strength is excellent'
-      : server
-        ? (server.suggestions[0]?.title ?? 'Your identity strength is good')
+      : identityTip
+        ? identityTip.title
         : s
           ? localSuggestion(s)
-          : '';
+          : 'Your identity strength is good';
 
   return (
     <Card pad={16} onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>

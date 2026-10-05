@@ -65,6 +65,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useLogoutFlow } from '@/features/auth/useLogoutFlow';
+import { displayDocNumber } from '@/features/documents/format';
 import { useMemberPhoto } from '@/features/family/hooks';
 import { useProfilePicture } from '@/features/profile/hooks';
 import { Guilloche } from '@/premium/blocks';
@@ -1191,7 +1192,7 @@ export function WalletCard({ d, onPress, style }: { d: IdentityDocument; onPress
               {d.label}
             </Text>
             <Text style={{ fontFamily: F.mono, fontSize: 12.5, letterSpacing: 1, color: 'rgba(255,255,255,0.72)' }} numberOfLines={1}>
-              {d.number?.trim() ? `${d.number} · ${expiry}` : expiry}
+              {displayDocNumber(d.number) ? `${displayDocNumber(d.number)} · ${expiry}` : expiry}
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>

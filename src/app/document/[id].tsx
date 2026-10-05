@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { useDocument, useDocumentImages, useRemoveDocument } from '@/features/documents/hooks';
+import { displayDocNumber } from '@/features/documents/format';
 import { useToast } from '@/hooks/useToast';
 import {
     DocumentCard,
@@ -152,7 +153,7 @@ export default function DocumentDetailScreen() {
                       <DocumentCard
                         type={d.type}
                         label={d.label}
-                        number={d.number}
+                        number={displayDocNumber(d.number)}
                         status={d.status}
                         holder={d.extractedName}
                         expiresAt={expires}
@@ -192,7 +193,7 @@ export default function DocumentDetailScreen() {
 
                 <Group title="Details">
                   <ListRow title="Holder" value={d.extractedName ?? '—'} chevron={false} />
-                  <ListRow title="Number" value={d.number || '—'} chevron={false} />
+                  <ListRow title="Number" value={displayDocNumber(d.number) || '—'} chevron={false} />
                   <ListRow title="Status" chevron={false} trailing={<Badge label={badge.label} tone={badge.tone} icon={badge.icon} dot={badge.dot} />} />
                   <ListRow title="Added" value={prettyDate(d.addedAt)} chevron={false} />
                   {d.verifiedAt ? <ListRow title="Verified on" value={localDay(d.verifiedAt)} chevron={false} /> : null}
