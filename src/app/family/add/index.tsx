@@ -7,7 +7,8 @@
  * verifying a photo document for a member without a face is rejected with
  * FACE_NOT_ENROLLED). The member page goes under the capture screen, so
  * backing out of a later step lands on it with "Continue setup".
- * A duplicate (same name + DOB) is caught here, before anything is created.
+ * A duplicate (same name + DOB) is caught here, before anything is created,
+ * and so is an age that doesn't fit the relationship (relationshipAge.ts).
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -17,6 +18,7 @@ import { View } from 'react-native';
 
 import { api } from '@/api';
 import { toApiError } from '@/api/errors';
+import { useMe } from '@/features/account/hooks';
 import {
   ageFromDob,
   familyKeys,
@@ -25,23 +27,30 @@ import {
   memberCaptureMode,
   useAddFamilyMember,
 } from '@/features/family/hooks';
+import { MAX_MEMBER_AGE, relationshipAgeError } from '@/features/family/relationshipAge';
 import { DateField } from '@/premium/flows/family';
 import { Banner, ConfirmSheet } from '@/premium/kit';
 import { C } from '@/premium/theme';
 import { Button, Chip, Field, Heading, Row, Screen, Steps, TopBar, Txt } from '@/premium/ui';
+import { useAppSelector } from '@/store';
 import type { FamilyMember } from '@/types/domain';
 
 const RELATIONSHIPS = ['Child', 'Spouse', 'Parent', 'Guardian', 'Sibling', 'Other'];
 
-function todayIso(): string {
+function isoYearsAgo(years: number): string {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getFullYear() - years}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export default function AddFamilyScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const addMember = useAddFamilyMember();
+  // The account holder's age, for the Child / Parent rules. useMe keeps the
+  // session user (and its DOB) fresh.
+  useMe();
+  const ownDob = useAppSelector((state) => state.auth.user?.dateOfBirth);
+  const ownAge = ownDob ? ageFromDob(ownDob) : undefined;
 
   const [fullName, setFullName] = useState('');
   const [dob, setDob] = useState('');
@@ -72,6 +81,10 @@ export default function AddFamilyScreen() {
       const age = ageFromDob(dob);
       if (!Number.isFinite(age)) next.dob = 'Enter a valid date';
       else if (age < 0) next.dob = 'Date of birth must be in the past';
+      else {
+        const fit = relationshipAgeError(relationship, age, ownAge);
+        if (fit) next.dob = fit;
+      }
     }
     if (!relationship) next.relationship = 'Choose a relationship';
     setErrors(next);
@@ -145,7 +158,16 @@ export default function AddFamilyScreen() {
         </Txt>
         <Row gap={8} style={{ flexWrap: 'wrap' }}>
           {RELATIONSHIPS.map((r) => (
-            <Chip key={r} label={r} active={relationship === r} onPress={() => setRelationship(r)} />
+            <Chip
+              key={r}
+              label={r}
+              active={relationship === r}
+              onPress={() => {
+                setRelationship(r);
+                // An age error may no longer apply; submit checks again.
+                setErrors((e) => ({ ...e, dob: undefined, relationship: undefined }));
+              }}
+            />
           ))}
         </Row>
         {errors.relationship ? (
@@ -171,7 +193,8 @@ export default function AddFamilyScreen() {
           value={dob || undefined}
           onChange={setDob}
           placeholder="Select date of birth"
-          maxDate={todayIso()}
+          minDate={isoYearsAgo(MAX_MEMBER_AGE)}
+          maxDate={isoYearsAgo(0)}
           error={errors.dob}
         />
       </View>
