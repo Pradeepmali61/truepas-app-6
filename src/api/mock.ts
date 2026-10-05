@@ -71,7 +71,6 @@ import type {
 
 import bookingsData from './data/bookings.json';
 import documentsData from './data/documents.json';
-import familyActivityData from './data/family-activity.json';
 import familyData from './data/family.json';
 import identitySummaryData from './data/identitySummary.json';
 import userData from './data/user.json';
@@ -113,10 +112,11 @@ const identitySummary: IdentitySummary = identitySummaryData as IdentitySummary;
 let documents: IdentityDocument[] = [...(documentsData as IdentityDocument[])];
 let family: FamilyMember[] = (familyData as FamilyMember[]).map((f) => ({
   ...f,
+  permissions: { independentCheckIn: false, notifyOnCheckIn: true },
+  createdAt: new Date(Date.now() - 7 * 86_400_000).toISOString(),
   faceEnrolled: false,
 }));
 let bookings: Booking[] = bookingsData as Booking[];
-const familyActivity: ActivityLogItem[] = familyActivityData as ActivityLogItem[];
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 let notifications: Notification[] = [
   { id: 'n1', title: 'Face enrolled', body: 'Your face is set up for check-in.', read: false, createdAt: minutesAgo(30), type: 'identity', data: { type: 'identity' } },
@@ -127,6 +127,7 @@ let notifications: Notification[] = [
 
 // ── Oct 2026 backend features (in-memory) ─────────────────────────────
 let twoFactor: { enabled: boolean; method: TwoFactorMethod | null } = { enabled: false, method: null };
+let pendingTwoFactorMethod: TwoFactorMethod | null = null;
 let sessions: AuthSession[] = [
   { id: 's1', device: 'This phone', platform: 'android', appVersion: '1.0.0', createdAt: minutesAgo(2880), lastActiveAt: minutesAgo(0), current: true },
   { id: 's2', device: 'iPad Air', platform: 'ios', appVersion: '1.0.0', createdAt: minutesAgo(20160), lastActiveAt: minutesAgo(4320), current: false },
@@ -202,9 +203,10 @@ function authResponse(): AuthResponse {
 }
 
 function ageFromDob(dob: string): number {
-  const match = dob.match(/^(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})$/);
-  if (!match) return 0;
-  const [, month, day, year] = match;
+  const us = dob.match(/^(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})$/);
+  const iso = dob.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!us && !iso) return 0;
+  const [year, month, day] = us ? [us[3], us[1], us[2]] : [iso![1], iso![2], iso![3]];
   const birth = new Date(Number(year), Number(month) - 1, Number(day));
   const now = new Date();
   let age = now.getFullYear() - birth.getFullYear();
@@ -230,7 +232,26 @@ export const mockApi = {
   getDocument: (id: string) => respond(documents.find((d) => d.id === id) ?? null),
   getFamily: () => respond(family),
   getFamilyMember: (id: string) => respond(family.find((f) => f.id === id) ?? null),
-  getFamilyActivity: (_id: string) => respond(familyActivity),
+  getFamilyActivity: (id: string): Promise<ActivityLogItem[]> => {
+    const m = family.find((f) => f.id === id);
+    if (!m) return respond([]);
+    const out: ActivityLogItem[] = [];
+    for (const d of documents.filter((x) => x.personId === id)) {
+      out.push({
+        id: `doc-${d.id}`,
+        type: d.status === 'verified' ? 'document_verified' : d.status === 'failed' ? 'document_failed' : 'document_added',
+        title: `${d.label} ${d.status === 'verified' ? 'verified' : d.status === 'failed' ? 'failed' : 'added'}`,
+        date: d.verifiedAt ?? `${d.addedAt}T10:00:00Z`,
+        tone: d.status === 'verified' ? 'success' : d.status === 'failed' ? 'warning' : 'neutral',
+        ref: { documentId: d.id, personId: id },
+      });
+    }
+    if (m.faceEnrolled) {
+      out.push({ id: `face-${id}`, type: 'family_face_enrolled', title: 'Face enrolled', date: m.faceEnrolledAt ?? minutesAgo(120), tone: 'success', ref: { personId: id } });
+    }
+    out.push({ id: `added-${id}`, type: 'family_member_added', title: 'Added to your family', date: m.createdAt ?? minutesAgo(600), tone: 'neutral', ref: { personId: id } });
+    return respond(out.sort((a, b) => b.date.localeCompare(a.date)));
+  },
   getBookings: () => respond(bookings),
   getBooking: (id: string) => respond(bookings.find((b) => b.id === id) ?? null),
   getNotifications: (params?: { limit?: number; offset?: number; unreadOnly?: boolean; type?: NotificationType }) => {
@@ -327,8 +348,10 @@ export const mockApi = {
     if (!/^\d{6}$/.test(payload.code)) return fail('That code is wrong or has expired. Try again.');
     return respond(authResponse());
   },
-  enableTwoFactor: (method: TwoFactorMethod): Promise<TwoFactorEnableResponse> =>
-    respond({
+  enableTwoFactor: (method: TwoFactorMethod): Promise<TwoFactorEnableResponse> => {
+    // Remember the method being set up; an existing working method stays on.
+    pendingTwoFactorMethod = method;
+    return respond({
       method,
       challengeId: nextId('ch'),
       nextStep: 'confirm',
@@ -338,10 +361,12 @@ export const mockApi = {
             otpauthUri: `otpauth://totp/Truepas%3A${encodeURIComponent(user.email)}?secret=JBSWY3DPEHPK3PXP&issuer=Truepas&digits=6&period=30`,
           }
         : {}),
-    }),
+    });
+  },
   confirmTwoFactor: (payload: { challengeId: string; code: string }): Promise<TwoFactorStatusResponse> => {
     if (!/^\d{6}$/.test(payload.code)) return fail('That code is wrong or has expired. Try again.');
-    twoFactor = { enabled: true, method: twoFactor.method ?? 'email' };
+    twoFactor = { enabled: true, method: pendingTwoFactorMethod ?? twoFactor.method ?? 'email' };
+    pendingTwoFactorMethod = null;
     user = { ...user, twoFactorEnabled: true, twoFactorMethod: twoFactor.method };
     return respond({ ok: true, twoFactorEnabled: true, method: twoFactor.method ?? 'email' });
   },
@@ -503,8 +528,16 @@ export const mockApi = {
       faceEnrolled: false,
       faceCaptureMode: age < 5 ? 'photo' : 'liveness',
       allowedCameras: age < 10 ? ['front', 'back'] : ['front'],
+      dateOfBirth: payload.dateOfBirth,
+      permissions: { independentCheckIn: false, notifyOnCheckIn: true },
+      createdAt: new Date().toISOString(),
+      faceEnrolledAt: null,
     };
     family = [...family, member];
+    pushNotification(`${member.name.split(' ')[0]} added to your family`, 'Set up their face to check in together.', 'family', {
+      type: 'family',
+      personId: member.id,
+    });
     return respond(member);
   },
   removeFamilyMember: (id: string): Promise<OkResponse> => {
@@ -623,6 +656,7 @@ export const mockApi = {
     const now = new Date().toISOString();
     const needsFace = !!member && !member.faceEnrolled && doc?.type !== 'birthCertificate';
     if (needsFace && !(livenessSessionId && payload.sessionToken)) {
+      documents = documents.map((d) => (d.id === documentId ? { ...d, status: 'failed' } : d));
       return respond({
         id: sessionId,
         status: 'completed',
@@ -714,12 +748,11 @@ export const mockApi = {
 
   // ── Face enrollment / update ─────────────────────────────────────────
   enrollFace: (payload: FaceEnrollRequest): Promise<FaceResponse> => {
-    user = { ...user, faceEnrolled: true };
-    // If this is for a family member, mark them as face enrolled
+    const now = new Date().toISOString();
     if (payload.personId) {
-      family = family.map((f) =>
-        f.id === payload.personId ? { ...f, faceEnrolled: true } : f,
-      );
+      family = family.map((f) => (f.id === payload.personId ? { ...f, faceEnrolled: true, faceEnrolledAt: now } : f));
+    } else {
+      user = { ...user, faceEnrolled: true, faceEnrolledAt: now };
     }
     return respond({ ok: true, faceEnrolled: true, faceId: nextId('face') });
   },
