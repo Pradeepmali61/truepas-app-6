@@ -239,7 +239,17 @@ export default function DocumentProcessingScreen() {
         // Network/API failure (not a rejection): stay here with Retry. Keep
         // the scan — Retry re-uploads the same capture.
         const msg = errorText(err);
-        console.error('[DocProcessing] Failed:', msg);
+        // warn, not error: this is handled (Retry is on screen), so it
+        // shouldn't open the dev error overlay. The endpoint, status and
+        // trace id are what the backend team needs for a report.
+        const apiErr = toApiError(err);
+        const url = (err as { config?: { method?: string; url?: string } })?.config;
+        console.warn('[DocProcessing] Failed:', msg, {
+          endpoint: url?.url ? `${url.method?.toUpperCase() ?? ''} ${url.url}` : undefined,
+          status: apiErr.status,
+          code: apiErr.code,
+          traceId: apiErr.traceId,
+        });
         setError(msg);
         setStatus('error');
       }

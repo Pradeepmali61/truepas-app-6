@@ -210,7 +210,9 @@ function baseApiError(error: unknown): ApiError {
     if (status === 503) {
       return {
         code: 'SERVICE_UNAVAILABLE',
-        message: 'Backend service is starting up. Please try again in a moment.',
+        // 503 = the BFF or a service behind it (documents, Regula) is down
+        // or restarting — not something the user did.
+        message: 'Our service is busy right now. Please try again in a moment.',
         status,
         retryable: true,
         traceId,
