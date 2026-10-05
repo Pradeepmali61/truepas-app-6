@@ -12,12 +12,15 @@
  *  - LegalPage: LegalView layout WITHOUT LegalView's hard-coded "short
  *    version" claim, so legal screens only show their own original text.
  *  - applyPinKey: Keypad → PIN string reducer.
+ *  - useSupportContact / timeAgo: server support channels and "3 days ago".
  */
 import Constants from 'expo-constants';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useSupportChannels } from '@/features/account/hooks';
 
 import { ComingSoon } from '../kit';
 import { C, F, R, SH } from '../theme';
@@ -28,11 +31,57 @@ import { Button, Group, ListRow, Row, TopBar, Txt } from '../ui';
 /** Real app version (app.json → expoConfig), same source the legacy ProfileMenu used. */
 export const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
+/** Fallback only — shown while GET /support/channels loads or if it fails. */
 export const SUPPORT_EMAIL = 'support@truepas.com';
 
 /** mailto: support — swallow the rejection when no mail client is configured. */
-export function emailSupport() {
-  void Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() => {});
+export function emailSupport(email: string = SUPPORT_EMAIL) {
+  void Linking.openURL(`mailto:${email}`).catch(() => {});
+}
+
+/** tel: support line (spaces and dashes stripped). */
+export function callSupport(phone: string) {
+  void Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`).catch(() => {});
+}
+
+export function openSupportChat(url: string) {
+  void Linking.openURL(url).catch(() => {});
+}
+
+/**
+ * Support contact from the server (GET /support/channels). Null channels are
+ * hidden; the email falls back to SUPPORT_EMAIL only while the call is
+ * loading or failed, so there is always one way to reach us.
+ */
+export function useSupportContact() {
+  const ch = useSupportChannels().data;
+  return {
+    email: ch ? ch.email : SUPPORT_EMAIL,
+    phone: ch?.phone ?? null,
+    chatUrl: ch?.chatUrl ?? null,
+    hours: ch?.hours ?? null,
+  };
+}
+
+/* ───────────────────────── time ───────────────────────── */
+
+/**
+ * "just now" · "5 minutes ago" · "3 hours ago" · "yesterday" · "4 days ago",
+ * then "on 12 Mar 2026". Empty string for a missing/unparseable timestamp.
+ */
+export function timeAgo(iso?: string | null, now = Date.now()): string {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const mins = Math.max(0, Math.floor((now - t) / 60_000));
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins} minutes ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days} days ago`;
+  return `on ${new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
 
 /* ───────────────────────── coming soon ───────────────────────── */

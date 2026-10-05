@@ -2,8 +2,8 @@
 /**
  * Data & privacy — retention info, deletion rights, consent management (PRD).
  * Face-template status and the consent date come from the signed-in user
- * record. "Download my data" and usage-analytics sharing have no API yet →
- * Coming soon.
+ * record. "Download my data" opens the export screen (/account/export).
+ * Usage-analytics sharing does nothing in the app yet → Coming soon.
  */
 import { BarChart3, Download, FileText, Fingerprint, Lock, ScanFace, Trash2 } from 'lucide-react-native';
 import { View } from 'react-native';
@@ -36,7 +36,13 @@ export default function DataPrivacyScreen() {
       <Heading title="Your" accent="data." sub="What we keep, for how long, and the controls to manage it." />
 
       <Group title="Your data">
-        <SoonRow icon={Download} tone="sky" title="Download my data" sub="Export all your data as ZIP" />
+        <ListRow
+          icon={Download}
+          tone="sky"
+          title="Download my data"
+          sub="Get a copy of your data as a ZIP file"
+          onPress={go('/account/export')}
+        />
         <ListRow
           icon={Trash2}
           danger

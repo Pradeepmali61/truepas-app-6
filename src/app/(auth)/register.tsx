@@ -12,16 +12,19 @@ import { DEFAULT_COUNTRY_CODE } from '@/constants/countries';
 import { useRegister } from '@/features/auth/mutations';
 import { PhoneForm, phoneSchema } from '@/features/auth/schemas';
 import { AuthScreen, CountryCodePicker, FlowBar, LinkRow, SIGNUP_STEPS } from '@/premium/flows/auth';
+import { Banner } from '@/premium/kit';
 import { C, F } from '@/premium/theme';
-import { Button, Field, Heading, Steps, Txt } from '@/premium/ui';
+import { Button, Field, Heading, Steps, TextLink, Txt } from '@/premium/ui';
 
 /** Register — step 1 (contract v1.1.0): POST /cb/auth/register { phone, countryCode }
  *  → registrationId → verify-phone with params. Phone only — name, DOB, PIN,
- *  email and password are collected on account-details after the SMS OTP. */
+ *  email and password are collected on account-details after the SMS OTP.
+ *  409 ACCOUNT_EXISTS (phone already registered) → inline "sign in instead". */
 export default function RegisterScreen() {
   const router = useRouter();
   const { toast } = useToast();
   const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
+  const [accountExists, setAccountExists] = useState(false);
   const register = useRegister();
   const { control, handleSubmit } = useForm<PhoneForm>({
     resolver: zodResolver(phoneSchema),
@@ -32,6 +35,7 @@ export default function RegisterScreen() {
   const onSubmit = handleSubmit(async (values) => {
     if (register.isPending) return;
     const cleanPhone = values.phone.replace(/\D/g, '');
+    setAccountExists(false);
     try {
       const response = await register.mutateAsync({ phone: cleanPhone, countryCode });
       if (!response?.registrationId) {
@@ -47,10 +51,15 @@ export default function RegisterScreen() {
         params: { phone: cleanPhone, countryCode, registrationId: response.registrationId },
       });
     } catch (err: unknown) {
+      const apiErr = toApiError(err);
+      if (apiErr.serverCode === 'ACCOUNT_EXISTS' || apiErr.status === 409) {
+        setAccountExists(true);
+        return;
+      }
       toast({
         variant: 'error',
         title: "Couldn't send code",
-        description: toApiError(err).message || 'Check the number and try again.',
+        description: apiErr.message || 'Check the number and try again.',
       });
     }
   });
@@ -94,7 +103,10 @@ export default function RegisterScreen() {
             placeholder="98765 43210"
             keyboardType="phone-pad"
             value={value}
-            onChangeText={onChange}
+            onChangeText={(v) => {
+              onChange(v);
+              setAccountExists(false);
+            }}
             onBlur={onBlur}
             error={fieldState.error?.message}
             hint="Enter your number without the country code."
@@ -103,6 +115,15 @@ export default function RegisterScreen() {
           />
         )}
       />
+
+      {accountExists && (
+        <Banner
+          tone="warning"
+          title="An account already exists"
+          body="This mobile number is already registered. Sign in instead."
+          action={<TextLink label="Sign in" color={C.amberInk} onPress={() => router.replace('/(auth)/login')} />}
+        />
+      )}
 
       <Txt v="small" style={{ lineHeight: 19 }}>
         By continuing you agree to the{' '}

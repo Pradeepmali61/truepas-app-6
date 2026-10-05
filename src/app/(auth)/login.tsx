@@ -9,6 +9,7 @@ import { toApiError } from '@/api/errors';
 import { DEFAULT_COUNTRY_CODE } from '@/constants/countries';
 import { loginSchema } from '@/features/auth/schemas';
 import { sessionStarted } from '@/features/auth/slice';
+import { formatWait, lockSecondsFrom, useLockCountdown } from '@/features/auth/useLockCountdown';
 import { AuthScreen, CountryCodePicker, LinkRow, PasswordField, Segmented } from '@/premium/flows/auth';
 import { Banner, ComingSoon } from '@/premium/kit';
 import { C } from '@/premium/theme';
@@ -19,11 +20,15 @@ import { isTwoFactorChallenge } from '@/types/domain';
 type IdentifierMode = 'email' | 'phone';
 
 /**
- * Login — POST /auth/login { identifier, password } → AuthResponse.
+ * Login — POST /auth/login { identifier, password } → AuthResponse, or 202
+ * with a 2-step challenge → /(auth)/two-factor.
  * sessionStarted stores tokens + user; the (auth) layout then redirects to
  * consent automatically when faceEnrolled is false.
- * The phone-number normalization, session-expired banner and 429 Retry-After
- * messaging are our real backend contract.
+ *
+ * Errors (backend Oct 2026 §4.2): 401 INVALID_CREDENTIALS always shows the
+ * same generic text (never "account not found"). 429 ACCOUNT_LOCKED comes
+ * back for every attempt while locked, even with the right password, so the
+ * Sign in button stays disabled with a live countdown from retry_after.
  */
 export default function LoginScreen() {
   const router = useRouter();
@@ -39,9 +44,10 @@ export default function LoginScreen() {
   const [passwordError, setPasswordError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const lock = useLockCountdown();
 
   const submit = async () => {
-    if (loading) return;
+    if (loading || lock.locked) return;
     const parsed = loginSchema.safeParse({ identifier, password });
     if (!parsed.success) {
       const fields = parsed.error.flatten().fieldErrors;
@@ -90,11 +96,17 @@ export default function LoginScreen() {
       dispatch(sessionStarted({ user, accessToken, refreshToken }));
     } catch (error) {
       const apiErr = toApiError(error);
-      // Surface the server's Retry-After on 429/lockout so the user knows
-      // when the next attempt will work instead of hammering the button.
-      setFormError(
-        apiErr.retryAfterSeconds ? `${apiErr.message} Try again in ${apiErr.retryAfterSeconds}s.` : apiErr.message,
-      );
+      const lockSecs = apiErr.status === 429 || apiErr.serverCode === 'ACCOUNT_LOCKED' ? lockSecondsFrom(apiErr) : null;
+      if (lockSecs != null) {
+        // Locked: the banner counts down live and the button stays off.
+        setFormError(null);
+        lock.lockFor(lockSecs);
+      } else if (apiErr.serverCode === 'INVALID_CREDENTIALS' || apiErr.status === 401 || apiErr.status === 404) {
+        // Same text for a wrong password and an unknown account.
+        setFormError('Email/phone or password is incorrect.');
+      } else {
+        setFormError(apiErr.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -175,7 +187,15 @@ export default function LoginScreen() {
           autoComplete="current-password"
         />
 
-        {formError ? <Banner tone="error" body={formError} /> : null}
+        {lock.locked ? (
+          <Banner
+            tone="error"
+            title="Too many attempts"
+            body={`Sign-in is paused for your security. Try again in ${formatWait(lock.secondsLeft)}.`}
+          />
+        ) : formError ? (
+          <Banner tone="error" body={formError} />
+        ) : null}
 
         <Row style={{ justifyContent: 'flex-end' }}>
           <TextLink label="Forgot password?" onPress={() => router.push('/(auth)/forgot-password')} />
@@ -187,7 +207,7 @@ export default function LoginScreen() {
           label="Sign in"
           iconRight={ArrowRight}
           loading={loading}
-          disabled={!identifier.trim() || !password}
+          disabled={!identifier.trim() || !password || lock.locked}
           onPress={() => void submit()}
         />
         <Row gap={12}>
@@ -195,7 +215,7 @@ export default function LoginScreen() {
           <Txt v="small">or</Txt>
           <View style={{ flex: 1, height: 1, backgroundColor: C.line }} />
         </Row>
-        {/* Face sign-in has no backend endpoint yet — shown, but inert. */}
+        {/* Face sign-in (§4.5) waits on a security review — shown, but inert. */}
         <View accessibilityState={{ disabled: true }} accessibilityHint="Coming soon">
           <Button label="Sign in with your face" tone="white" icon={ScanFace} disabled />
           <View pointerEvents="none" style={{ position: 'absolute', top: -11, right: 18 }}>

@@ -3,16 +3,18 @@
  * Help & FAQ — static content screen; entry points: liveness failure
  * "Get help", history "How check-in works", and the About page.
  *
- * Search and topic chips filter the FAQ locally (no backend needed). The
- * mockup's chat / call support have no backend → Coming soon; email support
- * is real (mailto).
+ * Search and topic chips filter the FAQ locally (no backend needed).
+ * Contact options come from GET /support/channels: only the channels the
+ * server sets are shown (email → mailto:, phone → tel:, chat → its link,
+ * hours as text). The email falls back to the default address only while
+ * that call loads or fails.
  */
-import { ChevronDown, ChevronRight, CircleHelp, Mail, MessageCircle, Phone, Search, X } from 'lucide-react-native';
+import { ChevronDown, ChevronRight, CircleHelp, Clock, Headset, Mail, MessageCircle, Phone, Search, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, TextInput, View, type TextStyle } from 'react-native';
 
-import { emailSupport } from '@/premium/flows/account';
-import { ComingSoon, EmptyView } from '@/premium/kit';
+import { callSupport, emailSupport, openSupportChat, useSupportContact } from '@/premium/flows/account';
+import { EmptyView } from '@/premium/kit';
 import { C, F, R } from '@/premium/theme';
 import { Button, Card, Chip, Divider, Heading, Row, Screen, Tile, TopBar, Txt } from '@/premium/ui';
 
@@ -59,7 +61,7 @@ const FAQS: { value: string; topic: Topic; title: string; content: string }[] = 
     topic: 'privacy',
     title: 'How do I update my face?',
     content:
-      "Go to Profile → Update face. You'll repeat a quick liveness check so we can be sure it's really you before replacing the enrolled face.",
+      "Go to Security → Update face. Enter your PIN, then repeat a quick liveness check so we can be sure it's really you before replacing the enrolled face.",
   },
 ];
 
@@ -68,6 +70,8 @@ export default function HelpScreen() {
   const [topic, setTopic] = useState<Topic | null>(null);
   // Multiple panels may be open at once (legacy Accordion `multiple`).
   const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const support = useSupportContact();
+  const hasContact = !!(support.email || support.phone || support.chatUrl);
 
   const q = query.trim().toLowerCase();
   const items = FAQS.filter(
@@ -165,36 +169,40 @@ export default function HelpScreen() {
         </Card>
       )}
 
-      <Card style={{ gap: 14 }}>
-        <Row gap={14}>
-          <Tile icon={Mail} tone="sky" size={42} />
-          <View style={{ flex: 1, gap: 2 }}>
-            <Txt v="bodyStrong">Still stuck?</Txt>
-            <Txt v="small">Our support team can help with verification issues.</Txt>
-          </View>
-        </Row>
-        <Button label="Email us" tone="white" size="md" icon={Mail} onPress={emailSupport} />
-      </Card>
-
-      <Row gap={12} align="stretch">
-        {[
-          { icon: MessageCircle, t: 'Chat with us', s: 'Live chat support' },
-          { icon: Phone, t: 'Call us', s: 'Phone support' },
-        ].map((x) => (
-          <View key={x.t} style={{ flex: 1 }} accessibilityState={{ disabled: true }} accessibilityHint="Coming soon">
-            <Card style={{ gap: 12, flex: 1 }}>
-              <View pointerEvents="none" style={{ gap: 12, opacity: 0.55 }}>
-                <Tile icon={x.icon} tone="navy" size={42} />
-                <View>
-                  <Txt v="bodyStrong">{x.t}</Txt>
-                  <Txt v="small">{x.s}</Txt>
-                </View>
-              </View>
-              <ComingSoon />
-            </Card>
-          </View>
-        ))}
-      </Row>
+      {hasContact && (
+        <Card style={{ gap: 14 }}>
+          <Row gap={14}>
+            <Tile icon={Headset} tone="sky" size={42} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Txt v="bodyStrong">Still stuck?</Txt>
+              <Txt v="small">Our support team can help with verification issues.</Txt>
+            </View>
+          </Row>
+          {!!support.hours && (
+            <Row gap={8}>
+              <Clock size={14} color={C.ink3} />
+              <Txt v="small" style={{ flex: 1 }}>
+                {support.hours}
+              </Txt>
+            </Row>
+          )}
+          {!!support.email && (
+            <Button label="Email us" tone="white" size="md" icon={Mail} onPress={() => emailSupport(support.email ?? undefined)} />
+          )}
+          {!!support.phone && (
+            <Button label="Call us" tone="white" size="md" icon={Phone} onPress={() => callSupport(support.phone as string)} />
+          )}
+          {!!support.chatUrl && (
+            <Button
+              label="Chat with us"
+              tone="white"
+              size="md"
+              icon={MessageCircle}
+              onPress={() => openSupportChat(support.chatUrl as string)}
+            />
+          )}
+        </Card>
+      )}
     </Screen>
   );
 }

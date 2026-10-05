@@ -1,17 +1,34 @@
 /** @jsxImportSource react */
 /**
  * About Truepas — brand header (real app version from expo-constants), what
- * Truepas offers, mission, contact (support email) and legal links.
- * "Rate Truepas" has no store listing yet → Coming soon.
+ * Truepas offers, mission, contact and legal links. Contact options come
+ * from GET /support/channels (null channels hidden; the default email shows
+ * only while that call loads or fails). "Rate Truepas" has no store listing
+ * yet → Coming soon.
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import { FileText, Lock, Mail, MapPin, QrCode, ScanFace, Shield, ShieldCheck, Star, Users, type LucideIcon } from 'lucide-react-native';
+import {
+  Clock,
+  FileText,
+  Lock,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+  ScanFace,
+  Shield,
+  ShieldCheck,
+  Star,
+  Users,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Glow, Guilloche, Wordmark } from '@/premium/blocks';
-import { APP_VERSION, emailSupport, SoonRow, SUPPORT_EMAIL } from '@/premium/flows/account';
+import { APP_VERSION, callSupport, emailSupport, openSupportChat, SoonRow, useSupportContact } from '@/premium/flows/account';
 import { useHeroStatusBar } from '@/premium/statusBar';
 import { C, F, G } from '@/premium/theme';
 import { Card, Divider, go, Group, ListRow, Serif, Tile, TopBar, Txt } from '@/premium/ui';
@@ -38,14 +55,14 @@ const FEATURES: { icon: LucideIcon; title: string; desc: string }[] = [
     desc: 'Add family members and manage their identity documents from a single account. Perfect for parents and dependents.',
   },
   {
-    icon: QrCode,
+    icon: Zap,
     title: 'Instant Check-In',
-    desc: 'Share your verified identity with hotels, cruises, theme parks, and more via QR code — skip the front desk queues.',
+    desc: 'Check in at partner hotels, cruises, theme parks and more with a look at the venue kiosk — skip the front desk queues.',
   },
   {
     icon: Lock,
     title: "You're in Control",
-    desc: 'You decide what to share and with whom. Every sharing action requires your PIN and face verification.',
+    desc: 'Sensitive changes need your PIN, and you can see and sign out every device signed in to your account.',
   },
 ];
 
@@ -53,6 +70,7 @@ export default function AboutScreen() {
   // Navy brand header: light status bar until it scrolls out from under it.
   const [headerH, setHeaderH] = useState(300);
   const heroStatusBar = useHeroStatusBar(headerH);
+  const support = useSupportContact();
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} {...heroStatusBar}>
@@ -120,7 +138,22 @@ export default function AboutScreen() {
 
           {/* ---------- contact ---------- */}
           <Group title="Get in touch">
-            <ListRow icon={Mail} tone="sky" title="Email support" sub={SUPPORT_EMAIL} onPress={emailSupport} />
+            {!!support.email && (
+              <ListRow
+                icon={Mail}
+                tone="sky"
+                title="Email support"
+                sub={support.email}
+                onPress={() => emailSupport(support.email ?? undefined)}
+              />
+            )}
+            {!!support.phone && (
+              <ListRow icon={Phone} tone="sky" title="Call support" sub={support.phone} onPress={() => callSupport(support.phone as string)} />
+            )}
+            {!!support.chatUrl && (
+              <ListRow icon={MessageCircle} tone="sky" title="Chat with us" onPress={() => openSupportChat(support.chatUrl as string)} />
+            )}
+            {!!support.hours && <ListRow icon={Clock} tone="sky" title="Support hours" sub={support.hours} chevron={false} />}
             <ListRow icon={MapPin} tone="sky" title="San Francisco, California" chevron={false} />
             <SoonRow icon={Star} tone="sky" title="Rate Truepas" />
           </Group>

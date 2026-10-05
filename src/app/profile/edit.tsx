@@ -25,8 +25,8 @@ function todayIso(): string {
  * read-only with a lock affordance. (The mockup locked the name and opened
  * contact fields — the API contract wins.)
  *
- * Change photo → expo-image-picker → useUploadProfilePicture (backend upload,
- * local fallback while the S3 endpoint is pending).
+ * Change photo → expo-image-picker → useUploadProfilePicture (persons API
+ * upload, with a copy kept on this device as the fallback).
  */
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -90,8 +90,9 @@ export default function EditProfileScreen() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]?.uri) {
-        await uploadProfilePicture(result.assets[0].uri);
-        toast.show('success', 'Profile picture updated');
+        const saved = await uploadProfilePicture(result.assets[0].uri);
+        if (saved.localOnly) toast.show('info', "Couldn't upload your photo. It shows on this phone only for now.");
+        else toast.show('success', 'Profile picture updated');
       }
     } catch {
       toast.show('error', 'Failed to update profile picture. Please try again.');

@@ -4,13 +4,17 @@
  * - Security: App lock (fingerprint / face unlock on open, expo-local-
  *   authentication) and a shortcut to Security & sign-in.
  * - Feedback: Haptics on/off (all vibration goes through services/haptics).
+ * - Check-in: "Face check-in at venues" is the account preference
+ *   faceCheckInEnabled (GET/PUT /user/me/preferences). Off is enforced at the
+ *   kiosk — it refuses face check-in for the account holder.
+ * - Notifications: which alerts you get (/notification/preferences).
  * - Phone permissions: notifications, camera and photos open the system
  *   settings page for Truepas.
- * Then account, support and legal links. Face check-in at venues and
- * languages have no backend yet and stay marked Coming soon.
+ * Then account, support and legal links. Languages stay Coming soon.
  */
 import {
   Bell,
+  BellRing,
   Camera,
   CircleHelp,
   Database,
@@ -28,9 +32,12 @@ import {
 import { useState } from 'react';
 import { Linking, Platform } from 'react-native';
 
+import { toApiError } from '@/api/errors';
+import { usePreferences, useUpdatePreferences } from '@/features/account/hooks';
 import { biometricsAvailable, confirmWithBiometrics, markUnlocked } from '@/features/settings/AppLock';
 import { useToast } from '@/hooks/useToast';
 import { APP_VERSION, SoonSection } from '@/premium/flows/account';
+import { ConfirmSheet } from '@/premium/kit';
 import { C } from '@/premium/theme';
 import { go, Group, Heading, ListRow, Screen, Toggle, TopBar, Txt } from '@/premium/ui';
 import { selectHaptic } from '@/services/haptics';
@@ -41,7 +48,22 @@ export default function SettingsScreen() {
   const appLock = usePref('appLock');
   const haptics = usePref('haptics');
   const [busy, setBusy] = useState(false);
+  const [confirmFaceOff, setConfirmFaceOff] = useState(false);
   const native = Platform.OS !== 'web';
+  const prefs = usePreferences();
+  const updatePrefs = useUpdatePreferences();
+  const faceCheckIn = prefs.data?.faceCheckInEnabled;
+
+  const setFaceCheckIn = async (next: boolean) => {
+    try {
+      await updatePrefs.mutateAsync({ faceCheckInEnabled: next });
+      toast.show('success', next ? 'Face check-in is on' : 'Face check-in is off');
+    } catch (err) {
+      toast.show('error', toApiError(err).message || "Couldn't save. Please try again.");
+    } finally {
+      setConfirmFaceOff(false);
+    }
+  };
 
   const toggleAppLock = async (next: boolean) => {
     if (busy) return;
@@ -101,13 +123,47 @@ export default function SettingsScreen() {
         />
       </Group>
 
+      <Group title="Check-in">
+        <ListRow
+          icon={ScanFace}
+          tone="sky"
+          title="Face check-in at venues"
+          sub={
+            prefs.isError && faceCheckIn == null
+              ? "Couldn't load — tap to try again"
+              : faceCheckIn === false
+                ? "Off — venue kiosks won't check you in with your face"
+                : 'Venue kiosks can check you in with your face'
+          }
+          chevron={false}
+          onPress={prefs.isError && faceCheckIn == null ? () => void prefs.refetch() : undefined}
+          trailing={
+            <Toggle
+              on={!!faceCheckIn}
+              disabled={faceCheckIn == null || updatePrefs.isPending}
+              onChange={(v) => (v ? void setFaceCheckIn(true) : setConfirmFaceOff(true))}
+              label="Face check-in at venues"
+            />
+          }
+        />
+      </Group>
+
+      <Group title="Notifications">
+        <ListRow
+          icon={BellRing}
+          tone="sky"
+          title="Notification preferences"
+          sub="Choose which alerts you get"
+          onPress={go('/notification/preferences')}
+        />
+      </Group>
+
       <Group title="Phone permissions">
-        <ListRow icon={Bell} tone="sky" title="Notifications" sub="Check-in and family alerts" onPress={openPhoneSettings} />
+        <ListRow icon={Bell} tone="sky" title="Notifications" sub="Allow alerts in your phone settings" onPress={openPhoneSettings} />
         <ListRow icon={Camera} tone="sky" title="Camera & photos" sub="Face scans, documents and family photos" onPress={openPhoneSettings} />
       </Group>
 
       <SoonSection title="On the way">
-        <ListRow icon={ScanFace} tone="sky" title="Face check-in at venues" sub="Check in with a look at partner venues" trailing={<Toggle />} />
         <ListRow icon={Languages} title="Language" value="English" />
       </SoonSection>
 
@@ -127,6 +183,17 @@ export default function SettingsScreen() {
       <Txt v="small" color={C.ink4} center>
         Truepas {APP_VERSION}
       </Txt>
+
+      <ConfirmSheet
+        visible={confirmFaceOff}
+        icon={ScanFace}
+        title="Turn off face check-in?"
+        body="Venue kiosks will refuse to check you in with your face until you turn this back on. Your enrolled face isn't deleted."
+        confirmLabel="Turn off"
+        loading={updatePrefs.isPending}
+        onCancel={() => setConfirmFaceOff(false)}
+        onConfirm={() => void setFaceCheckIn(false)}
+      />
     </Screen>
   );
 }

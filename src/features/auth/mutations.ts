@@ -18,6 +18,7 @@ import type {
     Notification,
     RegisterRequest,
     ResetPasswordRequest,
+    ResetPinRequest,
     UpdateProfileRequest,
     VerificationSessionRequest,
     VerifyOtpRequest
@@ -58,6 +59,13 @@ export function useForgotPassword() {
 export function useResetPassword() {
   return useMutation({
     mutationFn: (payload: ResetPasswordRequest) => api.resetPassword(payload),
+  });
+}
+
+/** Forgot PIN (backend §4.6): forgot-password → verify-otp (password_reset) → this. */
+export function useResetPin() {
+  return useMutation({
+    mutationFn: (payload: ResetPinRequest) => api.resetPin(payload),
   });
 }
 

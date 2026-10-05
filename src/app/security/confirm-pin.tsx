@@ -1,47 +1,37 @@
 /** @jsxImportSource react */
-import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LogOut } from 'lucide-react-native';
-import { useState } from 'react';
 import { View } from 'react-native';
 
 import { isMockApi } from '@/api';
 import { MOCK_PIN } from '@/api/mock';
-import { sessionEnded } from '@/features/auth/slice';
 import { PIN_LENGTH, usePinVerification } from '@/features/auth/usePinVerification';
 import { formatCountdown } from '@/hooks/useCountdown';
 import { Keypad } from '@/premium/blocks';
 import { applyPinKey } from '@/premium/flows/account';
-import { Banner, CodeInput, ConfirmSheet } from '@/premium/kit';
+import { Banner, CodeInput } from '@/premium/kit';
 import { C } from '@/premium/theme';
 import { Button, Heading, Screen, Steps, TextLink, TopBar, Txt } from '@/premium/ui';
 import { pinStore } from '@/services/pinStore';
-import { useAppDispatch } from '@/store';
 
 /**
  * Re-auth PIN gate shown before sensitive actions (change password / change
  * PIN). Verifies the CURRENT PIN via POST /auth/verify-pin, then replaces to
  * the `next` route passed as a query param. The verified PIN is stashed in
  * pinStore (not a route param — params can leak into logs) for change-pin's
- * currentPin. The attempt lockout and Forgot-PIN escape hatch are real
- * backend contract features.
+ * currentPin. The attempt lockout is the real backend contract; "Forgot
+ * PIN?" runs the email reset-PIN flow (/security/forgot-pin, §4.6) without
+ * signing out, then reopens this gate for the same `next`.
  */
 export default function ConfirmPinScreen() {
   const router = useRouter();
   const { next } = useLocalSearchParams<{ next?: string }>();
   const gate = usePinVerification();
-  const dispatch = useAppDispatch();
-  const queryClient = useQueryClient();
-  const [confirmForgot, setConfirmForgot] = useState(false);
 
-  // PIN can't be recovered in-app — the only way back is an email password
-  // reset, which ends this session first.
-  const signOutAndReset = () => {
-    setConfirmForgot(false);
+  // Replace (not push) so a locked gate isn't left underneath — forgot-pin
+  // opens a fresh gate when it's done.
+  const forgotPin = () => {
     pinStore.clear();
-    queryClient.clear();
-    dispatch(sessionEnded());
-    router.replace('/(auth)/forgot-password' as never);
+    router.replace({ pathname: '/security/forgot-pin', params: next ? { next } : {} } as never);
   };
 
   const submit = async (value?: string) => {
@@ -115,7 +105,7 @@ export default function ConfirmPinScreen() {
       ) : null}
 
       <View style={{ alignItems: 'center' }}>
-        <TextLink label="Forgot PIN?" onPress={() => setConfirmForgot(true)} />
+        <TextLink label="Forgot PIN?" onPress={forgotPin} />
       </View>
 
       {__DEV__ && isMockApi() && (
@@ -123,17 +113,6 @@ export default function ConfirmPinScreen() {
           Demo PIN: {MOCK_PIN}
         </Txt>
       )}
-
-      <ConfirmSheet
-        visible={confirmForgot}
-        danger
-        icon={LogOut}
-        title="Forgot PIN?"
-        body="You'll be signed out. Reset your password via email to sign back in."
-        confirmLabel="Sign out & reset"
-        onCancel={() => setConfirmForgot(false)}
-        onConfirm={signOutAndReset}
-      />
     </Screen>
   );
 }

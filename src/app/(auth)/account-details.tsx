@@ -6,13 +6,15 @@ import { useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { View } from 'react-native';
 
-import { getRegistrationToken } from '@/api/client';
+import { clearRegistrationToken, getRegistrationToken } from '@/api/client';
 import { toApiError } from '@/api/errors';
 import { useToast } from '@/components/composite/Toast';
 import { useCompleteAccountDetails } from '@/features/auth/mutations';
 import { AccountDetailsForm, accountDetailsSchema } from '@/features/auth/schemas';
 import { AuthScreen, DateField, FlowBar, PasswordField, PinField, SIGNUP_STEPS } from '@/premium/flows/auth';
-import { Button, Field, Heading, Steps, Txt } from '@/premium/ui';
+import { Banner } from '@/premium/kit';
+import { C } from '@/premium/theme';
+import { Button, Field, Heading, Steps, TextLink, Txt } from '@/premium/ui';
 import { accountDetailsStore } from '@/services/accountDetailsStore';
 import type { AccountDetailsRequest } from '@/types/domain';
 import { ADULT_AGE } from '@/utils/age';
@@ -38,19 +40,21 @@ const samePayload = (a: AccountDetailsRequest, b: AccountDetailsRequest) =>
   (Object.keys(a) as (keyof AccountDetailsRequest)[]).every((k) => a[k] === b[k]);
 
 /** Register — account details + PIN + email + password (contract v1.1.0).
- *  After submission, navigates to verify-email (NOT sessionStarted). */
+ *  After submission, navigates to verify-email (NOT sessionStarted).
+ *  409 ACCOUNT_EXISTS (email taken) → field error + "sign in instead". */
 export default function AccountDetailsScreen() {
   const router = useRouter();
   const { toast } = useToast();
   const [confirmPin, setConfirmPin] = useState('');
   const [confirmPinError, setConfirmPinError] = useState<string | undefined>();
+  const [accountExists, setAccountExists] = useState(false);
   const completeAccount = useCompleteAccountDetails();
   // This step submits with the in-memory registration token issued by phone
   // OTP verification — a deep link without it can only dead-end, so bounce
   // back to register.
   const [hasRegistrationToken] = useState(() => getRegistrationToken() !== null);
 
-  const { control, handleSubmit } = useForm<AccountDetailsForm>({
+  const { control, handleSubmit, setError } = useForm<AccountDetailsForm>({
     resolver: zodResolver(accountDetailsSchema),
     defaultValues: { fullName: '', dateOfBirth: '', pin: '', email: '', password: '', confirmPassword: '' },
   });
@@ -107,6 +111,16 @@ export default function AccountDetailsScreen() {
         status: apiErr.status,
         traceId: apiErr.traceId,
       });
+      if (apiErr.serverCode === 'ACCOUNT_EXISTS' || apiErr.status === 409) {
+        setAccountExists(true);
+        setError('email', { message: 'An account already exists with this email.' });
+        toast({
+          variant: 'error',
+          title: 'An account already exists',
+          description: 'Sign in instead, or use a different email.',
+        });
+        return;
+      }
       toast({
         variant: 'error',
         title: "Couldn't save details",
@@ -210,7 +224,10 @@ export default function AccountDetailsScreen() {
               placeholder="you@example.com"
               keyboardType="email-address"
               value={value}
-              onChangeText={onChange}
+              onChangeText={(v) => {
+                onChange(v);
+                setAccountExists(false);
+              }}
               error={fieldState.error?.message}
               hint="We'll email you a code to confirm it."
               inputProps={{ autoCapitalize: 'none', autoCorrect: false, autoComplete: 'email', textContentType: 'emailAddress' }}
@@ -246,6 +263,25 @@ export default function AccountDetailsScreen() {
           )}
         />
       </View>
+
+      {accountExists && (
+        <Banner
+          tone="warning"
+          title="An account already exists"
+          body="This email is already registered. Sign in instead."
+          action={
+            <TextLink
+              label="Sign in"
+              color={C.amberInk}
+              onPress={() => {
+                clearRegistrationToken();
+                accountDetailsStore.clear();
+                router.replace('/(auth)/login');
+              }}
+            />
+          }
+        />
+      )}
     </AuthScreen>
   );
 }
