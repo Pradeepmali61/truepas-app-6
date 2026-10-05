@@ -36,6 +36,7 @@ import {
   PremiumFinishingStage as FinishingStage,
   PremiumLivenessResultStage as LivenessResultStage,
 } from '@/premium/flows/face';
+import { uprightFrame } from '@/features/liveness/frame';
 import { useLivenessSession } from '@/features/liveness/useLivenessSession';
 import { flowGuards } from '@/services/flowGuards';
 import { hasReauthToken } from '@/services/reauth';
@@ -398,9 +399,20 @@ export function LivenessCamera({
 
       // Send the captured file straight into multipart FormData - no base64
       // round-trip (a high-res frame as a base64 string spikes memory).
-      const fileUri = photoFile.filePath.startsWith('file://')
+      const rawUri = photoFile.filePath.startsWith('file://')
         ? photoFile.filePath
         : `file://${photoFile.filePath}`;
+      // This frame becomes the enrolled face that documents are matched
+      // against: send it upright, and log exactly what goes up (frame.ts).
+      const frame = await uprightFrame(rawUri);
+      console.log(
+        '[FaceCapture] frame',
+        frame.before,
+        frame.after ? `→ ${frame.after}` : '',
+        `(${frame.note})`,
+        `camera=${cameraPosition} mode=${mode}${personId ? ' member' : ''}`,
+      );
+      const fileUri = frame.uri;
       capturedUri.current = fileUri;
 
       console.log('[Liveness] Calling finalize API...');
@@ -424,7 +436,7 @@ export function LivenessCamera({
     } finally {
       setCapturing(false);
     }
-  }, [capturing, liveness, failWithCooldown, photoOutput]);
+  }, [capturing, liveness, failWithCooldown, photoOutput, cameraPosition, mode, personId]);
 
   // Enroll/update the face with the liveness session credentials.
   // Per guide §5.2: send only livenessSessionId + sessionToken + personId.

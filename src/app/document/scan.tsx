@@ -13,6 +13,7 @@ import {
     isRegulaAvailable,
     scanDocument,
 } from '@/features/documents/regulaScanner';
+import { imageLabel } from '@/features/documents/verifyLog';
 import { DocScanView, ScanPill, type ScanFrameSize } from '@/premium/DocScanView';
 import { docMeta } from '@/premium/flows/documents';
 import { C } from '@/premium/theme';
@@ -256,6 +257,9 @@ export default function DocumentScanScreen() {
         setStep(skipSelfie ? 'done' : 'selfie');
       } else if (step === 'selfie') {
         setSelfieImage(base64);
+        // Display only: the backend matches the document against the
+        // enrolled face (liveness), not this photo — it is never uploaded.
+        console.log('[DocScan] selfie', imageLabel(base64), '(kept on the phone, not sent)');
         setStep('done');
       }
     } catch {
