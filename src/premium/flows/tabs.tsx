@@ -72,6 +72,15 @@ export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
         pointerEvents="box-none"
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: insets.bottom + 10, paddingHorizontal: 16 }}
       >
+        {/* Canvas behind the floating bar, down through the system nav area,
+            so scrolled content doesn't show in the gap under the pill. Fades
+            in above the bar so the page still reads as running underneath. */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(246,248,250,0)', C.canvas, C.canvas]}
+          locations={[0, 0.4, 1]}
+          style={[StyleSheet.absoluteFill, { top: -28 }]}
+        />
         <View
           style={[
             {
