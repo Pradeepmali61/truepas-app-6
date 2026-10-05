@@ -505,7 +505,9 @@ const TABS: { key: TabKey; label: string; icon: LucideIcon; href: string }[] = [
   { key: "profile", label: "Family", icon: Users, href: "/family" },
 ];
 
-export const TAB_BAR_SPACE = 110;
+/** Scroll padding under the floating tab bar: bar (68) + gap (10) + the
+ *  Android 3-button nav inset (~48) + air. */
+export const TAB_BAR_SPACE = 130;
 
 export function TabBar({ active }: { active: TabKey }) {
   const insets = useSafeAreaInsets();

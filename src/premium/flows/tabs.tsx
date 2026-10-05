@@ -70,7 +70,7 @@ export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
     <>
       <View
         pointerEvents="box-none"
-        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: Math.max(insets.bottom, 12), paddingHorizontal: 16 }}
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: insets.bottom + 10, paddingHorizontal: 16 }}
       >
         <View
           style={[
