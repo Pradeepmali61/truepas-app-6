@@ -148,7 +148,7 @@ export default function DocumentDetailScreen() {
                     flipped={isFlipped}
                     height={CARD_H}
                     scanUri={serverFront ?? scanImageUri}
-                    front={
+                    front={(h) => (
                       <DocumentCard
                         type={d.type}
                         label={d.label}
@@ -157,9 +157,9 @@ export default function DocumentDetailScreen() {
                         holder={d.extractedName}
                         expiresAt={expires}
                         issuer={(isLicense ? d.issuingState : d.nationality) || null}
-                        height={CARD_H}
+                        height={h}
                       />
-                    }
+                    )}
                   />
                   <Row gap={10}>
                     <View style={{ flex: 1 }}>

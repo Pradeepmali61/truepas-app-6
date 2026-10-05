@@ -107,7 +107,7 @@ export default function DocumentVerifiedScreen() {
           height={200}
           scanUri={scanUri}
           style={{ alignSelf: 'stretch' }}
-          front={
+          front={(h) => (
             <DocumentCard
               type={docType || (isLicense ? 'drivingLicense' : 'passport')}
               label={title}
@@ -116,9 +116,9 @@ export default function DocumentVerifiedScreen() {
               holder={extractedName || null}
               expiresAt={dateOfExpiry ? dateOfExpiry.split('T')[0] : null}
               issuer={(isLicense ? issuingState : nationality) || null}
-              height={200}
+              height={h}
             />
-          }
+          )}
         />
         <Button
           size="sm"

@@ -228,8 +228,13 @@ export function DocumentCard({
 
 /**
  * Card ↔ captured scan. Same spring + rotateY/backface pattern the original
- * verified/[id] screens used; the captured photo lives on-device (keyed by
- * docId) because the backend doesn't return it.
+ * verified/[id] screens used.
+ *
+ * Once the scan has loaded, BOTH sides take the scan's shape: the frame is
+ * the card's width and the scan's height-for-that-width. The scan then fills
+ * it exactly (no crop, no stretch, no filler), and flipping never changes the
+ * height, so the page below doesn't jump. `front` can be a function of that
+ * height so the credential card matches it.
  */
 export function FlipCard({
   flipped,
@@ -239,11 +244,15 @@ export function FlipCard({
   style,
 }: {
   flipped: boolean;
-  front: ReactNode;
+  front: ReactNode | ((height: number) => ReactNode);
   scanUri?: string | null;
   height?: number;
   style?: StyleProp<ViewStyle>;
 }) {
+  const [width, setWidth] = useState(0);
+  const [ratio, setRatio] = useState<number | null>(null);
+  const frameHeight =
+    scanUri && width > 0 && ratio ? Math.min(Math.max(Math.round(width / ratio), height * 0.75), height * 1.6) : height;
   const [anim] = useState(() => new Animated.Value(0));
   useEffect(() => {
     Animated.spring(anim, { toValue: flipped ? 1 : 0, useNativeDriver: true, friction: 8, tension: 10 }).start();
@@ -252,18 +261,18 @@ export function FlipCard({
   const backRot = anim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
 
   return (
-    <View style={[{ height }, style]}>
+    <View style={[{ height: frameHeight }, style]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       <Animated.View
         accessibilityElementsHidden={flipped}
         importantForAccessibility={flipped ? 'no-hide-descendants' : 'auto'}
         style={{
-          height,
+          height: frameHeight,
           transform: [{ perspective: 1000 }, { rotateY: frontRot }],
           backfaceVisibility: 'hidden',
           zIndex: flipped ? 0 : 1,
         }}
       >
-        {front}
+        {typeof front === 'function' ? front(frameHeight) : front}
       </Animated.View>
       <Animated.View
         accessibilityElementsHidden={!flipped}
@@ -283,20 +292,18 @@ export function FlipCard({
         ]}
       >
         {scanUri ? (
-          <>
-            {/* The frame keeps the card's height (no layout jump on flip).
-                A blurred copy of the scan fills it edge to edge and the scan
-                itself sits on top whole — nothing cropped or stretched. */}
-            <Image source={{ uri: scanUri }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={24} cachePolicy="memory" />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(1,27,39,0.18)' }]} />
-            <Image
-              source={{ uri: scanUri }}
-              style={StyleSheet.absoluteFill}
-              contentFit="contain"
-              cachePolicy="memory"
-              accessibilityLabel="Document scan"
-            />
-          </>
+          <Image
+            source={{ uri: scanUri }}
+            style={StyleSheet.absoluteFill}
+            // The frame already has the scan's shape, so cover fills it exactly.
+            contentFit="cover"
+            cachePolicy="memory"
+            accessibilityLabel="Document scan"
+            onLoad={(e) => {
+              const { width: w, height: h } = e.source;
+              if (w > 0 && h > 0) setRatio(w / h);
+            }}
+          />
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <FileText size={34} color={C.ink4} strokeWidth={1.6} />
