@@ -1,7 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import { api } from '@/api';
-import type { AddDocumentRequest, SupportedDocumentType } from '@/types/domain';
+import { accountKeys } from '@/features/account/hooks';
+import type { AddDocumentRequest, DocumentType, SupportedDocumentType } from '@/types/domain';
 
 export const documentKeys = {
   all: ['documents'] as const,
@@ -81,6 +83,43 @@ export function allowedDocumentTypes(types: SupportedDocumentType[], age?: numbe
       (t.minAge == null || a >= t.minAge) &&
       (t.maxAge == null || a <= t.maxAge),
   );
+}
+
+/** Picker order used when GET /documents/types/supported fails. */
+export const FALLBACK_DOCUMENT_TYPES: DocumentType[] = ['passport', 'drivingLicense', 'idCard', 'greenCard', 'birthCertificate', 'usVisa'];
+
+export interface DocumentTypeOption {
+  type: DocumentType;
+  /** Server label — absent on the fallback list. */
+  label?: string;
+}
+
+/**
+ * The types a person can add: supported types filtered by age (§6.1), or the
+ * hard-coded list when the request fails. `age`: undefined = adult,
+ * null = unknown (no age filter). `options` is undefined while loading.
+ */
+export function useDocumentTypeOptions(age?: number | null) {
+  const q = useSupportedDocumentTypes();
+  const options = useMemo<DocumentTypeOption[] | undefined>(() => {
+    if (q.data) {
+      const list = age === null ? q.data : allowedDocumentTypes(q.data, age);
+      return list.map((t) => ({ type: t.type, label: t.label }));
+    }
+    if (q.isError) return FALLBACK_DOCUMENT_TYPES.map((type) => ({ type }));
+    return undefined;
+  }, [q.data, q.isError, age]);
+  return { options, isPending: options === undefined, isFallback: !q.data && q.isError };
+}
+
+/** After a verify: refetch documents (the server drops older verified docs of
+ *  the same type on approval, §6.5), identity, score, activity and images. */
+export function refreshAfterVerify(queryClient: QueryClient, documentId?: string) {
+  queryClient.invalidateQueries({ queryKey: documentKeys.all });
+  queryClient.invalidateQueries({ queryKey: ['identity'] });
+  queryClient.invalidateQueries({ queryKey: accountKeys.securityScore });
+  queryClient.invalidateQueries({ queryKey: accountKeys.activity });
+  if (documentId) queryClient.invalidateQueries({ queryKey: documentKeys.images(documentId) });
 }
 
 /** Signed, expiring image URLs — staleTime stays short so they're refetched

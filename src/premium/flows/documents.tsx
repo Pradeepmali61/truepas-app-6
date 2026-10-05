@@ -21,6 +21,7 @@ import {
   type LucideIcon,
   ScanFace,
   ScrollText,
+  UserRound,
   X,
 } from 'lucide-react-native';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -28,9 +29,10 @@ import { Animated, Easing, StyleSheet, Text, View, type StyleProp, type ViewStyl
 import Svg, { Circle } from 'react-native-svg';
 
 import { Guilloche } from '@/premium/blocks';
+import { Bone } from '@/premium/kit';
 import { C, F, R, SH } from '@/premium/theme';
 import { Badge, type BadgeTone, Card, Row, Txt } from '@/premium/ui';
-import type { DocumentType } from '@/types/domain';
+import type { DocumentImages, DocumentType } from '@/types/domain';
 
 /* ───────────────────────── type metadata ───────────────────────── */
 
@@ -82,8 +84,6 @@ export function statusBadge(status?: string | null, onDark?: boolean): StatusBad
       return { label: 'Approved', tone: onDark ? 'glass' : 'green', icon: ScanFace };
     case 'pending':
       return { label: 'Pending', tone: 'amber', dot: true };
-    case 'review':
-      return { label: 'In review', tone: 'amber', dot: true };
     case 'failed':
       return { label: 'Failed', tone: 'red', dot: true };
     case 'rejected':
@@ -122,6 +122,16 @@ export function prettyDate(v?: string | null): string {
   const p = ymd(v);
   if (!p || p.d == null) return v;
   return `${p.d} ${MONTHS[p.m - 1]} ${p.y}`;
+}
+
+/** "12 Mar 2026" for an ISO timestamp in the user's time zone (date-only
+ *  strings as in prettyDate); "—" when empty. */
+export function localDay(v?: string | null): string {
+  if (!v) return '—';
+  if (!/T\d/.test(v)) return prettyDate(v);
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return prettyDate(v);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 /** Match score → whole percent. The BFF sends 0–1; tolerate 0–100 too. */
@@ -272,7 +282,13 @@ export function FlipCard({
         ]}
       >
         {scanUri ? (
-          <Image source={{ uri: scanUri }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel="Captured document scan" />
+          <Image
+            source={{ uri: scanUri }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            cachePolicy="memory"
+            accessibilityLabel="Document scan"
+          />
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <FileText size={34} color={C.ink4} strokeWidth={1.6} />
@@ -283,6 +299,70 @@ export function FlipCard({
         )}
       </Animated.View>
     </View>
+  );
+}
+
+/* ───────────────────────── document images ───────────────────────── */
+
+const IMAGE_PARTS: { key: keyof DocumentImages; label: string; icon: LucideIcon; fit: 'cover' | 'contain' }[] = [
+  { key: 'front', label: 'Front', icon: FileText, fit: 'cover' },
+  { key: 'back', label: 'Back', icon: FileText, fit: 'cover' },
+  { key: 'selfie', label: 'Selfie', icon: ScanFace, fit: 'contain' },
+  { key: 'portrait', label: 'Photo on document', icon: UserRound, fit: 'contain' },
+];
+
+/**
+ * GET /documents/{id}/images as a 2×2 grid — front, back, selfie, portrait.
+ * Each part is a signed, expiring URL or null (placeholder). Images are kept
+ * in memory only, never in the disk cache.
+ */
+export function DocumentImageGrid({ images, loading }: { images?: DocumentImages | null; loading?: boolean }) {
+  const tile = (p: (typeof IMAGE_PARTS)[number]) => {
+    const url = images?.[p.key]?.url;
+    return (
+      <View key={p.key} style={{ flex: 1, gap: 6 }}>
+        {loading && !images ? (
+          <Bone h={96} r={R.md} />
+        ) : (
+          <View
+            style={{
+              height: 96,
+              borderRadius: R.md,
+              overflow: 'hidden',
+              backgroundColor: C.sunken,
+              borderWidth: 1,
+              borderColor: C.lineSoft,
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+            }}>
+            {url ? (
+              <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit={p.fit} cachePolicy="memory" accessibilityLabel={p.label} />
+            ) : (
+              <>
+                <p.icon size={22} color={C.ink4} strokeWidth={1.6} />
+                <Txt v="small" color={C.ink4}>
+                  Not available
+                </Txt>
+              </>
+            )}
+          </View>
+        )}
+        <Txt v="small" color={C.ink3} style={{ marginLeft: 2 }}>
+          {p.label}
+        </Txt>
+      </View>
+    );
+  };
+  return (
+    <Card pad={14} style={{ gap: 12 }}>
+      <Row gap={12} align="flex-start">
+        {IMAGE_PARTS.slice(0, 2).map(tile)}
+      </Row>
+      <Row gap={12} align="flex-start">
+        {IMAGE_PARTS.slice(2).map(tile)}
+      </Row>
+    </Card>
   );
 }
 

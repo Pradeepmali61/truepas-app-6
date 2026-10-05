@@ -3,7 +3,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Camera, ScanLine, Zap, ZapOff } from 'lucide-react-native';
+import { Camera, RotateCcw, ScanLine, Zap, ZapOff } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from 'react-native';
 
@@ -25,22 +25,22 @@ type ScanStep = 'front' | 'selfie' | 'done';
  *  Document capture uses the Regula Document Reader native scanner (edge
  *  detection, auto-capture, perspective-corrected cropping) when the native
  *  modules are present, falling back to the manual expo-camera flow in Expo Go.
- *  Selfie capture always uses expo-camera.
- *  Per REACT_NATIVE_KYC_INTEGRATION_GUIDE.md §6:
- *  - Capture frontImageBase64 (required)
- *  - Capture selfieImageBase64 (for face match on portrait documents)
- *  - Images sent as base64 in the /verify call (NOT as object keys)
- *  - Regula runs server-side for OCR + authenticity + face match
+ *  Selfie capture always uses expo-camera. The scanner opens by itself the
+ *  first time it is ready; if it fails to start, the page offers Retry or the
+ *  camera instead.
+ *  The captures go to document/processing via scanStore, which uploads them
+ *  through presigned URLs (BACKEND_UPDATE_2026-10 §6.2); Regula runs
+ *  server-side for OCR + authenticity + face match.
+ *  `retake` param (set by the result screens): reset to a fresh capture.
  *  Family mode: when `family` param is set, routes to family/add/processing
  *  after capture instead of the user document processing screen. Birth
  *  certificates (0-4) skip the selfie step — no portrait, no face match. */
 export default function DocumentScanScreen() {
   const router = useRouter();
   const { width: winW } = useWindowDimensions();
-  const { type, label, number, expiresAt, family, personId, name, dob, relationship, band } = useLocalSearchParams<{
+  const { type, label, expiresAt, family, personId, name, dob, relationship, band, retake } = useLocalSearchParams<{
     type?: string;
     label?: string;
-    number?: string;
     expiresAt?: string;
     family?: string;
     personId?: string;
@@ -48,6 +48,7 @@ export default function DocumentScanScreen() {
     dob?: string;
     relationship?: string;
     band?: string;
+    retake?: string;
   }>();
   const isFamilyMode = family === '1';
   const isDocOnly = type === 'birthCertificate' || band === '0-4';
@@ -66,6 +67,17 @@ export default function DocumentScanScreen() {
   const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
   const [torch, setTorch] = useState(false);
 
+  // A result screen sent the user back here to retake: start a fresh capture
+  // (state adjusted during render when the param changes).
+  const [seenRetake, setSeenRetake] = useState(retake);
+  if (retake !== seenRetake) {
+    setSeenRetake(retake);
+    setFrontImage(null);
+    setFrontPreview(null);
+    setSelfieImage(null);
+    setStep('front');
+  }
+
   // Frame dimensions shown on the camera overlay (manual fallback path only).
   // The SAME objects are passed to DocScanView, which centres the frame in the
   // camera view — the crop math in handleCapture depends on that. The Regula
@@ -81,10 +93,14 @@ export default function DocumentScanScreen() {
 
   // ── Regula native scanner state ──────────────────────────────────────────
   const regulaAvailable = useMemo(() => isRegulaAvailable(), []);
-  const [useRegula] = useState(regulaAvailable);
+  // False → the manual expo-camera flow ("Use camera instead").
+  const [useRegula, setUseRegula] = useState(regulaAvailable);
   const [regulaReady, setRegulaReady] = useState(false);
+  const [regulaInitFailed, setRegulaInitFailed] = useState(false);
   const [regulaBusy, setRegulaBusy] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  // Open the native scanner by itself only the first time it becomes ready.
+  const autoOpened = useRef(false);
 
   // Request permission on mount if not yet determined
   useEffect(() => {
@@ -93,16 +109,25 @@ export default function DocumentScanScreen() {
     }
   }, [permission, requestPermission]);
 
-  // Initialize Regula on mount (native builds only)
-  useEffect(() => {
-    if (!regulaAvailable) return;
+  // Initialize Regula (native builds only). initializeRegula times out after
+  // 20 s and can be retried; a failure shows Retry / Use camera instead.
+  const initRegula = () =>
     initializeRegula()
       .then(() => setRegulaReady(true))
       .catch((e: any) => {
         console.error('[Scan] Regula init failed:', e?.message);
-        setScanError(e?.message ?? 'Document scanner failed to initialize');
+        setRegulaInitFailed(true);
       });
+
+  useEffect(() => {
+    if (!regulaAvailable) return;
+    void initRegula();
   }, [regulaAvailable]);
+
+  const retryRegulaInit = () => {
+    setRegulaInitFailed(false);
+    void initRegula();
+  };
 
   // ── Regula scan (native scanner UI) ──────────────────────────────────────
   const handleRegulaScan = async () => {
@@ -118,11 +143,24 @@ export default function DocumentScanScreen() {
     } catch (e: any) {
       if (e instanceof RegulaScanCancelled) return; // user closed the scanner
       console.error('[Scan] Regula scan failed:', e?.message);
-      setScanError(e?.message ?? 'Scan failed. Please try again.');
+      setScanError("The scan didn't work. Please try again.");
     } finally {
       setRegulaBusy(false);
     }
   };
+
+  // First time the scanner is ready (and the camera is allowed), open it —
+  // the button stays for re-scans. Short delay so the page renders first.
+  const cameraAllowed = !!permission?.granted;
+  useEffect(() => {
+    if (autoOpened.current || !regulaReady || !useRegula || !cameraAllowed || step !== 'front') return;
+    const t = setTimeout(() => {
+      autoOpened.current = true;
+      void handleRegulaScan();
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regulaReady, useRegula, cameraAllowed, step]);
 
   // ── Manual expo-camera capture (fallback path) ───────────────────────────
   const handleCapture = async () => {
@@ -255,7 +293,6 @@ export default function DocumentScanScreen() {
       params: {
         type: type ?? 'passport',
         label: label ?? '',
-        number: number ?? '',
         expiresAt: expiresAt ?? '',
       },
     });
@@ -399,6 +436,29 @@ export default function DocumentScanScreen() {
   const facing = isFront ? 'back' : 'front';
 
   // ── Regula native scanner UI (front step) ────────────────────────────────
+  if (showRegulaUI && regulaInitFailed) {
+    // The scanner didn't start (error or 20 s timeout): retry, or capture
+    // with the camera instead.
+    return (
+      <DocScanView
+        topTitle={scanTitle}
+        title="Scanner didn't start"
+        hint="Try again, or take the photo with your camera."
+        onBack={close}
+        topRight={null}
+        frame={FRONT_FRAME}
+        status="Scanner unavailable"
+        statusTone="red"
+        footer={
+          <View style={{ gap: 12 }}>
+            <Button label="Retry" icon={RotateCcw} onPress={retryRegulaInit} />
+            <Button label="Use camera instead" tone="glass" icon={Camera} onPress={() => setUseRegula(false)} />
+          </View>
+        }
+      />
+    );
+  }
+
   if (showRegulaUI) {
     return (
       <DocScanView

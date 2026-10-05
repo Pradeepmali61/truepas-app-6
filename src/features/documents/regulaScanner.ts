@@ -64,8 +64,21 @@ export function isRegulaAvailable(): boolean {
 
 // ── State ──────────────────────────────────────────────────────────────────
 let initialized = false;
+/** The caller-facing init (native init raced against INIT_TIMEOUT_MS). */
 let initPromise: Promise<void> | null = null;
+/** The native initializeReader call itself — may outlive a timed-out caller. */
+let nativeInit: Promise<void> | null = null;
 let initError: string | null = null;
+
+/** Give up waiting on the native init after this long; a later call retries. */
+const INIT_TIMEOUT_MS = 20_000;
+
+export class RegulaInitTimeout extends Error {
+  constructor() {
+    super('The document scanner took too long to start');
+    this.name = 'RegulaInitTimeout';
+  }
+}
 
 /** Resolve the license base64 from the embedded constant.
  *  (The license is a binary blob embedded as base64 in regulaLicense.ts —
@@ -79,9 +92,49 @@ async function loadLicense(): Promise<string> {
   return REGULA_LICENSE_BASE64;
 }
 
+/** Start (or join) the native initializeReader call. Cleared when it fails,
+ *  so the next attempt starts a fresh one. */
+function startNativeInit(): Promise<void> {
+  if (nativeInit) return nativeInit;
+  nativeInit = (async () => {
+    const licenseBase64 = await loadLicense();
+    const config = new DocReaderConfig();
+    config.license = licenseBase64;
+    config.delayedNNLoad = true;
+
+    await new Promise<void>((resolve, reject) => {
+      DocumentReader.initializeReader(
+        config,
+        () => {
+          // Request the raw uncropped camera image for backend processing
+          if (ProcessParams) {
+            const pp = new ProcessParams();
+            pp.returnUncroppedImage = true;
+            DocumentReader.setProcessParams(pp, () => {}, () => {});
+          }
+          initialized = true;
+          initError = null;
+          console.log('[Regula] Document Reader initialized');
+          resolve();
+        },
+        (err: string) => {
+          reject(new Error(`Regula init failed: ${err}`));
+        },
+      );
+    });
+  })();
+  nativeInit.catch(() => {
+    nativeInit = null;
+  });
+  return nativeInit;
+}
+
 /**
  * Initialize the Document Reader with the bundled license.
- * Idempotent — concurrent callers share one init promise.
+ * Concurrent callers share one promise. Rejects with RegulaInitTimeout after
+ * 20 s; on timeout or failure the cached promise is cleared so a later call
+ * (Retry, or the next visit) tries again — joining a native init that is
+ * still running instead of starting a second one.
  */
 export function initializeRegula(): Promise<void> {
   if (!loadNativeModules()) {
@@ -90,45 +143,26 @@ export function initializeRegula(): Promise<void> {
   if (initialized) return Promise.resolve();
   if (initPromise) return initPromise;
 
-  initPromise = (async () => {
-    try {
-      const licenseBase64 = await loadLicense();
-      const config = new DocReaderConfig();
-      config.license = licenseBase64;
-      config.delayedNNLoad = true;
-
-      await new Promise<void>((resolve, reject) => {
-        DocumentReader.initializeReader(
-          config,
-          () => {
-            // Request the raw uncropped camera image for backend processing
-            if (ProcessParams) {
-              const pp = new ProcessParams();
-              pp.returnUncroppedImage = true;
-              DocumentReader.setProcessParams(pp, () => {}, () => {});
-            }
-            initialized = true;
-            initError = null;
-            console.log('[Regula] Document Reader initialized');
-            resolve();
-          },
-          (err: string) => {
-            const errMsg = `Regula init failed: ${err}`;
-            console.error('[Regula]', errMsg);
-            initError = errMsg;
-            initPromise = null;
-            reject(new Error(errMsg));
-          },
-        );
-      });
-    } catch (e: any) {
-      initError = e?.message ?? 'Regula init exception';
-      initPromise = null;
-      throw e;
-    }
-  })();
-
-  return initPromise;
+  const attempt = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new RegulaInitTimeout()), INIT_TIMEOUT_MS);
+    startNativeInit().then(
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      (e: unknown) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+  initPromise = attempt;
+  attempt.catch((e: any) => {
+    initError = e?.message ?? 'Regula init exception';
+    console.error('[Regula]', initError);
+    if (initPromise === attempt) initPromise = null;
+  });
+  return attempt;
 }
 
 /** Last initialization error, if any. */
@@ -205,7 +239,22 @@ export function scanDocument(): Promise<RegulaScanResult> {
 
         const action = completion?.action;
         const COMPLETE = Enum?.DocReaderAction?.COMPLETE ?? 0;
+        const CANCEL = Enum?.DocReaderAction?.CANCEL ?? 3;
+        const ERROR = Enum?.DocReaderAction?.ERROR ?? 4;
         const TIMEOUT = Enum?.DocReaderAction?.TIMEOUT ?? 6;
+        // The user closed the scanner, or it failed: settle so the caller's
+        // busy state resets (otherwise the button keeps spinning).
+        if (action === CANCEL || action === ERROR) {
+          settled = true;
+          subscription.remove();
+          if (action === CANCEL) {
+            reject(new RegulaScanCancelled());
+          } else {
+            const msg = completion?.error?.message;
+            reject(new Error(typeof msg === 'string' && msg ? msg : 'The scanner stopped. Please try again.'));
+          }
+          return;
+        }
         if (action !== COMPLETE && action !== TIMEOUT) return; // intermediate progress
         if (!completion?.results) return;
 

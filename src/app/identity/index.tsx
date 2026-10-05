@@ -61,7 +61,7 @@ export default function IdentityScreen() {
   const incompleteHint =
     summary.face !== 'verified' ? 'Complete face verification to finish.'
     : summary.document === 'missing' ? 'Add a document to finish verification.'
-    : summary.document === 'pending' ? 'Your document is being reviewed.'
+    : summary.document === 'pending' ? 'Verify your document to finish.'
     : summary.document === 'failed' ? 'Document verification failed — try again.'
     : summary.selfieMatch !== 'verified' ? 'Selfie match is still pending.'
     : 'Finish verification to unlock check-ins.';
@@ -183,7 +183,7 @@ export default function IdentityScreen() {
                   icon={FileText}
                   tone="sky"
                   title={d.label}
-                  sub={`${statusLabel(d.status)} · ${d.expiresAt ? `Exp. ${fmtMonthYear(d.expiresAt)}` : d.number}`}
+                  sub={[statusLabel(d.status), d.expiresAt ? `Exp. ${fmtMonthYear(d.expiresAt)}` : d.number].filter(Boolean).join(' · ')}
                   onPress={() => router.push(`/document/${d.id}` as never)}
                 />
               ))}
@@ -220,8 +220,9 @@ export default function IdentityScreen() {
   );
 }
 
+/** Normalized feed item: `title` as-is, `timestamp` already formatted locally. */
 function ActivityRow({ item }: { item: ActivityItem }) {
-  const dot = item.tone === 'success' ? C.green : item.tone === 'error' ? C.red : C.amber;
+  const dot = item.tone === 'success' ? C.green : item.tone === 'error' ? C.red : item.tone === 'warning' ? C.amber : C.ink4;
   return (
     <Row gap={12} style={{ paddingVertical: 14 }}>
       <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: dot }} />
@@ -229,7 +230,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         <Txt v="bodyStrong" lines={1}>
           {item.title}
         </Txt>
-        <Txt v="small">{item.timestamp}</Txt>
+        {!!item.timestamp && <Txt v="small">{item.timestamp}</Txt>}
       </View>
     </Row>
   );

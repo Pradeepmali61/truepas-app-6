@@ -4,8 +4,10 @@
  * user's documents as a fanned wallet deck you can swipe through like playing
  * cards, and venue-issued credentials.
  *
- * Data: useIdentitySummary + useDocuments. There is no issued-credentials
- * endpoint in our API yet, so that section renders its empty state.
+ * Data: useSecurityScore (identity strength, §10.2) + useIdentitySummary
+ * (local fallback) + useDocuments + supported types (§6.1). Issued
+ * credentials (GET /documents/issued) is always [] for now (§13 #14), so that
+ * section renders its empty state.
  */
 import { useRouter } from 'expo-router';
 import { FileText, MoveHorizontal, Plus, ShieldCheck, Ticket } from 'lucide-react-native';
@@ -13,7 +15,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, PanResponder, RefreshControl, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useDocuments } from '@/features/documents/hooks';
+import { useSecurityScore } from '@/features/account/hooks';
+import { useDocumentTypeOptions, useDocuments } from '@/features/documents/hooks';
+import { ageFromDob } from '@/features/family/hooks';
 import { useIdentitySummary } from '@/features/identity/hooks';
 import { TAB_BAR_SPACE } from '@/premium/blocks';
 import {
@@ -26,8 +30,9 @@ import {
 import { Async, Bone, EmptyView } from '@/premium/kit';
 import { C, F, R } from '@/premium/theme';
 import { Button, Card, Chip, IconCircle, Row, SectionHead, Tile, Txt } from '@/premium/ui';
-import type { DocumentType, IdentityDocument, IdentitySummary, VerificationStatus } from '@/types/domain';
 import { selectHaptic } from '@/services/haptics';
+import { useAppSelector } from '@/store';
+import type { DocumentType, IdentityDocument, IdentitySummary, SecurityScore, VerificationStatus } from '@/types/domain';
 
 type Cat = 'all' | 'identity' | 'travel' | 'driving';
 
@@ -37,24 +42,33 @@ const CATS: { key: Exclude<Cat, 'all'>; label: string; types: DocumentType[] }[]
   { key: 'driving', label: 'Driving', types: ['drivingLicense'] },
 ];
 
-const ALL_TYPES: DocumentType[] = ['passport', 'drivingLicense', 'idCard', 'greenCard', 'birthCertificate', 'usVisa'];
-
 export default function DocumentsScreen() {
   const router = useRouter();
   const summary = useIdentitySummary();
+  const score = useSecurityScore();
   const documents = useDocuments();
   const [cat, setCat] = useState<Cat>('all');
 
-  const refreshing = summary.isRefetching || documents.isRefetching;
+  // "Add more": the types this user can add (supported types by age).
+  const dob = useAppSelector((state) => state.auth.user?.dateOfBirth);
+  const age = dob ? ageFromDob(dob) : NaN;
+  const { options: typeOptions } = useDocumentTypeOptions(Number.isFinite(age) && age >= 0 ? age : undefined);
+
+  const refreshing = summary.isRefetching || documents.isRefetching || score.isRefetching;
   const onRefresh = () => {
     void summary.refetch();
+    void score.refetch();
     void documents.refetch();
   };
 
   const addDocument = () => router.push('/document/select-type' as never);
-  const missingTypes = documents.data
-    ? ALL_TYPES.filter((t) => !documents.data.some((d) => d.type === t)).slice(0, 2)
-    : [];
+  const missingTypes: DocumentType[] =
+    documents.data && typeOptions
+      ? typeOptions
+          .map((o) => o.type)
+          .filter((t) => !documents.data.some((d) => d.type === t))
+          .slice(0, 2)
+      : [];
 
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
@@ -68,9 +82,14 @@ export default function DocumentsScreen() {
           <TabTitle right={<IconCircle icon={Plus} tone="sky" label="Add document" onPress={addDocument} />}>Wallet</TabTitle>
 
           {/* ---------- identity strength ---------- */}
-          <Async q={summary} compact skeleton={<Bone h={78} r={R.xl} />}>
-            {(s) => <IdentityStrengthCard s={s} docs={documents.data} onPress={() => router.push('/identity' as never)} />}
-          </Async>
+          {score.data ? (
+            <IdentityStrengthCard server={score.data} docs={documents.data} onPress={() => router.push('/identity' as never)} />
+          ) : (
+            // Server score loading or failed: the local estimate meanwhile.
+            <Async q={summary} compact skeleton={<Bone h={78} r={R.xl} />}>
+              {(s) => <IdentityStrengthCard s={s} docs={documents.data} onPress={() => router.push('/identity' as never)} />}
+            </Async>
+          )}
 
           {/* ---------- your documents ---------- */}
           <View style={{ gap: 16 }}>
@@ -153,17 +172,38 @@ export default function DocumentsScreen() {
 /* ───────────────────────── identity strength ───────────────────────── */
 
 /**
- * Identity strength out of 100, from the three server checks (face 40,
- * document 35, selfie match 25; "pending" counts half). The API has no score
- * yet (backend request #5) — when it ships, show its number instead.
+ * Local estimate of identity strength (face 40, document 35, selfie match 25;
+ * "pending" counts half), shown only while GET /user/me/security-score is
+ * loading or has failed. The server's `identityStrength` is the real number.
  */
 function strengthOf(s: IdentitySummary): number {
   const part = (v: VerificationStatus, w: number) => (v === 'verified' ? w : v === 'pending' ? w / 2 : 0);
   return Math.round(part(s.face, 40) + part(s.document, 35) + part(s.selfieMatch, 25));
 }
 
-function IdentityStrengthCard({ s, docs, onPress }: { s: IdentitySummary; docs?: IdentityDocument[]; onPress: () => void }) {
-  const score = strengthOf(s);
+/** Next-step line for the local estimate (same wording as the server suggestions). */
+function localSuggestion(s: IdentitySummary): string {
+  if (s.face !== 'verified') return 'Set up your face';
+  if (s.document === 'missing') return 'Add an ID document';
+  if (s.document !== 'verified') return 'Verify your document';
+  return 'Your identity strength is good';
+}
+
+function IdentityStrengthCard({
+  server,
+  s,
+  docs,
+  onPress,
+}: {
+  /** GET /user/me/security-score, preferred. */
+  server?: SecurityScore;
+  /** Identity summary: local fallback when the server score is unavailable. */
+  s?: IdentitySummary;
+  docs?: IdentityDocument[];
+  onPress: () => void;
+}) {
+  const raw = server ? server.identityStrength : s ? strengthOf(s) : 0;
+  const score = Math.max(0, Math.min(100, Math.round(raw)));
   const total = docs?.length ?? 0;
   const verifiedDocs = docs?.filter((d) => d.status === 'verified').length ?? 0;
   const tone = score >= 90 ? 'green' : score >= 60 ? 'sky' : 'amber';
@@ -174,15 +214,11 @@ function IdentityStrengthCard({ s, docs, onPress }: { s: IdentitySummary; docs?:
   const sub =
     score >= 90
       ? 'Your identity strength is excellent'
-      : s.face !== 'verified'
-        ? 'Enrol your face to strengthen your identity'
-        : s.document === 'pending'
-          ? 'Your document is in review'
-          : s.document !== 'verified'
-            ? 'Add an ID to strengthen your identity'
-            : s.selfieMatch !== 'verified'
-              ? 'Selfie match will raise your strength'
-              : 'Your identity strength is good';
+      : server
+        ? (server.suggestions[0]?.title ?? 'Your identity strength is good')
+        : s
+          ? localSuggestion(s)
+          : '';
 
   return (
     <Card pad={16} onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>

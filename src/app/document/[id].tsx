@@ -5,7 +5,6 @@ import {
     ChevronDown,
     ChevronRight,
     FileText,
-    History,
     RefreshCw,
     ScanLine,
     Share2,
@@ -15,10 +14,20 @@ import {
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
-import { useDocument, useRemoveDocument } from '@/features/documents/hooks';
+import { useDocument, useDocumentImages, useRemoveDocument } from '@/features/documents/hooks';
 import { useToast } from '@/hooks/useToast';
-import { DocumentCard, FlipCard, MatchRing, docMeta, matchPct, prettyDate, statusBadge } from '@/premium/flows/documents';
-import { Async, Bone, ComingSoon, ConfirmSheet, EmptyView, SkeletonList, SoonOverlay } from '@/premium/kit';
+import {
+    DocumentCard,
+    DocumentImageGrid,
+    FlipCard,
+    MatchRing,
+    docMeta,
+    localDay,
+    matchPct,
+    prettyDate,
+    statusBadge,
+} from '@/premium/flows/documents';
+import { Async, Bone, ComingSoon, ConfirmSheet, EmptyView, SkeletonList } from '@/premium/kit';
 import { C, R } from '@/premium/theme';
 import { Badge, Button, Card, Group, ListRow, Row, Screen, TopBar, Txt } from '@/premium/ui';
 import { getDocumentImageUri } from '@/services/documentImageStore';
@@ -40,14 +49,17 @@ function DetailSkeleton() {
 }
 
 /** Document detail — a single identity document. Premium credential card
- *  (flips to the captured scan), verify card when a match score exists,
- *  detail rows with selective disclosure, Verify now / Remove actions. */
+ *  (flips to the scan), verify card when a match score exists, the stored
+ *  images (GET /documents/{id}/images), detail rows with selective
+ *  disclosure, Verify now / Remove actions. */
 export default function DocumentDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const toast = useToast();
 
   const docQuery = useDocument(id);
+  // Signed, expiring URLs — refetched with the screen, never cached to disk.
+  const imagesQuery = useDocumentImages(id);
   const removeDocument = useRemoveDocument();
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [scanImageUri, setScanImageUri] = useState<string | null>(null);
@@ -55,8 +67,8 @@ export default function DocumentDetailScreen() {
   // Sensitive extracted fields stay hidden until asked for.
   const [showExtracted, setShowExtracted] = useState(false);
 
-  // The backend doesn't return the captured photo — it's persisted locally
-  // (keyed by docId) at scan time; flip the hero card to reveal it.
+  // Local copy of the capture (keyed by docId, saved at scan time) — the
+  // fallback for "View scan" when the server has no front image.
   useEffect(() => {
     if (!id) return;
     let alive = true;
@@ -76,6 +88,7 @@ export default function DocumentDetailScreen() {
   const canVerify = status === 'pending' || status === 'failed';
   const removing = removeDocument.isPending;
   const doc = docQuery.data;
+  const serverFront = imagesQuery.data?.front?.url ?? null;
 
   // Re-verify re-captures via the scan flow (design pushes `docVerify`).
   const reverify = (d: IdentityDocument) =>
@@ -84,7 +97,6 @@ export default function DocumentDetailScreen() {
       params: {
         type: d.type,
         label: d.label,
-        number: d.number,
         expiresAt: d.expiresAt ?? undefined,
       },
     } as never);
@@ -109,7 +121,14 @@ export default function DocumentDetailScreen() {
       <Screen
         header={<TopBar title={doc?.label ?? 'Document'} onBack={() => router.back()} />}
         contentStyle={{ paddingTop: 8 }}
-        onRefresh={id ? () => void docQuery.refetch() : undefined}
+        onRefresh={
+          id
+            ? () => {
+                void docQuery.refetch();
+                void imagesQuery.refetch();
+              }
+            : undefined
+        }
         refreshing={docQuery.isRefetching}
         footer={
           doc != null && canVerify ? <Button label="Verify now" icon={ScanLine} onPress={() => reverify(doc)} /> : undefined
@@ -131,7 +150,7 @@ export default function DocumentDetailScreen() {
                   <FlipCard
                     flipped={isFlipped}
                     height={CARD_H}
-                    scanUri={scanImageUri}
+                    scanUri={serverFront ?? scanImageUri}
                     front={
                       <DocumentCard
                         type={d.type}
@@ -155,7 +174,7 @@ export default function DocumentDetailScreen() {
                         onPress={() => setIsFlipped((f) => !f)}
                       />
                     </View>
-                    {/* Sharing a document has no backend yet. */}
+                    {/* Sharing is deferred by the backend (§13 #15). */}
                     <View style={{ flex: 1 }} accessible accessibilityLabel="Share" accessibilityHint="Coming soon" accessibilityState={{ disabled: true }}>
                       <View pointerEvents="none" style={{ opacity: 0.5 }}>
                         <Button label="Share" icon={Share2} size="md" />
@@ -172,17 +191,25 @@ export default function DocumentDetailScreen() {
                   <MatchRing
                     value={pct}
                     label="Document match"
-                    sub={`${meta.label} · added ${prettyDate(d.addedAt)}`}
+                    sub={d.verifiedAt ? `${meta.label} · verified ${localDay(d.verifiedAt)}` : `${meta.label} · added ${prettyDate(d.addedAt)}`}
                     right={<Badge label={badge.label} tone={badge.tone} icon={badge.icon} dot={badge.dot} />}>
                     <Button label="Re-verify" icon={RefreshCw} tone="soft" size="md" onPress={() => reverify(d)} />
                   </MatchRing>
                 )}
 
+                <View style={{ gap: 10 }}>
+                  <Txt v="micro" style={{ marginLeft: 4 }}>
+                    Images
+                  </Txt>
+                  <DocumentImageGrid images={imagesQuery.data} loading={imagesQuery.isPending} />
+                </View>
+
                 <Group title="Details">
                   <ListRow title="Holder" value={d.extractedName ?? '—'} chevron={false} />
-                  <ListRow title="Number" value={d.number} chevron={false} />
+                  <ListRow title="Number" value={d.number || '—'} chevron={false} />
                   <ListRow title="Status" chevron={false} trailing={<Badge label={badge.label} tone={badge.tone} icon={badge.icon} dot={badge.dot} />} />
                   <ListRow title="Added" value={prettyDate(d.addedAt)} chevron={false} />
+                  {d.verifiedAt ? <ListRow title="Verified on" value={localDay(d.verifiedAt)} chevron={false} /> : null}
                   <ListRow title="Expires" value={prettyDate(expires)} chevron={false} />
                   <ListRow title="Match" value={pct != null ? `${pct}%` : '—'} chevron={false} />
                   <ListRow
@@ -211,13 +238,6 @@ export default function DocumentDetailScreen() {
                     Sensitive fields stay hidden until needed.
                   </Txt>
                 </View>
-
-                {/* Usage history per document has no backend yet. */}
-                <SoonOverlay>
-                  <Group title="Recently used at">
-                    <ListRow icon={History} tone="sky" title="Check-ins with this document" sub="See where this document was used" chevron={false} />
-                  </Group>
-                </SoonOverlay>
 
                 <Card pad={0} style={{ paddingHorizontal: 16 }}>
                   <ListRow

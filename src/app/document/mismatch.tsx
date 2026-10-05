@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowDown, RotateCcw, TriangleAlert, UserRoundCheck } from 'lucide-react-native';
+import { ArrowDown, RotateCcw, TriangleAlert, UserPen, UserRoundCheck } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
@@ -61,21 +61,22 @@ function Line({ k, profile, doc, same }: { k: string; profile: string; doc: stri
   );
 }
 
-/** Profile mismatch session — 15-minute TTL, accept or retry (PRD).
- *  "Accept" copies the document's extracted name/DOB into the profile so the
- *  next verification attempt matches. */
+/** PROFILE_MISMATCH (§6.3) — the details read from the document differ from
+ *  the profile. 15-minute session TTL (PRD). "Accept" copies the document's
+ *  extracted name/DOB into the profile, then the document is scanned again;
+ *  "Edit profile" opens the profile form. */
 export default function MismatchScreen() {
   const router = useRouter();
   const { seconds } = useCountdown(SESSION_TTL_SECONDS);
   const updateProfile = useUpdateProfile();
   const toast = useToast();
   const params = useLocalSearchParams<{
-    docId?: string;
+    docType?: string;
     profileName?: string;
     profileDob?: string;
     docName?: string;
     docDob?: string;
-    reason?: string;
+    reasonMessage?: string;
   }>();
   // Result screen — deep links without a real verification session are
   // bounced back to the start of the document flow (ADV-001).
@@ -89,6 +90,12 @@ export default function MismatchScreen() {
   const docName = params.docName || '—';
   const profileDob = params.profileDob || '—';
   const docDob = params.docDob || '—';
+  // Accept needs something read from the document to copy.
+  const canAccept = !!(params.docName || params.docDob);
+
+  const scanAgain = () =>
+    router.dismissTo({ pathname: '/document/scan', params: { type: params.docType ?? 'passport', retake: String(Date.now()) } } as never);
+  const editProfile = () => router.push('/profile/edit' as never);
 
   const handleAccept = async () => {
     try {
@@ -96,11 +103,8 @@ export default function MismatchScreen() {
         ...(params.docName ? { fullName: params.docName } : {}),
         ...(params.docDob ? { dateOfBirth: params.docDob } : {}),
       });
-      if (params.docId) {
-        router.replace({ pathname: '/document/[id]', params: { id: params.docId } } as never);
-      } else {
-        router.dismissTo('/(tabs)');
-      }
+      toast.show('success', 'Profile updated. Scan your document again.');
+      scanAgain();
     } catch (err) {
       toast.show('error', toApiError(err).message || 'Could not update your profile. Please try again.');
     }
@@ -115,22 +119,20 @@ export default function MismatchScreen() {
       over="Needs your attention"
       title="Details don't"
       accent="match."
-      sub="The details read from your document don't match your profile."
+      sub={params.reasonMessage || "The details read from your document don't match your profile."}
       primary={
-        <Button
-          label="Accept & update profile"
-          icon={UserRoundCheck}
-          loading={updateProfile.isPending}
-          onPress={handleAccept}
-        />
+        canAccept ? (
+          <Button label="Accept & update profile" icon={UserRoundCheck} loading={updateProfile.isPending} onPress={handleAccept} />
+        ) : (
+          <Button label="Edit profile" icon={UserPen} onPress={editProfile} />
+        )
       }
       secondary={
-        <Button
-          label="Retry with a different document"
-          tone="ghost"
-          icon={RotateCcw}
-          onPress={() => router.replace('/document/select-type')}
-        />
+        canAccept ? (
+          <Button label="Edit profile" tone="ghost" icon={UserPen} onPress={editProfile} />
+        ) : (
+          <Button label="Use another document" tone="ghost" icon={RotateCcw} onPress={() => router.dismissTo('/document/select-type' as never)} />
+        )
       }>
       <Card pad={0} style={{ paddingHorizontal: 18, paddingVertical: 4 }}>
         <Line k="Name" profile={profileName} doc={docName} same={compare(params.profileName, params.docName, 'text')} />
@@ -138,20 +140,20 @@ export default function MismatchScreen() {
         <Line k="Date of birth" profile={profileDob} doc={docDob} same={compare(params.profileDob, params.docDob, 'date')} />
       </Card>
 
-      {params.reason ? <Banner tone="info" title="Reason" body={params.reason} /> : null}
-
       <Banner
         tone="warning"
         title={seconds > 0 ? `Session expires in ${formatCountdown(seconds)}` : 'Session expired'}
         body="If the session expires, you'll need to re-verify your document."
       />
 
-      <Row gap={8} align="flex-start" style={{ paddingHorizontal: 4 }}>
-        <ArrowDown size={14} color={C.ink3} style={{ marginTop: 2 }} />
-        <Txt v="small" style={{ flex: 1 }}>
-          Accepting copies the name and date of birth from your document into your profile.
-        </Txt>
-      </Row>
+      {canAccept ? (
+        <Row gap={8} align="flex-start" style={{ paddingHorizontal: 4 }}>
+          <ArrowDown size={14} color={C.ink3} style={{ marginTop: 2 }} />
+          <Txt v="small" style={{ flex: 1 }}>
+            Accepting copies the name and date of birth from your document into your profile.
+          </Txt>
+        </Row>
+      ) : null}
     </ResultView>
   );
 }

@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import { api } from '@/api';
-import { documentKeys, useAddDocument } from '@/features/documents/hooks';
+import { toApiError } from '@/api/errors';
+import { refreshAfterVerify, useAddDocument } from '@/features/documents/hooks';
+import { isApproved, verifyDocumentWithUploads, type VerifyUploadStep } from '@/features/documents/verifyWithUploads';
 import { DocumentCard, docMeta, ScanHero, StepList, type FlowStepState } from '@/premium/flows/documents';
 import { Banner } from '@/premium/kit';
 import { C } from '@/premium/theme';
@@ -17,27 +19,18 @@ import { clearScanResult, getScanResult } from '@/services/scanStore';
 import { useAppSelector } from '@/store';
 import type { DocumentType, IdentityDocument } from '@/types/domain';
 
-const DOC_LABELS: Record<DocumentType, string> = {
-  passport: 'Passport',
-  drivingLicense: "Driver's License",
-  idCard: 'ID Card',
-  greenCard: 'US Green Card',
-  birthCertificate: 'Birth Certificate',
-  usVisa: 'U.S. Visa',
-};
+type ProcessingStatus = 'adding' | 'uploading' | 'verifying' | 'done' | 'error';
 
-type ProcessingStatus = 'adding' | 'creating_session' | 'verifying' | 'done' | 'error';
-
-const STEP_LABELS = ['Document scanned', 'Adding to account', 'Creating session', 'Verifying document'];
+const STEP_LABELS = ['Document scanned', 'Adding to account', 'Uploading photos', 'Verifying document'];
 const STEP_DETAILS = [
   'Captured on this device',
   'Saving it to your documents',
-  'Opening a secure verification',
+  'Sending your scan securely',
   'Checking authenticity & extracting details',
 ];
 const STEP_INDEX: Record<ProcessingStatus, number> = {
   adding: 1,
-  creating_session: 2,
+  uploading: 2,
   verifying: 3,
   done: 4,
   error: -1,
@@ -45,52 +38,51 @@ const STEP_INDEX: Record<ProcessingStatus, number> = {
 
 const STATUS_LINE: Record<ProcessingStatus, string> = {
   adding: 'Adding document…',
-  creating_session: 'Creating verification session…',
+  uploading: 'Uploading photos…',
   verifying: 'Verifying document…',
   done: 'Verified!',
   error: 'Verification failed',
 };
 
-/** Extract a readable message from any thrown error. */
-const msg0 = (err: any): string =>
-  // No response at all (offline / dropped connection) — axios only says "Network Error".
-  err?.request && !err?.response
-    ? "Couldn't reach the server. Check your internet connection and tap Retry."
-    : (err?.response?.data?.message ?? err?.message ?? 'Verification failed');
+/** Readable text for a thrown network/API error (not a verify rejection). */
+const errorText = (err: unknown): string => {
+  const e = toApiError(err);
+  // axios → NETWORK; the presigned PUT uses fetch → "Network request failed".
+  if (e.code === 'NETWORK' || /network request failed|failed to fetch/i.test(e.message)) {
+    return "Couldn't reach the server. Check your internet connection and tap Retry.";
+  }
+  return e.message || 'Verification failed';
+};
 
-/** Document processing — per REACT_NATIVE_KYC_INTEGRATION_GUIDE.md §6:
- *  1. POST /documents → documentId
- *  2. POST /documents/{id}/verification-sessions → sessionId
- *  3. POST /document-verification-sessions/{sessionId}/verify
- *     with { frontImageBase64, selfieImageBase64? } → SYNCHRONOUS result
- *  4. No polling needed — verify returns final outcome directly */
+/** Document processing (BACKEND_UPDATE_2026-10 §6.2–6.5):
+ *  1. POST /documents (no number — the server reads it from the scan)
+ *  2. presigned upload of the captured image(s)
+ *  3. verification session with the object keys → /verify (synchronous)
+ *  4. approved → verified screen; rejected → reasonMessage + one action. */
 export default function DocumentProcessingScreen() {
   const router = useRouter();
-  const { type, label, number, expiresAt } = useLocalSearchParams<{
+  const { type, label, expiresAt } = useLocalSearchParams<{
     type?: string;
     label?: string;
-    number?: string;
     expiresAt?: string;
   }>();
   const docType = (type ?? 'passport') as DocumentType;
-  // Metadata collected on the add-document form — falls back to the type
-  // label / 'PENDING' placeholder when reached without it (deep links).
-  const docLabel = label?.trim() || DOC_LABELS[docType];
-  const docNumber = number?.trim() || 'PENDING';
+  const meta = docMeta(docType);
+  const docLabel = label?.trim() || meta.label;
   const docExpiresAt = expiresAt?.trim() || null;
   const [status, setStatus] = useState<ProcessingStatus>('adding');
   const [error, setError] = useState<string | null>(null);
   const hasStarted = useRef(false);
   const processRef = useRef<(() => Promise<void>) | null>(null);
   // Document created by the current attempt — reused on Retry so a failed
-  // session/API error doesn't pile up duplicate documents.
+  // upload/API error doesn't pile up duplicate documents.
   const createdDocRef = useRef<IdentityDocument | null>(null);
   const addDocument = useAddDocument();
   const queryClient = useQueryClient();
-  const profileName = useAppSelector((state) => state.auth.user?.fullName ?? 'User');
+  const profileName = useAppSelector((state) => state.auth.user?.fullName ?? '');
   const profileDob = useAppSelector((state) => state.auth.user?.dateOfBirth ?? '');
   // Hero: the photo the user just captured (read once — the store is cleared
-  // on success). Display only; the upload still reads the store in process().
+  // on completion). Display only; the upload reads the store in process().
   const [heroUri] = useState(() => {
     const s = getScanResult();
     const b64 = s?.documentPreviewBase64 ?? s?.documentImageBase64;
@@ -100,14 +92,11 @@ export default function DocumentProcessingScreen() {
   // Staged flow — index tracks the real API step; on error it stays at the
   // last active step so that step renders as the failed one.
   const [stepIndex, setStepIndex] = useState(STEP_INDEX.adding);
-
-  // Refresh document lists + identity summary AFTER verification completes —
-  // the addDocument invalidation fires while the doc is still `pending`, so
-  // without this the list shows a stale pre-verify status (e.g. "Failed").
-  const refreshDocumentCaches = () => {
-    queryClient.invalidateQueries({ queryKey: documentKeys.all });
-    queryClient.invalidateQueries({ queryKey: ['identity'] });
+  const goStep = (s: ProcessingStatus) => {
+    setStatus(s);
+    setStepIndex(STEP_INDEX[s]);
   };
+  const onUploadStep = (s: VerifyUploadStep) => goStep(s === 'uploading' ? 'uploading' : 'verifying');
 
   useEffect(() => {
     if (hasStarted.current) return;
@@ -116,7 +105,6 @@ export default function DocumentProcessingScreen() {
     const process = async () => {
       const scanResult = getScanResult();
       const frontImage = scanResult?.documentImageBase64 ?? '';
-      const selfieImage = scanResult?.selfieBase64;
 
       if (!frontImage) {
         setError('No document image captured. Please scan again.');
@@ -126,92 +114,64 @@ export default function DocumentProcessingScreen() {
       }
 
       try {
-        // Step 1: Add document (metadata only — backend will fill in extracted data).
+        // Step 1: add the document — metadata only, no number (§6.2).
         // On Retry, reuse the document created by the previous attempt.
-        // NOTE: `number` is a required backend field (min 2 chars) but the real
-        // number comes from server-side OCR during /verify — never fabricate a
-        // random one here. "PENDING" is overwritten by the backend after verify.
         let doc = createdDocRef.current;
         if (!doc) {
-          setStatus('adding');
-          setStepIndex(STEP_INDEX.adding);
+          goStep('adding');
           doc = await addDocument.mutateAsync({
             type: docType,
             label: docLabel,
-            number: docNumber,
             expiresAt: docExpiresAt,
           });
           createdDocRef.current = doc;
 
-          // Persist captured images locally so the document detail screen
-          // can show the originally captured photo later.
+          // Keep a local copy of the capture — the detail screen falls back
+          // to it when the server has no image for this document.
           try {
             await saveDocumentImages(doc.id, {
               front: scanResult?.documentPreviewBase64 ?? frontImage,
-              selfie: selfieImage,
+              back: scanResult?.backImageBase64,
+              selfie: scanResult?.selfieBase64,
             });
           } catch (e) {
             console.warn('[DocProcessing] Failed to save document images locally:', e);
           }
         }
 
-        // Step 2: Create verification session (requestId = idempotency key)
-        // Per guide §6.3: omit frontObjectKey/backObjectKey/selfieObjectKey —
-        // they are reserved for the future signed-upload pipeline and the BFF
-        // rejects keys not starting with customers/{customerId}/.
-        setStatus('creating_session');
-        setStepIndex(STEP_INDEX.creating_session);
-        const session = await api.createVerificationSession(doc.id, {
-          requestId: `req-${Date.now()}`,
+        // Steps 2–3: presigned upload → session → verify (no base64).
+        const result = await verifyDocumentWithUploads({
+          documentId: doc.id,
+          frontBase64: frontImage,
+          backBase64: scanResult?.backImageBase64,
+          onStep: onUploadStep,
         });
-
-        // Step 3: Verify — SYNCHRONOUS result with images as base64
-        // Per guide §6.3: frontImageBase64 is required, selfieImageBase64 for face match
-        setStatus('verifying');
-        setStepIndex(STEP_INDEX.verifying);
-        const result = await api.startVerificationWithImages(
-          session.id,
-          {
-            frontImageBase64: frontImage,
-            selfieImageBase64: selfieImage,
-          },
-          { timeout: 90_000 } // Regula processing can take a while
-        );
 
         clearScanResult();
 
-        // Step 4: Handle outcome — verify is synchronous, no polling
-        if (result.outcome === 'approved' || result.outcome === 'review') {
-          // Facepe-style REPLACE: the new document is verified, so remove any
-          // previous document of the same type for the main user. GET /documents
-          // (self) is already scoped to the account owner by the BFF, so a
-          // plain type match is enough — do NOT filter on !personId (the
-          // backend fills personId on self docs too, which silently disabled
-          // this cleanup and let duplicates pile up).
+        if (isApproved(result)) {
+          // One per type (§6.5): the server removed older VERIFIED documents of
+          // this type. Unverified leftovers of the same type (earlier failed or
+          // pending attempts) are now noise — remove them too (best effort).
           try {
             const existing = await api.getDocuments();
-            const duplicates = (existing ?? []).filter(
-              (d) => d.type === docType && d.id !== doc.id,
+            const leftovers = (existing ?? []).filter(
+              (d) => d.type === docType && d.id !== doc.id && d.status !== 'verified',
             );
-            for (const dup of duplicates) {
+            for (const old of leftovers) {
               try {
-                await api.removeDocument(dup.id);
-                await clearDocumentImages(dup.id);
-                console.log('[DocProcessing] Replaced existing document:', dup.id, dup.type);
+                await api.removeDocument(old.id);
+                await clearDocumentImages(old.id);
               } catch (e) {
-                console.warn('[DocProcessing] Failed to remove duplicate:', dup.id, e);
+                console.warn('[DocProcessing] Failed to remove leftover document:', old.id, e);
               }
             }
           } catch (e) {
-            console.warn('[DocProcessing] Replace lookup failed — keeping existing documents:', e);
+            console.warn('[DocProcessing] Leftover lookup failed:', e);
           }
 
-          refreshDocumentCaches();
-          setStatus('done');
-          setStepIndex(STEP_INDEX.done);
-          // Pass backend-returned extracted data to the verified screen.
-          // docNumber comes from the POST-VERIFY document (real masked number),
-          // not the pre-verify placeholder.
+          refreshAfterVerify(queryClient, doc.id);
+          goStep('done');
           flowGuards.grant('document:verified');
           router.replace({
             pathname: '/document/verified',
@@ -219,64 +179,69 @@ export default function DocumentProcessingScreen() {
               docId: doc.id,
               docLabel,
               docType,
-              docNumber: result.document?.number ?? doc.number ?? '',
+              // The POST-VERIFY number (masked, read from the document).
+              docNumber: result.document?.number ?? '',
               extractedName: result.extractedName ?? '',
               extractedDob: result.extractedDob ?? '',
               matchScore: result.matchScore != null ? String(result.matchScore) : '',
-              outcome: result.outcome,
               issuingState: result.issuingState ?? '',
               nationality: result.nationality ?? '',
               dateOfExpiry: result.dateOfExpiry ?? '',
               portraitImageUrl: result.portraitImageUrl ?? '',
             },
           });
-        } else {
-          setStatus('error');
-          setError(result.reasonCode ?? 'Document verification failed');
+          return;
+        }
 
-          // Verification rejected — if the user already has a document of this
-          // type, discard the failed attempt so the old document survives
-          // (Facepe-style replace never leaves a failed duplicate behind).
-          try {
-            const existing = await api.getDocuments();
-            const hasExisting = (existing ?? []).some(
-              (d) => d.type === docType && d.id !== doc.id,
-            );
-            if (hasExisting) {
-              await api.removeDocument(doc.id);
-              await clearDocumentImages(doc.id);
-              createdDocRef.current = null;
-              console.log('[DocProcessing] Discarded failed re-upload, existing document kept');
-            }
-          } catch (e) {
-            console.warn('[DocProcessing] Failed-attempt cleanup error:', e);
+        // Rejected. If another document of this type exists, discard the
+        // failed attempt so the existing one stays the only one; otherwise
+        // keep it so the wallet shows it as not verified.
+        try {
+          const existing = await api.getDocuments();
+          if ((existing ?? []).some((d) => d.type === docType && d.id !== doc.id)) {
+            await api.removeDocument(doc.id);
+            await clearDocumentImages(doc.id);
+            createdDocRef.current = null;
           }
+        } catch (e) {
+          console.warn('[DocProcessing] Failed-attempt cleanup error:', e);
+        }
+        refreshAfterVerify(queryClient, doc.id);
 
-          refreshDocumentCaches();
+        if (result.reasonCode === 'PROFILE_MISMATCH') {
+          // Name/DOB differ from the profile — compare them and offer to update.
           flowGuards.grant('document:mismatch');
           router.replace({
             pathname: '/document/mismatch',
             params: {
-              docId: doc.id,
+              docType,
               profileName,
               profileDob,
               docName: result.extractedName ?? '',
               docDob: result.extractedDob ?? '',
-              reason: result.reasonCode ?? '',
+              reasonMessage: result.reasonMessage ?? '',
             },
           });
+          return;
         }
-      } catch (err: any) {
-        // Keep scanResult — Retry re-runs with the same captured images.
-        // Clearing it here made every Retry fail with "No document image
-        // captured". It's cleared on success or overwritten by the next scan.
-        const msg = msg0(err);
-        console.error('[DocProcessing] Failed at step:', status, '|', msg, JSON.stringify(err?.response?.data));
+
+        flowGuards.grant('document:rejected');
+        router.replace({
+          pathname: '/document/rejected',
+          params: {
+            docType,
+            docLabel,
+            reasonCode: result.reasonCode ?? '',
+            reasonMessage: result.reasonMessage ?? '',
+          },
+        } as never);
+      } catch (err) {
+        // Network/API failure (not a rejection): stay here with Retry. Keep
+        // the scan — Retry re-uploads the same capture.
+        const msg = errorText(err);
+        console.error('[DocProcessing] Failed:', msg);
         setError(msg);
         setStatus('error');
-        // Stay on this screen with a Retry button — do NOT route to mismatch.
-        // Mismatch is only for real verification outcomes (rejected/mismatch),
-        // not for HTTP/API errors like 404 or 5xx.
       }
     };
 
@@ -286,16 +251,14 @@ export default function DocumentProcessingScreen() {
   }, [docType]);
 
   const retry = () => {
-    hasStarted.current = false;
     setError(null);
-    setStatus('adding');
-    setStepIndex(STEP_INDEX.adding);
+    goStep('adding');
     processRef.current?.();
   };
 
   const backToDocuments = () => {
-    // Discard the unverified document created by this attempt so
-    // no pending duplicate is left in My Documents.
+    // Discard the unverified document created by this attempt so no pending
+    // duplicate is left in the wallet.
     const doc = createdDocRef.current;
     if (doc) {
       api.removeDocument(doc.id).catch(() => {});
@@ -306,12 +269,10 @@ export default function DocumentProcessingScreen() {
   };
 
   const failed = status === 'error';
-  const meta = docMeta(docType);
   // Index-driven steps: before index → done, at index → active (failed on
   // error), after → pending.
   const steps = STEP_LABELS.map((l, i) => {
-    const state: FlowStepState =
-      i < stepIndex ? 'done' : i === stepIndex ? (failed ? 'failed' : 'active') : 'todo';
+    const state: FlowStepState = i < stepIndex ? 'done' : i === stepIndex ? (failed ? 'failed' : 'active') : 'todo';
     return { label: l, detail: STEP_DETAILS[i], state };
   });
 

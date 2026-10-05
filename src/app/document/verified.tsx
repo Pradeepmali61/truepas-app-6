@@ -1,11 +1,12 @@
 /** @jsxImportSource react */
 import { Image } from 'expo-image';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { Camera, Check, FileText, RotateCcw, ScanFace, TriangleAlert } from 'lucide-react-native';
+import { Camera, Check, FileText, ScanFace } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { DocumentCard, FlipCard, MatchRing } from '@/premium/flows/documents';
+import { useDocumentImages } from '@/features/documents/hooks';
+import { DocumentCard, FlipCard, MatchRing, matchPct } from '@/premium/flows/documents';
 import { C } from '@/premium/theme';
 import { Button, Group, ListRow, Txt } from '@/premium/ui';
 import { ResultView } from '@/premium/views';
@@ -19,10 +20,10 @@ function formatUSDate(value?: string): string {
   return d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 }
 
-/** Document verified success — flip card design (ref: facepe-user-frontend verify.tsx).
- *  Front face: premium credential card (label, number, holder, expiry).
- *  Back face: the captured document scan image.
- *  Flip button toggles between "View scan" and "View info". */
+/** Document verified (approved only — rejections go to document/rejected or
+ *  document/mismatch). Flip card (ref: facepe-user-frontend verify.tsx):
+ *  front = premium credential card, back = the scan (server image, local
+ *  capture as fallback). */
 export default function DocumentVerifiedScreen() {
   const router = useRouter();
   const {
@@ -33,7 +34,6 @@ export default function DocumentVerifiedScreen() {
     extractedName,
     extractedDob,
     matchScore,
-    outcome,
     issuingState,
     nationality,
     dateOfExpiry,
@@ -46,7 +46,6 @@ export default function DocumentVerifiedScreen() {
     extractedName?: string;
     extractedDob?: string;
     matchScore?: string;
-    outcome?: string;
     issuingState?: string;
     nationality?: string;
     dateOfExpiry?: string;
@@ -54,6 +53,8 @@ export default function DocumentVerifiedScreen() {
   }>();
 
   const [frontImageUri, setFrontImageUri] = useState<string | null>(null);
+  // Server images (signed, expiring) — preferred over the local capture.
+  const images = useDocumentImages(docId || undefined);
   const [selfieImageUri, setSelfieImageUri] = useState<string | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   // Result screen — a deep link with no real verification behind it must not
@@ -72,63 +73,46 @@ export default function DocumentVerifiedScreen() {
     }
   }, [docId]);
 
-  // Binary outcome (like DL): approved → VERIFIED, everything else (review,
-  // manual_review, rejected) → FAILED. No intermediate "review" state in UI.
-  const isFailed = outcome !== 'approved';
   const title = docLabel ?? 'Document';
   // Prefer the real doc type (passed from processing); fall back to the label
   // heuristic for direct navigation without the param.
   const isLicense = (docType ?? docLabel ?? '').toLowerCase().includes('license');
   // matchScore arrives 0–1 from the BFF; the ring renders a percentage.
-  const confidencePct =
-    matchScore && !isFailed
-      ? (() => {
-          const n = parseFloat(matchScore);
-          if (Number.isNaN(n)) return null;
-          return Math.round(n <= 1 ? n * 100 : n);
-        })()
-      : null;
+  const confidencePct = matchPct(matchScore);
 
   if (!allowed) return <Redirect href="/document/select-type" />;
 
-  const portraitUri = portraitImageUrl || selfieImageUri;
+  const portraitUri = portraitImageUrl || images.data?.portrait?.url || selfieImageUri;
+  const scanUri = images.data?.front?.url ?? frontImageUri;
 
   return (
     <ResultView
       close
-      icon={isFailed ? TriangleAlert : Check}
-      tone={isFailed ? 'red' : 'green'}
-      over={isFailed ? 'Verification failed' : 'Verification complete'}
-      title={isFailed ? "Couldn't verify" : title}
-      accent={isFailed ? 'this document.' : 'verified.'}
-      sub={
-        isFailed
-          ? 'We could not verify this document. Please scan it again.'
-          : 'Your document has been verified successfully.'
-      }
+      icon={Check}
+      tone="green"
+      over="Verification complete"
+      title={title}
+      accent="verified."
+      sub="Your document has been verified successfully."
       primary={
         <Button label="Go to identity dashboard" onPress={() => router.dismissTo('/identity' as never)} />
       }
       secondary={
-        isFailed ? (
-          <Button label="Scan again" tone="ghost" icon={RotateCcw} onPress={() => router.dismissTo('/document/select-type' as never)} />
-        ) : (
-          <Button label="Add another document" tone="ghost" onPress={() => router.dismissTo('/document/select-type' as never)} />
-        )
+        <Button label="Add another document" tone="ghost" onPress={() => router.dismissTo('/document/select-type' as never)} />
       }>
       {/* Flip card — front: credential card / back: captured scan */}
       <View style={{ gap: 14, alignItems: 'center' }}>
         <FlipCard
           flipped={isFlipped}
           height={200}
-          scanUri={frontImageUri}
+          scanUri={scanUri}
           style={{ alignSelf: 'stretch' }}
           front={
             <DocumentCard
               type={docType || (isLicense ? 'drivingLicense' : 'passport')}
               label={title}
               number={docNumber || '—'}
-              status={isFailed ? 'failed' : 'verified'}
+              status="verified"
               holder={extractedName || null}
               expiresAt={dateOfExpiry ? dateOfExpiry.split('T')[0] : null}
               issuer={(isLicense ? issuingState : nationality) || null}
