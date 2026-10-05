@@ -8,6 +8,7 @@ import { View } from 'react-native';
 import { api } from '@/api';
 import { toApiError } from '@/api/errors';
 import { refreshAfterVerify, useAddDocument } from '@/features/documents/hooks';
+import { errorFields, startDocLog } from '@/features/documents/verifyLog';
 import { isApproved, verifyDocumentWithUploads, type VerifyUploadStep } from '@/features/documents/verifyWithUploads';
 import { DocumentCard, docMeta, ScanHero, StepList, type FlowStepState } from '@/premium/flows/documents';
 import { Banner } from '@/premium/kit';
@@ -77,6 +78,8 @@ export default function DocumentProcessingScreen() {
   // Document created by the current attempt — reused on Retry so a failed
   // upload/API error doesn't pile up duplicate documents.
   const createdDocRef = useRef<IdentityDocument | null>(null);
+  // Retries of this screen, for the attempt log.
+  const attemptRef = useRef(0);
   const addDocument = useAddDocument();
   const queryClient = useQueryClient();
   const profileName = useAppSelector((state) => state.auth.user?.fullName ?? '');
@@ -105,8 +108,10 @@ export default function DocumentProcessingScreen() {
     const process = async () => {
       const scanResult = getScanResult();
       const frontImage = scanResult?.documentImageBase64 ?? '';
+      const log = startDocLog({ flow: 'self', type: docType, retry: attemptRef.current++ || undefined });
 
       if (!frontImage) {
+        log.end('error', { error: 'no scan in the store' });
         setError('No document image captured. Please scan again.');
         setStatus('error');
         clearScanResult();
@@ -119,11 +124,11 @@ export default function DocumentProcessingScreen() {
         let doc = createdDocRef.current;
         if (!doc) {
           goStep('adding');
-          doc = await addDocument.mutateAsync({
-            type: docType,
-            label: docLabel,
-            expiresAt: docExpiresAt,
-          });
+          doc = await log.step(
+            'create document',
+            () => addDocument.mutateAsync({ type: docType, label: docLabel, expiresAt: docExpiresAt }),
+            (d) => ({ document: d.id }),
+          );
           createdDocRef.current = doc;
 
           // Keep a local copy of the capture — the detail screen falls back
@@ -135,8 +140,10 @@ export default function DocumentProcessingScreen() {
               selfie: scanResult?.selfieBase64,
             });
           } catch (e) {
-            console.warn('[DocProcessing] Failed to save document images locally:', e);
+            log.warn('local copy not saved', errorFields(e));
           }
+        } else {
+          log.info('reusing document', { document: doc.id });
         }
 
         // Steps 2–3: presigned upload → session → verify (no base64).
@@ -145,6 +152,7 @@ export default function DocumentProcessingScreen() {
           frontBase64: frontImage,
           backBase64: scanResult?.backImageBase64,
           onStep: onUploadStep,
+          log,
         });
 
         clearScanResult();
@@ -162,14 +170,16 @@ export default function DocumentProcessingScreen() {
               try {
                 await api.removeDocument(old.id);
                 await clearDocumentImages(old.id);
+                log.info('removed leftover', { document: old.id, status: old.status });
               } catch (e) {
-                console.warn('[DocProcessing] Failed to remove leftover document:', old.id, e);
+                log.warn('leftover not removed', { document: old.id, ...errorFields(e) });
               }
             }
           } catch (e) {
-            console.warn('[DocProcessing] Leftover lookup failed:', e);
+            log.warn('leftover lookup failed', errorFields(e));
           }
 
+          log.end('approved', { document: doc.id });
           refreshAfterVerify(queryClient, doc.id);
           goStep('done');
           flowGuards.grant('document:verified');
@@ -206,15 +216,24 @@ export default function DocumentProcessingScreen() {
               await api.removeDocument(old.id);
               await clearDocumentImages(old.id);
               if (old.id === doc.id) createdDocRef.current = null;
+              log.info(old.id === doc.id ? 'discarded this attempt (a verified one exists)' : 'removed older unverified', {
+                document: old.id,
+                status: old.status,
+              });
             } catch (e) {
-              console.warn('[DocProcessing] Failed to remove document:', old.id, e);
+              log.warn('document not removed', { document: old.id, ...errorFields(e) });
             }
           }
         } catch (e) {
-          console.warn('[DocProcessing] Failed-attempt cleanup error:', e);
+          log.warn('cleanup lookup failed', errorFields(e));
         }
         refreshAfterVerify(queryClient, doc.id);
 
+        log.end('rejected', {
+          reason: result.reasonCode,
+          match: result.matchScore,
+          next: result.reasonCode === 'PROFILE_MISMATCH' ? 'mismatch' : 'rejected',
+        });
         if (result.reasonCode === 'PROFILE_MISMATCH') {
           // Name/DOB differ from the profile — compare them and offer to update.
           flowGuards.grant('document:mismatch');
@@ -245,18 +264,10 @@ export default function DocumentProcessingScreen() {
       } catch (err) {
         // Network/API failure (not a rejection): stay here with Retry. Keep
         // the scan — Retry re-uploads the same capture.
+        // Logged as a warning (Retry is on screen), so it doesn't open the
+        // dev error overlay.
         const msg = errorText(err);
-        // warn, not error: this is handled (Retry is on screen), so it
-        // shouldn't open the dev error overlay. The endpoint, status and
-        // trace id are what the backend team needs for a report.
-        const apiErr = toApiError(err);
-        const url = (err as { config?: { method?: string; url?: string } })?.config;
-        console.warn('[DocProcessing] Failed:', msg, {
-          endpoint: url?.url ? `${url.method?.toUpperCase() ?? ''} ${url.url}` : undefined,
-          status: apiErr.status,
-          code: apiErr.code,
-          traceId: apiErr.traceId,
-        });
+        log.end('error', { ...errorFields(err), shown: msg });
         setError(msg);
         setStatus('error');
       }

@@ -115,7 +115,8 @@ export default function DocumentScanScreen() {
     initializeRegula()
       .then(() => setRegulaReady(true))
       .catch((e: any) => {
-        console.error('[Scan] Regula init failed:', e?.message);
+        // Handled (Retry / Use camera on screen) — warn, not error.
+        console.warn('[DocScan] Regula init failed:', e?.message);
         setRegulaInitFailed(true);
       });
 
@@ -142,7 +143,7 @@ export default function DocumentScanScreen() {
       setStep(skipSelfie ? 'done' : 'selfie');
     } catch (e: any) {
       if (e instanceof RegulaScanCancelled) return; // user closed the scanner
-      console.error('[Scan] Regula scan failed:', e?.message);
+      console.warn('[DocScan] Regula scan failed:', e?.message);
       setScanError("The scan didn't work. Please try again.");
     } finally {
       setRegulaBusy(false);

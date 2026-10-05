@@ -26,6 +26,7 @@ import { api } from '@/api';
 import { toApiError } from '@/api/errors';
 import { useToast } from '@/components/composite/Toast';
 import { documentKeys, refreshAfterVerify, useAddDocument } from '@/features/documents/hooks';
+import { errorFields, startDocLog, type DocLog } from '@/features/documents/verifyLog';
 import {
   DEFAULT_REJECTION_MESSAGE,
   isApproved,
@@ -76,13 +77,15 @@ export default function FamilyProcessingScreen() {
   // Retry-safe: a retry after a failed upload/verify reuses the document.
   const createdDocRef = useRef<IdentityDocument | null>(null);
   const processRef = useRef<(() => Promise<void>) | null>(null);
+  // Retries of this screen, for the attempt log.
+  const attemptRef = useRef(0);
 
   const memberPage = () =>
     personId ? router.dismissTo({ pathname: '/family/[id]', params: { id: personId } }) : router.dismissTo('/(tabs)');
 
   /** After an approval: drop this member's earlier failed/unverified tries of
    *  the same type (the server already removes older verified ones, §6.5). */
-  const removeLeftovers = async (keepId: string) => {
+  const removeLeftovers = async (keepId: string, log: DocLog) => {
     if (!personId) return;
     try {
       const docs = await api.getDocuments(personId);
@@ -91,12 +94,15 @@ export default function FamilyProcessingScreen() {
         try {
           await api.removeDocument(d.id);
           await clearDocumentImages(d.id);
-        } catch {
+          log.info('removed leftover', { document: d.id, status: d.status });
+        } catch (e) {
           // Leave it — the member page still lists it.
+          log.warn('leftover not removed', { document: d.id, ...errorFields(e) });
         }
       }
-    } catch {
+    } catch (e) {
       // List unavailable — nothing to tidy.
+      log.warn('leftover lookup failed', errorFields(e));
     }
     void queryClient.invalidateQueries({ queryKey: documentKeys.all });
   };
@@ -116,6 +122,7 @@ export default function FamilyProcessingScreen() {
     setStatus('working');
     setError(null);
     setNoScan(false);
+    const log = startDocLog({ flow: 'family', person: personId, type: docType, retry: attemptRef.current++ || undefined });
     try {
       const scan = getScanResult();
       if (!scan?.documentImageBase64) {
@@ -125,37 +132,47 @@ export default function FamilyProcessingScreen() {
       let doc = createdDocRef.current;
       if (!doc) {
         setStepIndex(0);
-        doc = await addDocument.mutateAsync({ type: docType, label: DOC_LABELS[docType], expiresAt: null, personId });
+        doc = await log.step(
+          'create document',
+          () => addDocument.mutateAsync({ type: docType, label: DOC_LABELS[docType], expiresAt: null, personId }),
+          (d) => ({ document: d.id }),
+        );
         createdDocRef.current = doc;
         try {
           await saveDocumentImages(doc.id, {
             front: scan.documentPreviewBase64 ?? scan.documentImageBase64,
             selfie: scan.selfieBase64,
           });
-        } catch {
+        } catch (e) {
           // Display copy only — verification doesn't need it.
+          log.warn('local copy not saved', errorFields(e));
         }
+      } else {
+        log.info('reusing document', { document: doc.id });
       }
       const verdict = await verifyDocumentWithUploads({
         documentId: doc.id,
         frontBase64: scan.documentImageBase64,
         backBase64: scan.backImageBase64,
         onStep: (s) => setStepIndex(s === 'uploading' ? 1 : 2),
+        log,
       });
       refreshReads(doc.id);
       clearScanResult();
       if (isApproved(verdict)) {
+        log.end('approved', { document: doc.id });
         setStatus('approved');
-        void removeLeftovers(doc.id);
+        void removeLeftovers(doc.id, log);
         toast({ variant: 'success', title: `${DOC_LABELS[docType]} verified` });
         memberPage();
         return;
       }
+      log.end('rejected', { reason: verdict.reasonCode, match: verdict.matchScore });
       setResult(verdict);
       setStatus('rejected');
     } catch (err) {
       const apiErr = toApiError(err);
-      console.warn('[FamilyDoc] Failed:', apiErr.code, apiErr.serverCode ?? '', apiErr.traceId ?? '');
+      log.end('error', { ...errorFields(err), shown: apiErr.message });
       setRetryable(apiErr.retryable);
       setError(apiErr.message || "Couldn't check the document. Please try again.");
       setStatus('error');

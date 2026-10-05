@@ -6,14 +6,15 @@
  *   - auto-capture when aligned + in focus
  *   - cropping + perspective correction to the document bounds
  *
- * The app never does manual crop math — the SDK returns an already-cropped,
- * rectangular document image which we forward to the backend as base64
- * (per REACT_NATIVE_KYC_INTEGRATION_GUIDE.md §6.3).
+ * The app never does manual crop math. The backend gets the raw, uncropped
+ * camera frame (its own Regula re-reads the document from it); the SDK's
+ * cropped, perspective-corrected image is used for display only.
  *
  * Native modules are lazy-required inside try/catch so the JS bundle still
  * runs in Expo Go (where they're unavailable) — callers must check
  * isRegulaAvailable() and fall back to the manual expo-camera flow.
  */
+import { imageLabel } from '@/features/documents/verifyLog';
 
 // ── Lazy native module holders ─────────────────────────────────────────────
 let DocumentReader: any = null;
@@ -291,9 +292,12 @@ export function scanDocument(): Promise<RegulaScanResult> {
           return;
         }
 
+        // Which image goes to the backend, and both sizes — the backend
+        // reads the portrait from the upload, so its resolution matters.
         console.log(
-          '[Regula] Scan complete — upload:', rawFrame ? 'raw frame' : 'cropped',
-          '| upload length:', imageBase64.length, '| preview length:', previewBase64?.length ?? 0,
+          '[DocScan] complete',
+          `upload=${rawFrame ? 'raw-frame' : 'cropped'} ${imageLabel(imageBase64)}`,
+          `| preview ${imageLabel(previewBase64) ?? 'none'}`,
         );
         resolve({ imageBase64, previewBase64: previewBase64 ?? imageBase64 });
       } catch (e: any) {

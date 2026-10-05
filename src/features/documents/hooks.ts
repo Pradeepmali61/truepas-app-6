@@ -20,10 +20,6 @@ export function useDocuments(personId?: string) {
     // Always refetch when the screen mounts — ensures newly added documents
     // show up even if cache invalidation timing is off.
     refetchOnMount: true,
-    select: (data) => {
-      console.log('[useDocuments] personId=', personId, '| docs returned=', data?.length, '| ids=', data?.map(d => d.id).join(','));
-      return data;
-    },
   });
 }
 

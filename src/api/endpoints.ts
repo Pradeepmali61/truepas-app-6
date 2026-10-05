@@ -132,7 +132,10 @@ function authFrom(data: Record<string, unknown>): AuthResponse {
 async function putFile(uploadUrl: string, fileUri: string, contentType: string): Promise<void> {
   const blob = await (await fetch(fileUri)).blob();
   const res = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: blob });
-  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+  if (!res.ok) {
+    const code = (await res.text().catch(() => '')).match(/<Code>([^<]+)<\/Code>/)?.[1];
+    throw new Error(`Upload failed (${res.status}${code ? ` ${code}` : ''})`);
+  }
 }
 
 /** Liveness routes take the face sign-in preauth token instead of the
@@ -161,12 +164,18 @@ export const realApi = {
     return { ...data, activity: (Array.isArray(data?.activity) ? data.activity : []).map(normalizeActivity) };
   },
   getDocuments: async (personId?: string): Promise<IdentityDocument[]> => {
-    console.log('[API] GET /documents', personId ? `?personId=${personId}` : '(self)');
     const { data } = await apiClient.get<IdentityDocument[]>(
       '/documents',
       personId ? { params: { personId } } : undefined,
     );
-    console.log('[API] GET /documents response:', JSON.stringify(data), `count=${Array.isArray(data) ? data.length : 'N/A'}`);
+    // Ids, types and statuses only — the items carry holder names and DOBs.
+    console.log(
+      '[API] GET /documents',
+      personId ? `person=${personId}` : '(self)',
+      Array.isArray(data)
+        ? `→ ${data.length}: ${data.map((d) => `${d.id.slice(0, 8)} ${d.type} ${d.status}${d.matchScore != null ? ` match=${d.matchScore.toFixed(2)}` : ''}`).join(', ')}`
+        : '→ unexpected shape',
+    );
     return data;
   },
   getDocument: async (id: string): Promise<IdentityDocument | null> => {
@@ -483,9 +492,7 @@ export const realApi = {
 
   // ── Documents ────────────────────────────────────────────────────────
   addDocument: async (payload: AddDocumentRequest): Promise<IdentityDocument> => {
-    console.log('[API] POST /documents', JSON.stringify(payload));
     const { data } = await apiClient.post<IdentityDocument>('/documents', payload);
-    console.log('[API] POST /documents response:', JSON.stringify(data));
     return data;
   },
   removeDocument: async (id: string): Promise<OkResponse> => {
@@ -523,12 +530,10 @@ export const realApi = {
 
   // ── Document verification sessions ───────────────────────────────────
   createVerificationSession: async (documentId: string, payload: VerificationSessionRequest): Promise<VerificationSession> => {
-    console.log('[API] POST /documents/:id/verification-sessions', JSON.stringify({ documentId, payload }));
     const { data } = await apiClient.post<VerificationSession>(
       `/documents/${documentId}/verification-sessions`,
       payload,
     );
-    console.log('[API] /documents/:id/verification-sessions response:', JSON.stringify(data));
     // Backend returns `sessionId`, the app type expects `id` — normalize it.
     const raw = data as any;
     return {
@@ -544,21 +549,11 @@ export const realApi = {
     payload: VerifyDocumentRequest,
     config?: { timeout?: number },
   ): Promise<VerifyDocumentResponse> => {
-    console.log('[API] POST /document-verification-sessions/:id/verify', JSON.stringify({ sessionId, hasFrontImage: !!payload.frontImageBase64, hasSelfie: !!payload.selfieImageBase64 }));
     const { data } = await apiClient.post<VerifyDocumentResponse>(
       `/document-verification-sessions/${sessionId}/verify`,
       payload,
       config,
     );
-    // Log only the outcome — the response carries extracted PII (name, DOB,
-    // portrait URL, document number) which must not land in device logs.
-    console.log('[API] /document-verification-sessions/:id/verify response:', JSON.stringify({
-      status: data.status, outcome: data.outcome, reasonCode: data.reasonCode,
-      reasonMessage: data.reasonMessage, matchScore: data.matchScore, documentId: data.documentId,
-      hasPortrait: !!data.portraitImageUrl,
-      // The backend looks a decision up by this id (with the session id).
-      sessionId, decisionId: (data as { decisionId?: string }).decisionId,
-    }));
     return data;
   },
   /** Legacy: start verification without images (not per guide — kept for compatibility) */

@@ -15,6 +15,7 @@ import { EncodingType, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
 import { api } from '@/api';
+import { errorFields, imageLabel, startDocLog, type DocLog } from '@/features/documents/verifyLog';
 import type { DocumentImagePart, DocumentReasonCode, VerifyDocumentResponse } from '@/types/domain';
 
 export type VerifyUploadStep = 'uploading' | 'creating_session' | 'verifying';
@@ -39,6 +40,8 @@ export interface VerifyDocumentWithUploadsInput {
   onStep?: (step: VerifyUploadStep) => void;
   /** /verify timeout — server-side Regula can take a while. Default 90 s. */
   timeoutMs?: number;
+  /** The caller's attempt log, so these steps share its id (verifyLog.ts). */
+  log?: DocLog;
 }
 
 const CONTENT_TYPE = 'image/jpeg';
@@ -88,6 +91,11 @@ function presignUnavailable(err: unknown, phase: 'urls' | 'put'): boolean {
  */
 export async function verifyDocumentWithUploads(input: VerifyDocumentWithUploadsInput): Promise<VerifyDocumentResponse> {
   const { documentId, livenessSessionId, sessionToken, onStep } = input;
+  const log = input.log ?? startDocLog({ document: documentId });
+  log.info('images', {
+    front: imageLabel(input.frontBase64) ?? (input.frontUri ? 'file' : 'none'),
+    back: imageLabel(input.backBase64) ?? (input.backUri ? 'file' : undefined),
+  });
   const temps: File[] = [];
   let frontObjectKey: string | undefined;
   let backObjectKey: string | undefined;
@@ -101,32 +109,24 @@ export async function verifyDocumentWithUploads(input: VerifyDocumentWithUploads
     onStep?.('uploading');
     const files: [DocumentImagePart, string][] = [['front', frontUri]];
     if (backUri) files.push(['back', backUri]);
-    const { uploads } = await api.getDocumentUploadUrls(
-      documentId,
-      files.map(([part]) => part),
-      CONTENT_TYPE,
+    const { uploads } = await log.step(
+      'upload-urls',
+      () => api.getDocumentUploadUrls(documentId, files.map(([part]) => part), CONTENT_TYPE),
+      (r) => ({ parts: Object.keys(r.uploads ?? {}).join('+') }),
     );
     phase = 'put';
     await Promise.all(
       files.map(([part, uri]) => {
         const target = uploads[part];
         if (!target) throw new Error("Couldn't start the upload. Please try again.");
-        return api.uploadFileToUrl(target.uploadUrl, uri, CONTENT_TYPE);
+        return log.step(`put ${part}`, () => api.uploadFileToUrl(target.uploadUrl, uri, CONTENT_TYPE));
       }),
     );
     frontObjectKey = uploads.front!.objectKey;
     backObjectKey = backUri ? uploads.back?.objectKey : undefined;
   } catch (err) {
     if (!input.frontBase64 || !presignUnavailable(err, phase)) throw err;
-    const status = err instanceof AxiosError ? err.response?.status : undefined;
-    // The server's error body ({ code, message, trace_id }) is what the
-    // backend team needs to find the failure in their logs.
-    console.warn('[DocUpload] Presigned upload failed — verifying with inline images:', {
-      phase,
-      status,
-      message: err instanceof Error ? err.message : String(err),
-      server: err instanceof AxiosError ? err.response?.data : undefined,
-    });
+    log.warn('presigned upload unavailable, sending images inline', { phase, ...errorFields(err) });
     inline = true;
   } finally {
     for (const f of temps) {
@@ -139,12 +139,21 @@ export async function verifyDocumentWithUploads(input: VerifyDocumentWithUploads
   }
 
   onStep?.('creating_session');
-  const session = await api.createVerificationSession(documentId, {
-    ...(frontObjectKey ? { frontObjectKey } : {}),
-    ...(backObjectKey ? { backObjectKey } : {}),
-    ...(livenessSessionId ? { livenessSessionId } : {}),
-    requestId: input.requestId ?? `req-${documentId}-${Date.now()}`,
-  });
+  const session = await log.step(
+    'session',
+    () =>
+      api.createVerificationSession(documentId, {
+        ...(frontObjectKey ? { frontObjectKey } : {}),
+        ...(backObjectKey ? { backObjectKey } : {}),
+        ...(livenessSessionId ? { livenessSessionId } : {}),
+        requestId: input.requestId ?? `req-${documentId}-${Date.now()}`,
+      }),
+    (r) => ({
+      session: r.id,
+      mode: inline ? 'inline' : 'presigned',
+      liveness: livenessSessionId ? 'yes' : undefined,
+    }),
+  );
 
   onStep?.('verifying');
   const images =
@@ -154,9 +163,22 @@ export async function verifyDocumentWithUploads(input: VerifyDocumentWithUploads
           ...(input.backBase64 ? { backImageBase64: stripDataUri(input.backBase64) } : {}),
         }
       : {};
-  return api.startVerificationWithImages(session.id, { ...images, ...(sessionToken ? { sessionToken } : {}) }, {
-    timeout: input.timeoutMs ?? 90_000,
-  });
+  return log.step(
+    'verify',
+    () =>
+      api.startVerificationWithImages(session.id, { ...images, ...(sessionToken ? { sessionToken } : {}) }, {
+        timeout: input.timeoutMs ?? 90_000,
+      }),
+    (r) => ({
+      outcome: r.outcome,
+      reason: r.reasonCode,
+      match: r.matchScore,
+      portrait: r.portraitImageUrl ? 'yes' : 'no',
+      expiry: r.dateOfExpiry ? 'yes' : 'no',
+      session: session.id,
+      decision: (r as { decisionId?: string }).decisionId,
+    }),
+  );
 }
 
 /* ───────────────────────── outcomes (§6.3) ───────────────────────── */
