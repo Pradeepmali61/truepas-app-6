@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/api';
-import type { AddDocumentRequest } from '@/types/domain';
+import type { AddDocumentRequest, SupportedDocumentType } from '@/types/domain';
 
 export const documentKeys = {
   all: ['documents'] as const,
+  supportedTypes: ['document-types', 'supported'] as const,
+  images: (id: string) => ['document-images', id] as const,
   detail: (id: string) => ['documents', id] as const,
   member: (personId: string) => ['documents', 'member', personId] as const,
 };
@@ -58,5 +60,36 @@ export function useRemoveDocument() {
       // Identity summary derives document state — same invalidation as add.
       queryClient.invalidateQueries({ queryKey: ['identity'] });
     },
+  });
+}
+
+/** GET /documents/types/supported — the picker's source of truth (§6.1). */
+export function useSupportedDocumentTypes() {
+  return useQuery({
+    queryKey: documentKeys.supportedTypes,
+    queryFn: () => api.getSupportedDocumentTypes(),
+    staleTime: 60 * 60_000,
+  });
+}
+
+/** Types allowed for a person of this age (undefined age = adult). */
+export function allowedDocumentTypes(types: SupportedDocumentType[], age?: number): SupportedDocumentType[] {
+  const a = age ?? 18;
+  return types.filter(
+    (t) =>
+      (a < 18 ? t.allowedForMinors : t.allowedForAdults) &&
+      (t.minAge == null || a >= t.minAge) &&
+      (t.maxAge == null || a <= t.maxAge),
+  );
+}
+
+/** Signed, expiring image URLs — staleTime stays short so they're refetched
+ *  rather than reused after they expire. */
+export function useDocumentImages(id?: string) {
+  return useQuery({
+    queryKey: documentKeys.images(id ?? ''),
+    queryFn: () => api.getDocumentImages(id as string),
+    enabled: !!id,
+    staleTime: 60_000,
   });
 }

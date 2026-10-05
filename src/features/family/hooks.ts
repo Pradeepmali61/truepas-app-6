@@ -47,6 +47,19 @@ export function useAddFamilyMember() {
   });
 }
 
+/** PATCH /family/{id}/permissions — notifyOnCheckIn works; independentCheckIn
+ *  is stored but not enforced yet (show it as coming soon). */
+export function useUpdateFamilyPermissions(personId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<NonNullable<FamilyMember['permissions']>>) => api.updateFamilyPermissions(personId, patch),
+    onSuccess: (member) => {
+      queryClient.setQueryData(familyKeys.detail(personId), member);
+      void queryClient.invalidateQueries({ queryKey: familyKeys.all });
+    },
+  });
+}
+
 export function useRemoveFamilyMember() {
   const queryClient = useQueryClient();
   return useMutation({

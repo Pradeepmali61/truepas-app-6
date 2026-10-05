@@ -76,13 +76,13 @@ import type { ActivityItem, Booking, DocumentType, FamilyMember, IdentityDocumen
 
 /** ISO or date-only → Date. Date-only strings are pinned to midday so they
  *  don't slip a day in negative-UTC time zones (design-repo formatCheckIn). */
-function toDate(iso: string): Date {
+function toDate(iso: string | null | undefined): Date {
   if (!iso) return new Date(NaN);
   return new Date(iso.includes('T') ? iso : `${iso}T12:00:00`);
 }
 
 /** "Jul 21, 2026" — falls back to the raw string when unparsable. */
-export function fmtDate(iso: string): string {
+export function fmtDate(iso: string | null | undefined): string {
   const d = toDate(iso);
   return Number.isNaN(d.getTime())
     ? iso || '—'
@@ -90,14 +90,14 @@ export function fmtDate(iso: string): string {
 }
 
 /** "Thu, 2 Oct" */
-export function fmtDay(iso: string): string {
+export function fmtDay(iso: string | null | undefined): string {
   const d = toDate(iso);
   return Number.isNaN(d.getTime())
     ? iso || '—'
     : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-function dayDiff(iso: string): number | null {
+function dayDiff(iso: string | null | undefined): number | null {
   const d = toDate(iso);
   if (Number.isNaN(d.getTime())) return null;
   const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
@@ -105,7 +105,7 @@ function dayDiff(iso: string): number | null {
 }
 
 /** "Today" / "Tomorrow" / "Thu, 2 Oct". */
-export function whenLabel(iso: string): string {
+export function whenLabel(iso: string | null | undefined): string {
   const diff = dayDiff(iso);
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
@@ -116,8 +116,10 @@ export function isTodayIso(iso: string): boolean {
   return dayDiff(iso) === 0;
 }
 
-/** Booking amount — same rendering as the original BookingCard. */
-export function money(amount: number): string {
+/** Booking amount — same rendering as the original BookingCard. Reservations
+ *  have no amount (null) -> "—". */
+export function money(amount: number | null | undefined): string {
+  if (amount == null) return '—';
   return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -135,7 +137,7 @@ export function fmtMonthLabel(iso: string): string {
   return d.toLocaleDateString(undefined, sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' });
 }
 
-export function yearOf(iso: string): number | null {
+export function yearOf(iso: string | null | undefined): number | null {
   const d = toDate(iso);
   return Number.isNaN(d.getTime()) ? null : d.getFullYear();
 }
@@ -850,6 +852,7 @@ const SERVER_TONE: Record<ActivityItem['tone'], { icon: LucideIcon; tone: TileTo
   success: { icon: ShieldCheck, tone: 'green', badge: { label: 'Done', tone: 'green' } },
   warning: { icon: TriangleAlert, tone: 'amber', badge: { label: 'Review', tone: 'amber' } },
   error: { icon: CircleX, tone: 'red', badge: { label: 'Failed', tone: 'red' } },
+  neutral: { icon: ShieldCheck, tone: 'sky', badge: { label: 'Done', tone: 'sky' } },
 };
 
 const DOC_ACTIVITY: Partial<Record<VerificationStatus, { verb: string; tone: TileTone; badge: { label: string; tone: BadgeTone } }>> = {

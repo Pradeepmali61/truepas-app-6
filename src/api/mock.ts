@@ -1,7 +1,36 @@
+import { setReauthToken, takeReauthToken } from '@/services/reauth';
 import type {
     AccountDetailsRequest,
     AccountDetailsResponse,
+    ActivityItem,
     ActivityLogItem,
+    AppPreferences,
+    AuthSession,
+    CreateReservationRequest,
+    DataExport,
+    DocumentImagePart,
+    DocumentImages,
+    DocumentReasonCode,
+    DocumentUploadUrls,
+    FaceLoginPurpose,
+    FaceLoginResult,
+    FaceLoginStartResponse,
+    LoginResult,
+    NotificationCount,
+    NotificationPreferences,
+    NotificationType,
+    PushDevice,
+    ResetPinRequest,
+    RevokeSessionsResponse,
+    SecurityScore,
+    SupportChannels,
+    SupportedDocumentType,
+    TwoFactorEnableResponse,
+    TwoFactorMethod,
+    TwoFactorStatusResponse,
+    UpdateReservationRequest,
+    UserStats,
+    VerifyPinResponse,
     AddDocumentRequest,
     AddFamilyMemberRequest,
     AuthResponse,
@@ -86,11 +115,81 @@ let family: FamilyMember[] = (familyData as FamilyMember[]).map((f) => ({
   ...f,
   faceEnrolled: false,
 }));
-const bookings: Booking[] = bookingsData as Booking[];
+let bookings: Booking[] = bookingsData as Booking[];
 const familyActivity: ActivityLogItem[] = familyActivityData as ActivityLogItem[];
-const notifications: Notification[] = [
-  { id: 'n1', title: 'Welcome to Truepas', body: 'Your account is set up.', read: false, createdAt: new Date().toISOString(), type: 'system' },
+const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+let notifications: Notification[] = [
+  { id: 'n1', title: 'Face enrolled', body: 'Your face is set up for check-in.', read: false, createdAt: minutesAgo(30), type: 'identity', data: { type: 'identity' } },
+  { id: 'n2', title: 'Maya added to your family', body: 'Finish her face scan to check in together.', read: false, createdAt: minutesAgo(180), type: 'family', data: { type: 'family', personId: 'f1' } },
+  { id: 'n3', title: 'Reservation added', body: 'Hilton Garden Inn, Oct 12.', read: true, createdAt: minutesAgo(1440), type: 'booking', data: { type: 'booking', bookingId: 'b9' } },
+  { id: 'n4', title: 'PIN changed', body: 'Your PIN was changed. If this wasn\'t you, contact support.', read: true, createdAt: minutesAgo(4320), type: 'account', data: { type: 'account' } },
 ];
+
+// ── Oct 2026 backend features (in-memory) ─────────────────────────────
+let twoFactor: { enabled: boolean; method: TwoFactorMethod | null } = { enabled: false, method: null };
+let sessions: AuthSession[] = [
+  { id: 's1', device: 'This phone', platform: 'android', appVersion: '1.0.0', createdAt: minutesAgo(2880), lastActiveAt: minutesAgo(0), current: true },
+  { id: 's2', device: 'iPad Air', platform: 'ios', appVersion: '1.0.0', createdAt: minutesAgo(20160), lastActiveAt: minutesAgo(4320), current: false },
+  { id: 's3', device: null, platform: null, appVersion: null, createdAt: minutesAgo(60000), lastActiveAt: minutesAgo(30000), current: false },
+];
+let notificationPrefs: NotificationPreferences = { checkin: true, family: true, security: true, document: true };
+let appPrefs: AppPreferences = { language: 'en', region: null, faceCheckInEnabled: true, shareAnalytics: false };
+let pushDevices: PushDevice[] = [];
+const verificationLiveness = new Map<string, string | undefined>();
+let dataExport: DataExport | null = null;
+
+const SUPPORTED_TYPES: SupportedDocumentType[] = [
+  { type: 'passport', label: 'Passport', selfieRequired: true, allowedForMinors: true, allowedForAdults: true, minAge: null, maxAge: null },
+  { type: 'idCard', label: 'ID card', selfieRequired: true, allowedForMinors: true, allowedForAdults: true, minAge: null, maxAge: null },
+  { type: 'drivingLicense', label: "Driver's license", selfieRequired: true, allowedForMinors: true, allowedForAdults: true, minAge: 16, maxAge: null },
+  { type: 'greenCard', label: 'Green card', selfieRequired: true, allowedForMinors: true, allowedForAdults: true, minAge: null, maxAge: null },
+  { type: 'usVisa', label: 'U.S. visa', selfieRequired: true, allowedForMinors: true, allowedForAdults: true, minAge: null, maxAge: null },
+  { type: 'birthCertificate', label: 'Birth certificate', selfieRequired: false, allowedForMinors: true, allowedForAdults: false, minAge: null, maxAge: 17 },
+];
+
+const REASON_MESSAGES: Record<DocumentReasonCode, string> = {
+  DOCUMENT_PROCESSING_ERROR: "We couldn't read this document. Retake the photos in good light.",
+  AUTHENTICITY_FAILED: 'This document did not pass our security checks. Try another document.',
+  DOCUMENT_TYPE_MISMATCH: 'The document does not look like the type you selected. Check the type and retake it.',
+  DOCUMENT_UNREADABLE: 'Some details on the document could not be read. Retake the photos in good light.',
+  NO_PORTRAIT_IN_DOCUMENT: "We couldn't find a photo of you on this document. Use a document that shows your face.",
+  FACE_NOT_ENROLLED: 'Verify this document with a live selfie, or set up the face first.',
+  DOCUMENT_FACE_MISMATCH: 'The photo on this document does not match your enrolled face. Make sure it is your own document.',
+  PROFILE_MISMATCH: 'The details on this document do not match your profile. Check the document or update your profile.',
+  DOCUMENT_CHECKS_INCONCLUSIVE: "We couldn't confirm this document automatically. Retake the photos in good light or try another document.",
+};
+
+function pushNotification(title: string, body: string, type: NotificationType, data: Notification['data']) {
+  notifications = [{ id: nextId('n'), title, body, read: false, createdAt: new Date().toISOString(), type, data }, ...notifications];
+}
+
+/** Account activity derived from the in-memory state, newest first. */
+function accountActivity(): ActivityItem[] {
+  const out: ActivityItem[] = [];
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  for (const d of documents.filter((x) => !x.personId || x.personId === user.id)) {
+    const at = d.verifiedAt ?? `${d.addedAt}T10:00:00Z`;
+    out.push({
+      id: `doc-${d.id}`,
+      type: d.status === 'verified' ? 'document_verified' : d.status === 'failed' ? 'document_failed' : 'document_added',
+      title: `${d.label} ${d.status === 'verified' ? 'verified' : d.status === 'failed' ? 'failed' : 'added'}`,
+      occurredAt: at,
+      timestamp: fmt(at),
+      tone: d.status === 'verified' ? 'success' : d.status === 'failed' ? 'warning' : 'neutral',
+      ref: { documentId: d.id },
+    });
+  }
+  for (const f of family) {
+    const at = f.createdAt ?? minutesAgo(600);
+    out.push({ id: `fam-${f.id}`, type: 'family_member_added', title: `${f.name.split(' ')[0]} added to family`, occurredAt: at, timestamp: fmt(at), tone: 'neutral', ref: { personId: f.id } });
+  }
+  if (user.faceEnrolled) {
+    const at = user.faceEnrolledAt ?? minutesAgo(9000);
+    out.push({ id: 'face', type: 'face_enrolled', title: 'Face enrolled', occurredAt: at, timestamp: fmt(at), tone: 'success' });
+  }
+  return out.sort((a, b) => (b.occurredAt ?? '').localeCompare(a.occurredAt ?? '')).slice(0, 20);
+}
 
 export const mockUser: User = user;
 
@@ -119,7 +218,7 @@ function ageFromDob(dob: string): number {
 export const mockApi = {
   // ── Reads ────────────────────────────────────────────────────────────
   getUser: () => respond(user),
-  getIdentitySummary: () => respond(identitySummary),
+  getIdentitySummary: () => respond({ ...identitySummary, activity: [...identitySummary.activity, ...accountActivity()] }),
   getDocuments: (personId?: string) =>
     respond(
       personId
@@ -134,14 +233,143 @@ export const mockApi = {
   getFamilyActivity: (_id: string) => respond(familyActivity),
   getBookings: () => respond(bookings),
   getBooking: (id: string) => respond(bookings.find((b) => b.id === id) ?? null),
-  getNotifications: (_params?: { limit?: number; offset?: number; unreadOnly?: boolean }) => respond(notifications),
+  getNotifications: (params?: { limit?: number; offset?: number; unreadOnly?: boolean; type?: NotificationType }) => {
+    const list = notifications.filter(
+      (n) => (!params?.unreadOnly || !n.read) && (!params?.type || n.type === params.type),
+    );
+    const offset = params?.offset ?? 0;
+    return respond(list.slice(offset, offset + (params?.limit ?? 50)));
+  },
+  getNotificationCount: (type?: NotificationType): Promise<NotificationCount> => {
+    const list = notifications.filter((n) => !type || n.type === type);
+    return respond({ total: list.length, unread: list.filter((n) => !n.read).length });
+  },
+  markNotificationRead: (id: string): Promise<OkResponse> => {
+    notifications = notifications.map((n) => (n.id === id ? { ...n, read: true, readAt: new Date().toISOString() } : n));
+    return respond({ ok: true });
+  },
+  markNotificationsRead: (ids: string[]): Promise<OkResponse> => {
+    notifications = notifications.map((n) => (ids.includes(n.id) ? { ...n, read: true, readAt: new Date().toISOString() } : n));
+    return respond({ ok: true });
+  },
+  markAllNotificationsRead: (): Promise<OkResponse> => {
+    notifications = notifications.map((n) => ({ ...n, read: true, readAt: n.readAt ?? new Date().toISOString() }));
+    return respond({ ok: true });
+  },
+  getNotificationPreferences: () => respond(notificationPrefs),
+  updateNotificationPreferences: (patch: Partial<NotificationPreferences>) => {
+    notificationPrefs = { ...notificationPrefs, ...patch };
+    return respond(notificationPrefs);
+  },
+  registerPushDevice: (pushToken: string, platform: 'ios' | 'android'): Promise<PushDevice> => {
+    const existing = pushDevices.find((d) => d.id === `push-${pushToken.slice(-6)}`);
+    const device = existing ?? { id: `push-${pushToken.slice(-6)}`, platform, createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString() };
+    pushDevices = [...pushDevices.filter((d) => d.id !== device.id), { ...device, lastSeenAt: new Date().toISOString() }];
+    return respond(device);
+  },
+  getPushDevices: () => respond(pushDevices),
+  deletePushDevice: (id: string): Promise<OkResponse> => {
+    pushDevices = pushDevices.filter((d) => d.id !== id);
+    return respond({ ok: true });
+  },
+
+  // ── Home / profile / settings data ───────────────────────────────────
+  getAccountActivity: () => respond(accountActivity()),
+  getSecurityScore: (): Promise<SecurityScore> => {
+    const docs = documents.filter((d) => !d.personId || d.personId === user.id);
+    const verified = docs.some((d) => d.status === 'verified');
+    const suggestions: SecurityScore['suggestions'] = [];
+    if (!user.faceEnrolled) suggestions.push({ id: 'enroll_face', title: 'Set up your face', points: 30 });
+    if (docs.length === 0) suggestions.push({ id: 'add_document', title: 'Add an ID document', points: 20 });
+    else if (!verified) suggestions.push({ id: 'verify_document', title: 'Verify your document', points: 15 });
+    if (!twoFactor.enabled) suggestions.push({ id: 'enable_2fa', title: 'Turn on 2-step sign-in', points: 8 });
+    if (sessions.length > 2) suggestions.push({ id: 'review_sessions', title: 'Review signed-in devices', points: 4 });
+    const lost = suggestions.reduce((n, x) => n + x.points, 0);
+    return respond({ score: Math.max(0, 100 - lost), identityStrength: Math.max(0, 100 - lost + (twoFactor.enabled ? 0 : 8)), suggestions });
+  },
+  getUserStats: (year: number): Promise<UserStats> => {
+    const done = bookings.filter((b) => b.status === 'completed' && new Date(b.checkIn).getFullYear() === year);
+    return respond({
+      year,
+      checkIns: done.length,
+      cities: new Set(done.map((b) => b.location)).size,
+      avgCheckInMs: done.length ? 950 : null,
+      minutesSaved: done.length * 2,
+    });
+  },
+  getPreferences: () => respond(appPrefs),
+  updatePreferences: (patch: Partial<AppPreferences>) => {
+    appPrefs = { ...appPrefs, ...patch };
+    return respond(appPrefs);
+  },
+  getSupportChannels: (): Promise<SupportChannels> =>
+    respond({ email: 'support@truepas.com', phone: null, hours: null, chatUrl: null }),
+  requestDataExport: (): Promise<DataExport> => {
+    dataExport = dataExport ?? { exportId: nextId('exp'), status: 'pending', readyAt: null, expiresAt: null };
+    return respond(dataExport);
+  },
+  getDataExport: (exportId: string): Promise<DataExport> =>
+    respond(dataExport && dataExport.exportId === exportId ? dataExport : { exportId, status: 'expired' }),
 
   // ── Auth ─────────────────────────────────────────────────────────────
-  login: (payload: LoginRequest): Promise<AuthResponse> => {
+  login: (payload: LoginRequest): Promise<LoginResult> => {
     if (!payload.identifier || !payload.password) {
       return fail('Invalid credentials');
     }
+    // 2-step sign-in: on when turned on in Security, or for any identifier
+    // containing "2fa" (lets the code screen be tried without set-up).
+    if (twoFactor.enabled || payload.identifier.includes('2fa')) {
+      return respond({ nextStep: 'verify2fa', challengeId: nextId('ch'), method: twoFactor.method ?? 'email' });
+    }
     return respond(authResponse());
+  },
+  verifyTwoFactor: (payload: { challengeId: string; code: string }): Promise<AuthResponse> => {
+    if (!/^\d{6}$/.test(payload.code)) return fail('That code is wrong or has expired. Try again.');
+    return respond(authResponse());
+  },
+  enableTwoFactor: (method: TwoFactorMethod): Promise<TwoFactorEnableResponse> =>
+    respond({
+      method,
+      challengeId: nextId('ch'),
+      nextStep: 'confirm',
+      ...(method === 'totp'
+        ? {
+            secret: 'JBSWY3DPEHPK3PXP',
+            otpauthUri: `otpauth://totp/Truepas%3A${encodeURIComponent(user.email)}?secret=JBSWY3DPEHPK3PXP&issuer=Truepas&digits=6&period=30`,
+          }
+        : {}),
+    }),
+  confirmTwoFactor: (payload: { challengeId: string; code: string }): Promise<TwoFactorStatusResponse> => {
+    if (!/^\d{6}$/.test(payload.code)) return fail('That code is wrong or has expired. Try again.');
+    twoFactor = { enabled: true, method: twoFactor.method ?? 'email' };
+    user = { ...user, twoFactorEnabled: true, twoFactorMethod: twoFactor.method };
+    return respond({ ok: true, twoFactorEnabled: true, method: twoFactor.method ?? 'email' });
+  },
+  disableTwoFactor: (pin: string): Promise<TwoFactorStatusResponse> => {
+    if (pin !== userPin) return fail('Incorrect PIN.');
+    twoFactor = { enabled: false, method: null };
+    user = { ...user, twoFactorEnabled: false, twoFactorMethod: null };
+    return respond({ ok: true, twoFactorEnabled: false });
+  },
+  getSessions: () => respond(sessions),
+  revokeSession: (id: string): Promise<RevokeSessionsResponse> => {
+    const before = sessions.length;
+    sessions = sessions.filter((x) => x.id !== id);
+    return respond({ ok: true, revoked: before - sessions.length });
+  },
+  revokeOtherSessions: (): Promise<RevokeSessionsResponse> => {
+    const before = sessions.length;
+    sessions = sessions.filter((x) => x.current);
+    return respond({ ok: true, revoked: before - sessions.length });
+  },
+  startFaceLogin: (payload: { identifier: string; purpose: FaceLoginPurpose }): Promise<FaceLoginStartResponse> =>
+    respond({ nextStep: 'face', preauthToken: 'mock-preauth', expiresIn: 300, purpose: payload.purpose }),
+  faceLogin: (_payload: { preauthToken: string; livenessSessionId: string; sessionToken: string }): Promise<FaceLoginResult> =>
+    respond(authResponse()),
+  resetPin: (payload: ResetPinRequest): Promise<OkResponse> => {
+    if (!/^\d{4,6}$/.test(payload.newPin)) return fail('PIN must be 4–6 digits');
+    userPin = payload.newPin;
+    return respond({ ok: true, message: 'PIN reset' });
   },
   register: (payload: RegisterRequest): Promise<RegisterResponse> => {
     user = { ...user, phone: `${payload.countryCode} ${payload.phone}` };
@@ -226,11 +454,12 @@ export const mockApi = {
     userPin = payload.newPin;
     return respond({ ok: true, message: 'PIN changed' });
   },
-  verifyPin: (pin: string): Promise<OkResponse> => {
+  verifyPin: (pin: string): Promise<VerifyPinResponse> => {
     if (pin !== userPin) {
       return fail('Incorrect PIN');
     }
-    return respond({ ok: true });
+    setReauthToken('mock-reauth', 300);
+    return respond({ ok: true, reauthToken: 'mock-reauth', scope: 'face_update', expiresIn: 300 });
   },
   logout: (_payload: LogoutRequest): Promise<OkResponse> => {
     return respond({ ok: true });
@@ -282,6 +511,63 @@ export const mockApi = {
     family = family.filter((f) => f.id !== id);
     return respond({ ok: true, message: 'Member removed' });
   },
+  updateFamilyPermissions: (personId: string, patch: Partial<NonNullable<FamilyMember['permissions']>>): Promise<FamilyMember> => {
+    const member = family.find((f) => f.id === personId);
+    if (!member) return fail('Family member not found');
+    const updated: FamilyMember = {
+      ...member,
+      permissions: { independentCheckIn: false, notifyOnCheckIn: true, ...member.permissions, ...patch },
+    };
+    family = family.map((f) => (f.id === personId ? updated : f));
+    return respond(updated);
+  },
+
+  // ── Bookings / reservations ──────────────────────────────────────────
+  createReservation: (payload: CreateReservationRequest): Promise<Booking> => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (!payload.venue?.trim()) return fail('Venue is required');
+    if (payload.checkIn < todayStr) return fail('Check-in date cannot be in the past');
+    if (payload.checkOut && payload.checkOut < payload.checkIn) return fail('Check-out must be on or after check-in');
+    const booking: Booking = {
+      id: nextId('res-'),
+      source: 'customer',
+      venue: payload.venue.trim(),
+      location: payload.location ?? '',
+      type: 'reservation',
+      kind: payload.kind ?? 'other',
+      image: null,
+      checkIn: payload.checkIn,
+      checkOut: payload.checkOut ?? null,
+      checkedInAt: null,
+      status: 'upcoming',
+      guests: payload.guests ?? 1,
+      amount: null,
+      durationMs: null,
+      notes: payload.notes ?? null,
+      checkedInMembers: [],
+      linkedBookingId: null,
+      createdAt: new Date().toISOString(),
+    };
+    bookings = [booking, ...bookings];
+    pushNotification('Reservation added', `${booking.venue}, ${booking.checkIn}`, 'booking', { type: 'booking', bookingId: booking.id });
+    return respond(booking);
+  },
+  updateReservation: (id: string, patch: UpdateReservationRequest): Promise<Booking> => {
+    const b = bookings.find((x) => x.id === id);
+    if (!b) return fail('Booking not found');
+    if (b.source !== 'customer' || b.status !== 'upcoming') return fail("This booking can't be changed any more.");
+    const updated: Booking = { ...b, ...patch, checkOut: patch.checkOut ?? b.checkOut, notes: patch.notes ?? b.notes };
+    bookings = bookings.map((x) => (x.id === id ? updated : x));
+    return respond(updated);
+  },
+  deleteReservation: (id: string): Promise<OkResponse> => {
+    const b = bookings.find((x) => x.id === id);
+    if (!b) return fail('Booking not found');
+    if (b.source !== 'customer' || b.status !== 'upcoming') return fail("This booking can't be changed any more.");
+    bookings = bookings.filter((x) => x.id !== id);
+    return respond({ ok: true });
+  },
 
   // ── Documents ────────────────────────────────────────────────────────
   addDocument: (payload: AddDocumentRequest): Promise<IdentityDocument> => {
@@ -289,11 +575,11 @@ export const mockApi = {
       id: nextId('d'),
       type: payload.type,
       label: payload.label,
-      number: payload.number,
+      number: payload.number ?? '',
       status: 'pending',
       matchScore: null,
       addedAt: new Date().toISOString().slice(0, 10),
-      expiresAt: payload.expiresAt,
+      expiresAt: payload.expiresAt ?? null,
       source: 'uploaded',
       personId: payload.personId,
     };
@@ -304,28 +590,71 @@ export const mockApi = {
     documents = documents.filter((d) => d.id !== id);
     return respond({ ok: true, message: 'Document removed' });
   },
+  getSupportedDocumentTypes: () => respond(SUPPORTED_TYPES),
+  getDocumentUploadUrls: (documentId: string, parts: DocumentImagePart[], _contentType = 'image/jpeg'): Promise<DocumentUploadUrls> => {
+    const uploads: DocumentUploadUrls['uploads'] = {};
+    for (const part of parts) {
+      uploads[part] = { uploadUrl: `mock://upload/${documentId}/${part}`, objectKey: `documents/${documentId}/${part}.jpg` };
+    }
+    return respond({ uploads, expiresIn: 900 });
+  },
+  uploadFileToUrl: (_uploadUrl: string, _fileUri: string, _contentType = 'image/jpeg'): Promise<void> => respond(undefined),
+  getDocumentImages: (_documentId: string): Promise<DocumentImages> =>
+    respond({ front: null, back: null, selfie: null, portrait: null }),
 
   // ── Document verification sessions ───────────────────────────────────
-  createVerificationSession: (documentId: string, _payload: VerificationSessionRequest): Promise<VerificationSession> => {
+  createVerificationSession: (documentId: string, payload: VerificationSessionRequest): Promise<VerificationSession> => {
+    const id = nextId('vs');
+    verificationLiveness.set(id, `${documentId}|${payload.livenessSessionId ?? ''}`);
     return respond({
-      id: nextId('vs'),
+      id,
       status: 'created',
       documentId,
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     });
   },
-  startVerificationWithImages: (_sessionId: string, _payload: VerifyDocumentRequest): Promise<VerifyDocumentResponse> => {
-    // Per guide §6.3: verify is SYNCHRONOUS — returns final outcome
+  startVerificationWithImages: (sessionId: string, payload: VerifyDocumentRequest): Promise<VerifyDocumentResponse> => {
+    // Verify is synchronous. Oct 2026 policy: approved | rejected only, and a
+    // photo document for a member without a face needs a liveness session.
+    const [documentId = 'mock-doc', livenessSessionId = ''] = (verificationLiveness.get(sessionId) ?? '').split('|');
+    const doc = documents.find((d) => d.id === documentId);
+    const member = doc?.personId ? family.find((f) => f.id === doc.personId) : undefined;
+    const now = new Date().toISOString();
+    const needsFace = !!member && !member.faceEnrolled && doc?.type !== 'birthCertificate';
+    if (needsFace && !(livenessSessionId && payload.sessionToken)) {
+      return respond({
+        id: sessionId,
+        status: 'completed',
+        outcome: 'rejected',
+        reasonCode: 'FACE_NOT_ENROLLED',
+        reasonMessage: REASON_MESSAGES.FACE_NOT_ENROLLED,
+        documentId,
+        createdAt: now,
+        completedAt: now,
+        matchScore: null,
+      });
+    }
+    const verified: IdentityDocument | undefined = doc
+      ? { ...doc, status: 'verified', matchScore: doc.type === 'birthCertificate' ? null : 0.95, number: doc.number || '•••• 4821', verifiedAt: now }
+      : undefined;
+    if (verified) {
+      // One verified document per type per person.
+      documents = documents
+        .filter((d) => !(d.id !== verified.id && d.type === verified.type && d.personId === verified.personId && d.status === 'verified'))
+        .map((d) => (d.id === verified.id ? verified : d));
+    }
     return respond({
-      id: _sessionId,
+      id: sessionId,
       status: 'completed',
       outcome: 'approved',
       reasonCode: null,
-      documentId: 'mock-doc',
-      createdAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      matchScore: 95,
+      reasonMessage: null,
+      documentId,
+      createdAt: now,
+      completedAt: now,
+      matchScore: verified?.matchScore ?? null,
+      document: verified,
     });
   },
   startVerification: (sessionId: string): Promise<OkResponse> => {
@@ -394,15 +723,21 @@ export const mockApi = {
     }
     return respond({ ok: true, faceEnrolled: true, faceId: nextId('face') });
   },
-  updateFace: (_payload: FaceUpdateRequest): Promise<FaceResponse> => {
+  updateFace: (payload: FaceUpdateRequest): Promise<FaceResponse> => {
+    // Mirrors the backend: PUT /face needs a fresh verify-pin token.
+    if (!takeReauthToken()) return fail('For your security, enter your PIN again to continue.');
+    if (payload.personId) {
+      family = family.map((f) => (f.id === payload.personId ? { ...f, faceEnrolled: true, faceEnrolledAt: new Date().toISOString() } : f));
+    }
+    pushNotification('Face updated', 'Your face was updated for check-in.', 'identity', { type: 'identity', personId: payload.personId });
     return respond({ ok: true, faceEnrolled: true, faceId: nextId('face') });
   },
 
   // ── Profile picture (mock — no-op) ─────────────────────────────────────
-  uploadProfilePicture: (_imageUri: string): Promise<ProfilePictureResponse> => {
+  uploadProfilePicture: (_imageUri: string, _personId?: string): Promise<ProfilePictureResponse> => {
     return respond({ url: '', expires_in: 3600, updated_at: new Date().toISOString() });
   },
-  getProfilePicture: (): Promise<ProfilePictureResponse | null> => {
+  getProfilePicture: (_personId?: string): Promise<ProfilePictureResponse | null> => {
     return respond(null);
   },
 };

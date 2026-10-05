@@ -13,6 +13,51 @@ export interface ApiError {
   retryAfterSeconds?: number;
   /** 422 per-field validation messages, keyed by field name. */
   fieldErrors?: Record<string, string>;
+  /** Backend machine code from the error envelope (`code`), e.g.
+   *  ACCOUNT_LOCKED, ACCOUNT_EXISTS, REAUTH_REQUIRED, PIN_INVALID,
+   *  TWO_FACTOR_INVALID, BOOKING_NOT_EDITABLE. Branch on this, never on text. */
+  serverCode?: string;
+  /** ISO time an ACCOUNT_LOCKED lock ends. */
+  lockedUntil?: string;
+  /** PIN_INVALID: tries left before PIN_LOCKED. */
+  attemptsRemaining?: number;
+}
+
+/** User-facing text for backend codes whose server `message` is too terse.
+ *  Codes not listed here use the server message or the status fallback. */
+const SERVER_CODE_MESSAGES: Record<string, string> = {
+  ACCOUNT_EXISTS: 'An account already exists with these details. Sign in instead.',
+  INVALID_CREDENTIALS: 'Email/phone or password is incorrect.',
+  REAUTH_REQUIRED: 'For your security, enter your PIN again to continue.',
+  TWO_FACTOR_INVALID: 'That code is wrong or has expired. Try again.',
+  TWO_FACTOR_LOCKED: 'Too many wrong codes. Start signing in again.',
+  PIN_INVALID: 'Incorrect PIN.',
+  FACE_NOT_MATCHED: "We couldn't sign you in with your face.",
+  BOOKING_NOT_EDITABLE: "This booking can't be changed any more.",
+  RESERVATION_LIMIT: 'You have reached the limit of 50 upcoming reservations.',
+  FAMILY_MEMBER_EXISTS: 'This family member has already been added.',
+};
+
+function minutesText(seconds: number): string {
+  const m = Math.max(1, Math.ceil(seconds / 60));
+  return `${m} minute${m === 1 ? '' : 's'}`;
+}
+
+/** Lock/limit text that includes the wait time when the backend sends one. */
+function lockMessage(serverCode: string | undefined, retryAfter: number | undefined): string | undefined {
+  const wait = retryAfter != null ? ` Try again in ${minutesText(retryAfter)}.` : ' Please wait and try again.';
+  switch (serverCode) {
+    case 'ACCOUNT_LOCKED':
+      return `Too many attempts.${wait}`;
+    case 'PIN_LOCKED':
+      return `Too many wrong PINs.${wait}`;
+    case 'FACE_LOGIN_LOCKED':
+      return `Too many face sign-in attempts.${wait}`;
+    case 'TWO_FACTOR_LOCKED':
+      return SERVER_CODE_MESSAGES.TWO_FACTOR_LOCKED;
+    default:
+      return undefined;
+  }
 }
 
 /** Backend sends trace_id in the error body and/or X-Trace-Id/X-Request-Id headers. */
@@ -72,6 +117,45 @@ function fieldErrorsFrom(data: unknown): Record<string, string> | undefined {
  *  - 4xx request errors
  */
 export function toApiError(error: unknown): ApiError {
+  const base = baseApiError(error);
+  if (!(error instanceof AxiosError) || !error.response) return base;
+
+  const data = error.response.data as Record<string, unknown> | undefined;
+  const details = (data?.details && typeof data.details === 'object' && !Array.isArray(data.details)
+    ? data.details
+    : undefined) as Record<string, unknown> | undefined;
+  const pick = (k: string) => data?.[k] ?? details?.[k];
+
+  const serverCode = typeof data?.code === 'string' ? data.code : undefined;
+  const lockedUntil = typeof pick('locked_until') === 'string' ? (pick('locked_until') as string) : undefined;
+  const attempts = pick('attempts_remaining');
+  const attemptsRemaining = typeof attempts === 'number' ? attempts : undefined;
+  const retryAfterSeconds =
+    base.retryAfterSeconds ?? (typeof pick('retry_after') === 'number' ? (pick('retry_after') as number) : undefined);
+
+  let message = base.message;
+  const lock = lockMessage(serverCode, retryAfterSeconds);
+  if (lock) message = lock;
+  else if (serverCode && SERVER_CODE_MESSAGES[serverCode]) {
+    message = SERVER_CODE_MESSAGES[serverCode];
+    if (serverCode === 'PIN_INVALID' && attemptsRemaining != null) {
+      message = `Incorrect PIN. ${attemptsRemaining} ${attemptsRemaining === 1 ? 'try' : 'tries'} left.`;
+    }
+  }
+
+  return {
+    ...base,
+    // 403 REAUTH_REQUIRED is its own category: the caller must ask for the PIN.
+    code: serverCode === 'REAUTH_REQUIRED' ? 'REAUTH_REQUIRED' : base.code,
+    message,
+    serverCode,
+    lockedUntil,
+    attemptsRemaining,
+    retryAfterSeconds,
+  };
+}
+
+function baseApiError(error: unknown): ApiError {
   // Refresh token missing/rejected — session is over, not retryable.
   if (error instanceof SessionExpiredError) {
     return {
@@ -138,7 +222,9 @@ export function toApiError(error: unknown): ApiError {
       // 401 from an auth attempt (login/register/OTP) means bad credentials,
       // NOT an expired session — show a credential error instead.
       const url = error.config?.url ?? '';
-      const isAuthAttempt = ['/auth/login', '/auth/register', '/auth/verify-otp'].some((p) => url.endsWith(p));
+      const isAuthAttempt = ['/auth/login', '/auth/register', '/auth/verify-otp', '/auth/2fa/verify', '/auth/face-login'].some((p) =>
+        url.endsWith(p),
+      );
       if (isAuthAttempt) {
         return {
           code: 'INVALID_CREDENTIALS',

@@ -10,6 +10,16 @@ export interface User {
   address?: string;
   faceEnrolled: boolean;
   biometricConsentAt: string | null;
+  /** Oct 2026 additions (GET /user/me) — absent on older payloads. */
+  faceEnrolledAt?: string | null;
+  passwordChangedAt?: string | null;
+  pinChangedAt?: string | null;
+  twoFactorEnabled?: boolean;
+  twoFactorMethod?: TwoFactorMethod | null;
+  /** Signed profile photo URL (GET /user/me). Face sign-in / 2-step verify
+   *  return only profileImageKey — refetch /user/me for the URL. */
+  profileImageUrl?: string | null;
+  profileImageKey?: string | null;
 }
 
 export interface IdentitySummary {
@@ -20,11 +30,33 @@ export interface IdentitySummary {
   activity: ActivityItem[];
 }
 
+/** Account activity (GET /user/me/activity, identity summary `activity`).
+ *  `timestamp` is a display string: the normalizer formats `occurredAt`
+ *  locally (older payloads sent a preformatted `timestamp`). */
 export interface ActivityItem {
   id: string;
   title: string;
   timestamp: string;
-  tone: 'success' | 'warning' | 'error';
+  tone: 'success' | 'warning' | 'error' | 'neutral';
+  type?: ActivityType;
+  occurredAt?: string;
+  ref?: ActivityRef;
+}
+
+export type ActivityType =
+  | 'face_enrolled'
+  | 'document_added'
+  | 'document_verified'
+  | 'document_failed'
+  | 'family_member_added'
+  | 'family_face_enrolled'
+  | 'check_in'
+  | 'password_changed';
+
+export interface ActivityRef {
+  documentId?: string;
+  personId?: string;
+  bookingId?: string;
 }
 
 export type DocumentType =
@@ -55,6 +87,8 @@ export interface IdentityDocument {
   issuingState?: string | null;
   portraitImageUrl?: string | null;
   documentImageUrl?: string | null;
+  /** When the document was approved (Oct 2026). */
+  verifiedAt?: string | null;
 }
 
 export type FamilyAgeBand = '0-4' | '5-9' | '10+';
@@ -74,26 +108,72 @@ export interface FamilyMember {
   dateOfBirth?: string;
   /** Capture cameras allowed; 'back' is added for members under 10. */
   allowedCameras?: ('front' | 'back')[];
+  /** Oct 2026 additions on every family read. */
+  permissions?: FamilyPermissions;
+  createdAt?: string | null;
+  faceEnrolledAt?: string | null;
+  /** Signed photo URL when the member has a profile image (persons API). */
+  profileImageUrl?: string | null;
 }
 
+export interface FamilyPermissions {
+  /** Stored but not enforced yet (consent-policy review) — show as coming soon. */
+  independentCheckIn: boolean;
+  notifyOnCheckIn: boolean;
+}
+
+export type BookingKind = 'hotel' | 'park' | 'flight' | 'cinema' | 'cruise' | 'stadium' | 'concert' | 'other';
+export type BookingStatus = 'completed' | 'failed' | 'upcoming' | 'expired';
+
+/** GET /bookings — kiosk check-ins and the customer's own reservations. */
 export interface Booking {
   id: string;
   venue: string;
   location: string;
+  /** 'reservation' | 'checkin' on Oct 2026 payloads; a venue type on older ones. */
   type: string;
-  image: string;
+  image: string | null;
   checkIn: string;
-  checkOut: string;
-  status: 'completed' | 'failed' | 'upcoming';
+  checkOut: string | null;
+  status: BookingStatus;
   guests: number;
-  amount: number;
+  amount: number | null;
   checkedInMembers?: string[];
+  /** Oct 2026 additions. */
+  source?: 'customer' | 'checkin';
+  kind?: BookingKind | null;
+  /** Exact kiosk check-in time (ISO) — format in the user's time zone. */
+  checkedInAt?: string | null;
+  durationMs?: number | null;
+  notes?: string | null;
+  /** The other side of a reservation <-> check-in link. */
+  linkedBookingId?: string | null;
+  createdAt?: string | null;
 }
 
+/** POST /bookings — a customer reservation. Dates are local YYYY-MM-DD. */
+export interface CreateReservationRequest {
+  venue: string;
+  location?: string;
+  kind?: BookingKind;
+  checkIn: string;
+  checkOut?: string;
+  guests?: number;
+  memberIds?: string[];
+  notes?: string;
+}
+
+export type UpdateReservationRequest = Partial<CreateReservationRequest>;
+
+/** Member activity (GET /family/{id}/activity) — same feed shape as the
+ *  account activity; `date` is the ISO time (occurredAt). */
 export interface ActivityLogItem {
   id: string;
   title: string;
   date: string;
+  type?: ActivityType;
+  tone?: ActivityItem['tone'];
+  ref?: ActivityRef;
 }
 
 // ── Write operation payloads & responses ──────────────────────────────
@@ -108,6 +188,81 @@ export interface AuthResponse {
 export interface LoginRequest {
   identifier: string;
   password: string;
+  device?: DeviceInfo;
+}
+
+/** Labels the session in "Signed-in devices" (login, refresh, OTP, 2FA, face login). */
+export interface DeviceInfo {
+  name: string;
+  platform: 'android' | 'ios' | 'web';
+  appVersion: string;
+}
+
+export type TwoFactorMethod = 'email' | 'totp';
+
+/** 202 from POST /auth/login when 2-step sign-in is on. */
+export interface TwoFactorChallenge {
+  nextStep: 'verify2fa';
+  challengeId: string;
+  method: TwoFactorMethod;
+}
+
+export type LoginResult = AuthResponse | TwoFactorChallenge;
+
+export function isTwoFactorChallenge(r: LoginResult): r is TwoFactorChallenge {
+  return (r as TwoFactorChallenge).nextStep === 'verify2fa';
+}
+
+export interface TwoFactorEnableResponse {
+  method: TwoFactorMethod;
+  challengeId: string;
+  nextStep: 'confirm';
+  /** TOTP only: manual-entry secret and the otpauth:// URI to show as a QR. */
+  secret?: string;
+  otpauthUri?: string;
+}
+
+export interface TwoFactorStatusResponse {
+  ok: boolean;
+  twoFactorEnabled: boolean;
+  method?: TwoFactorMethod;
+}
+
+/** GET /auth/sessions — one row per signed-in device. */
+export interface AuthSession {
+  id: string;
+  /** null for sessions created before device labels existed -> "Unknown device". */
+  device: string | null;
+  platform: string | null;
+  appVersion: string | null;
+  createdAt: string;
+  lastActiveAt: string;
+  current: boolean;
+}
+
+export interface RevokeSessionsResponse {
+  ok: boolean;
+  revoked: number;
+}
+
+export type FaceLoginPurpose = 'login' | 'recovery';
+
+export interface FaceLoginStartResponse {
+  nextStep: 'face';
+  preauthToken: string;
+  expiresIn: number;
+  purpose: FaceLoginPurpose;
+}
+
+/** POST /auth/face-login -> tokens (login) or a one-time reset token (recovery). */
+export type FaceLoginResult = AuthResponse | { resetToken: string; expiresIn: number };
+
+/** POST /auth/verify-pin — reauthToken (5 min, single use) authorizes PUT /face. */
+export interface VerifyPinResponse {
+  ok: boolean;
+  reauthToken?: string;
+  scope?: string;
+  expiresIn?: number;
 }
 
 export interface RegisterRequest {
@@ -167,10 +322,20 @@ export interface ForgotPasswordRequest {
   email: string;
 }
 
+/** Either the email OTP pair or a face-recovery resetToken (single use). */
 export interface ResetPasswordRequest {
-  email: string;
-  otp: string;
+  email?: string;
+  otp?: string;
+  resetToken?: string;
   newPassword: string;
+}
+
+/** POST /auth/reset-pin — forgot PIN (email OTP) or face recovery. */
+export interface ResetPinRequest {
+  email?: string;
+  otp?: string;
+  resetToken?: string;
+  newPin: string;
 }
 
 export interface ChangePasswordRequest {
@@ -198,14 +363,52 @@ export interface AddFamilyMemberRequest {
 export interface AddDocumentRequest {
   type: DocumentType;
   label: string;
-  number: string;
-  expiresAt: string | null;
+  /** Optional since Oct 2026 — don't send "PENDING"; verification fills it. */
+  number?: string;
+  expiresAt?: string | null;
   personId?: string;
 }
+
+/** GET /documents/types/supported — build the picker from this, by age. */
+export interface SupportedDocumentType {
+  type: DocumentType;
+  label: string;
+  selfieRequired: boolean;
+  allowedForMinors: boolean;
+  allowedForAdults: boolean;
+  minAge: number | null;
+  maxAge: number | null;
+}
+
+export type DocumentImagePart = 'front' | 'back' | 'selfie';
+
+/** POST /documents/{id}/upload-urls — presigned PUT URLs (15 min). */
+export interface DocumentUploadUrls {
+  uploads: Partial<Record<DocumentImagePart, { uploadUrl: string; objectKey: string }>>;
+  expiresIn: number;
+}
+
+export interface SignedImage {
+  url: string;
+  expiresAt: string;
+}
+
+/** GET /documents/{id}/images — null parts show a placeholder; URLs expire. */
+export interface DocumentImages {
+  front: SignedImage | null;
+  back: SignedImage | null;
+  selfie: SignedImage | null;
+  portrait: SignedImage | null;
+}
+
+export type DeleteAccountReason = 'privacy' | 'not_using' | 'few_venues' | 'other';
 
 export interface DeleteAccountRequest {
   confirmation: string;
   pin: string;
+  /** Optional, stored without a link to the account. */
+  reason?: DeleteAccountReason;
+  comment?: string;
 }
 
 export interface BiometricConsentRequest {
@@ -223,6 +426,16 @@ export interface OkResponse {
 
 // ── Notifications ──────────────────────────────────────────────────────
 
+export type NotificationType = 'booking' | 'document' | 'family' | 'identity' | 'account';
+
+/** Deep-link payload on inbox items and push messages. */
+export interface NotificationData {
+  type?: NotificationType;
+  bookingId?: string;
+  documentId?: string;
+  personId?: string;
+}
+
 export interface Notification {
   id: string;
   title: string;
@@ -230,6 +443,82 @@ export interface Notification {
   read: boolean;
   createdAt: string;
   type?: string;
+  data?: NotificationData | null;
+  readAt?: string | null;
+}
+
+export interface NotificationCount {
+  total: number;
+  unread: number;
+}
+
+/** Turning a category off stops push only; `security` covers account + identity. */
+export interface NotificationPreferences {
+  checkin: boolean;
+  family: boolean;
+  security: boolean;
+  document: boolean;
+}
+
+export interface PushDevice {
+  id: string;
+  platform: string;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+// ── Home / settings data (Oct 2026) ────────────────────────────────────
+
+export type SecuritySuggestionId =
+  | 'enroll_face'
+  | 'add_document'
+  | 'verify_document'
+  | 'enable_2fa'
+  | 'renew_document'
+  | 'change_password'
+  | 'review_sessions';
+
+export interface SecurityScore {
+  score: number;
+  identityStrength: number;
+  suggestions: { id: SecuritySuggestionId | string; title: string; points: number; documentId?: string }[];
+}
+
+export interface UserStats {
+  year: number;
+  checkIns: number;
+  cities: number;
+  /** null when there is no data. */
+  avgCheckInMs: number | null;
+  minutesSaved: number;
+}
+
+export interface AppPreferences {
+  language: string;
+  region: string | null;
+  /** false -> the kiosk refuses face check-in for the account holder. */
+  faceCheckInEnabled: boolean;
+  shareAnalytics: boolean;
+}
+
+/** Hide any channel that is null. */
+export interface SupportChannels {
+  email: string | null;
+  phone: string | null;
+  hours: string | null;
+  chatUrl: string | null;
+}
+
+export type DataExportStatus = 'pending' | 'ready' | 'failed' | 'expired';
+
+export interface DataExport {
+  exportId: string;
+  status: DataExportStatus;
+  readyAt?: string | null;
+  expiresAt?: string | null;
+  /** BFF path needing the Authorization header — download, never open in a browser. */
+  url?: string | null;
+  error?: string | null;
 }
 
 // ── Liveness / Face (all via BFF /cb/liveness/* and /cb/face/*) ────────
@@ -279,9 +568,12 @@ export interface FaceEnrollRequest {
   personId?: string;
 }
 
+/** PUT /face — needs X-Reauth-Token from verify-pin (sent by the API layer).
+ *  Liveness fields, or selfieBase64 for members under 5. */
 export interface FaceUpdateRequest {
-  livenessSessionId: string;
-  sessionToken: string;
+  livenessSessionId?: string;
+  sessionToken?: string;
+  selfieBase64?: string;
   personId?: string;
 }
 
@@ -309,7 +601,20 @@ export interface VerificationSessionRequest {
 }
 
 export type VerificationSessionStatus = 'created' | 'completed';
+/** 'review' is never returned since Oct 2026 — kept only so old cached
+ *  sessions still type-check; treat anything but 'approved' as rejected. */
 export type VerificationOutcome = 'approved' | 'rejected' | 'review';
+
+export type DocumentReasonCode =
+  | 'DOCUMENT_PROCESSING_ERROR'
+  | 'AUTHENTICITY_FAILED'
+  | 'DOCUMENT_TYPE_MISMATCH'
+  | 'DOCUMENT_UNREADABLE'
+  | 'NO_PORTRAIT_IN_DOCUMENT'
+  | 'FACE_NOT_ENROLLED'
+  | 'DOCUMENT_FACE_MISMATCH'
+  | 'PROFILE_MISMATCH'
+  | 'DOCUMENT_CHECKS_INCONCLUSIVE';
 
 export interface VerificationSession {
   id: string;
@@ -329,9 +634,12 @@ export interface VerificationSession {
  *  - backImageBase64 optional
  */
 export interface VerifyDocumentRequest {
-  frontImageBase64: string;
+  /** Legacy base64 path — prefer presigned uploads (object keys on the session). */
+  frontImageBase64?: string;
   backImageBase64?: string;
   selfieImageBase64?: string;
+  /** Liveness sessionToken when the session carries a livenessSessionId. */
+  sessionToken?: string;
 }
 
 /** Response from /verify — synchronous result with outcome + document.
@@ -339,6 +647,8 @@ export interface VerifyDocumentRequest {
  *  — see BUG_REPORT_BACKEND_EXTRACTED_DATA.md for the full contract. */
 export interface VerifyDocumentResponse extends VerificationSession {
   document?: IdentityDocument;
+  /** Ready-to-show rejection text; use reasonCode only to pick the action. */
+  reasonMessage?: string | null;
   matchScore?: number | null;
   /** Name extracted from the document by Regula (may differ from profile). */
   extractedName?: string | null;

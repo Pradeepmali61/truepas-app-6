@@ -14,6 +14,7 @@ import { Banner, ComingSoon } from '@/premium/kit';
 import { C } from '@/premium/theme';
 import { Button, Field, Heading, Row, TextLink, TopBar, Txt } from '@/premium/ui';
 import { useAppDispatch } from '@/store';
+import { isTwoFactorChallenge } from '@/types/domain';
 
 type IdentifierMode = 'email' | 'phone';
 
@@ -66,10 +67,20 @@ export default function LoginScreen() {
         value = digits.startsWith(cc) && digits.length > 10 ? `+${digits}` : `${countryCode}${digits}`;
       }
 
-      const { user, accessToken, refreshToken } = await api.login({
+      const result = await api.login({
         identifier: value,
         password,
       });
+
+      // 2-step sign-in is on: the backend answered 202 with a challenge.
+      if (isTwoFactorChallenge(result)) {
+        router.push({
+          pathname: '/(auth)/two-factor',
+          params: { challengeId: result.challengeId, method: result.method },
+        } as never);
+        return;
+      }
+      const { user, accessToken, refreshToken } = result;
 
       if (!accessToken || !refreshToken) {
         setFormError('Login incomplete — tokens missing. Please finish registration or contact support.');

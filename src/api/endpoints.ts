@@ -1,8 +1,37 @@
-import { apiClient, getRegistrationToken, setRegistrationToken } from '@/api/client';
+import { apiClient, getPreauthToken, getRegistrationToken, setRegistrationToken } from '@/api/client';
+import { deviceInfo } from '@/services/deviceInfo';
+import { setReauthToken, takeReauthToken } from '@/services/reauth';
 import type {
     AccountDetailsRequest,
     AccountDetailsResponse,
+    ActivityItem,
     ActivityLogItem,
+    AppPreferences,
+    AuthSession,
+    CreateReservationRequest,
+    DataExport,
+    DocumentImagePart,
+    DocumentImages,
+    DocumentUploadUrls,
+    FaceLoginPurpose,
+    FaceLoginResult,
+    FaceLoginStartResponse,
+    LoginResult,
+    NotificationCount,
+    NotificationPreferences,
+    NotificationType,
+    PushDevice,
+    ResetPinRequest,
+    RevokeSessionsResponse,
+    SecurityScore,
+    SupportChannels,
+    SupportedDocumentType,
+    TwoFactorEnableResponse,
+    TwoFactorMethod,
+    TwoFactorStatusResponse,
+    UpdateReservationRequest,
+    UserStats,
+    VerifyPinResponse,
     AddDocumentRequest,
     AddFamilyMemberRequest,
     AuthResponse,
@@ -40,6 +69,79 @@ import type {
     VerifyOtpResponse
 } from '@/types/domain';
 
+/** "Oct 5, 10:04 AM" — activity times are ISO since Oct 2026 (§10.1). */
+function fmtActivityTime(iso: string | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/** Account activity: Oct 2026 { type, occurredAt, tone, ref } or the older
+ *  { timestamp } shape -> ActivityItem with a display `timestamp`. */
+export function normalizeActivity(raw: unknown): ActivityItem {
+  const a = (raw ?? {}) as Record<string, unknown>;
+  const occurredAt = typeof a.occurredAt === 'string' ? a.occurredAt : undefined;
+  return {
+    id: String(a.id ?? ''),
+    title: String(a.title ?? ''),
+    timestamp: typeof a.timestamp === 'string' ? a.timestamp : fmtActivityTime(occurredAt),
+    tone: (a.tone as ActivityItem['tone']) ?? 'neutral',
+    type: a.type as ActivityItem['type'],
+    occurredAt,
+    ref: (a.ref as ActivityItem['ref']) ?? undefined,
+  };
+}
+
+function normalizeMemberActivity(raw: unknown): ActivityLogItem {
+  const a = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: String(a.id ?? ''),
+    title: String(a.title ?? ''),
+    date: String(a.occurredAt ?? a.date ?? ''),
+    type: a.type as ActivityLogItem['type'],
+    tone: a.tone as ActivityLogItem['tone'],
+    ref: (a.ref as ActivityLogItem['ref']) ?? undefined,
+  };
+}
+
+/** Inbox items are snake_case ({ message, is_read, created_at, notification_type, data, read_at }). */
+export function normalizeNotification(raw: unknown): Notification {
+  const n = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: String(n.id ?? ''),
+    title: String(n.title ?? ''),
+    body: String(n.message ?? n.body ?? ''),
+    read: Boolean(n.is_read ?? n.read ?? false),
+    createdAt: String(n.created_at ?? n.createdAt ?? ''),
+    type: (n.notification_type ?? n.type) as string | undefined,
+    data: (n.data as Notification['data']) ?? null,
+    readAt: (n.read_at ?? n.readAt ?? null) as string | null,
+  };
+}
+
+function authFrom(data: Record<string, unknown>): AuthResponse {
+  return {
+    user: data.user as User,
+    accessToken: (data.accessToken ?? data.access_token) as string,
+    refreshToken: (data.refreshToken ?? data.refresh_token) as string,
+  };
+}
+
+/** PUT a local file (file:// or content:// URI) to a presigned URL. */
+async function putFile(uploadUrl: string, fileUri: string, contentType: string): Promise<void> {
+  const blob = await (await fetch(fileUri)).blob();
+  const res = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: blob });
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+}
+
+/** Liveness routes take the face sign-in preauth token instead of the
+ *  access token while a face sign-in is in progress (§4.5). */
+function livenessAuth(): Record<string, string> {
+  const t = getPreauthToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 /**
  * Real REST API layer — same function signatures as `mockApi` so screens/hooks
  * never need to change when we switch from mock JSON fixtures to the live
@@ -56,7 +158,7 @@ export const realApi = {
   },
   getIdentitySummary: async (): Promise<IdentitySummary> => {
     const { data } = await apiClient.get<IdentitySummary>('/identity/summary');
-    return data;
+    return { ...data, activity: (Array.isArray(data?.activity) ? data.activity : []).map(normalizeActivity) };
   },
   getDocuments: async (personId?: string): Promise<IdentityDocument[]> => {
     console.log('[API] GET /documents', personId ? `?personId=${personId}` : '(self)');
@@ -80,8 +182,8 @@ export const realApi = {
     return data;
   },
   getFamilyActivity: async (id: string): Promise<ActivityLogItem[]> => {
-    const { data } = await apiClient.get<ActivityLogItem[]>(`/family/${id}/activity`);
-    return data;
+    const { data } = await apiClient.get<unknown[]>(`/family/${id}/activity`);
+    return (Array.isArray(data) ? data : []).map(normalizeMemberActivity);
   },
   getBookings: async (): Promise<Booking[]> => {
     const { data } = await apiClient.get<unknown>('/bookings');
@@ -104,38 +206,156 @@ export const realApi = {
     const { data } = await apiClient.get<Booking>(`/bookings/${id}`);
     return data;
   },
-  getNotifications: async (params?: { limit?: number; offset?: number; unreadOnly?: boolean }): Promise<Notification[]> => {
+  getNotifications: async (params?: {
+    limit?: number;
+    offset?: number;
+    unreadOnly?: boolean;
+    type?: NotificationType;
+  }): Promise<Notification[]> => {
     const { data } = await apiClient.get<unknown[]>('/notifications', {
       params: {
         limit: params?.limit ?? 50,
         offset: params?.offset ?? 0,
         unread_only: params?.unreadOnly ?? false,
+        ...(params?.type ? { type: params.type } : {}),
       },
     });
-    // Contract schema is snake_case ({ message, is_read, created_at,
-    // notification_type }) — normalize to the app's Notification shape.
-    return (Array.isArray(data) ? data : []).map((raw) => {
-      const n = raw as Record<string, unknown>;
-      return {
-        id: String(n.id ?? ''),
-        title: String(n.title ?? ''),
-        body: String(n.message ?? n.body ?? ''),
-        read: Boolean(n.is_read ?? n.read ?? false),
-        createdAt: String(n.created_at ?? n.createdAt ?? ''),
-        type: (n.notification_type ?? n.type) as string | undefined,
-      };
+    // Contract schema is snake_case — normalize to the app's Notification shape.
+    return (Array.isArray(data) ? data : []).map(normalizeNotification);
+  },
+  getNotificationCount: async (type?: NotificationType): Promise<NotificationCount> => {
+    const { data } = await apiClient.get<Record<string, unknown>>('/notifications/count', {
+      params: type ? { type } : undefined,
     });
+    return { total: Number(data?.total_count ?? 0), unread: Number(data?.unread_count ?? 0) };
+  },
+  markNotificationRead: async (id: string): Promise<OkResponse> => {
+    const { data } = await apiClient.post<OkResponse>(`/notifications/${id}/read`);
+    return data;
+  },
+  markNotificationsRead: async (ids: string[]): Promise<OkResponse> => {
+    const { data } = await apiClient.post<OkResponse>('/notifications/read', { notification_ids: ids });
+    return data;
+  },
+  markAllNotificationsRead: async (): Promise<OkResponse> => {
+    const { data } = await apiClient.post<OkResponse>('/notifications/read-all');
+    return data;
+  },
+  getNotificationPreferences: async (): Promise<NotificationPreferences> => {
+    const { data } = await apiClient.get<NotificationPreferences>('/user/me/notification-preferences');
+    return data;
+  },
+  /** Send only what changed. */
+  updateNotificationPreferences: async (patch: Partial<NotificationPreferences>): Promise<NotificationPreferences> => {
+    const { data } = await apiClient.put<NotificationPreferences>('/user/me/notification-preferences', patch);
+    return data;
+  },
+  registerPushDevice: async (pushToken: string, platform: 'ios' | 'android'): Promise<PushDevice> => {
+    const { data } = await apiClient.post<PushDevice>('/user/me/devices', { pushToken, platform });
+    return data;
+  },
+  getPushDevices: async (): Promise<PushDevice[]> => {
+    const { data } = await apiClient.get<PushDevice[]>('/user/me/devices');
+    return Array.isArray(data) ? data : [];
+  },
+  deletePushDevice: async (id: string): Promise<OkResponse> => {
+    const { data } = await apiClient.delete<OkResponse>(`/user/me/devices/${id}`);
+    return data;
+  },
+
+  // ── Home / profile / settings data (Oct 2026) ───────────────────────
+  getAccountActivity: async (): Promise<ActivityItem[]> => {
+    const { data } = await apiClient.get<unknown[]>('/user/me/activity');
+    return (Array.isArray(data) ? data : []).map(normalizeActivity);
+  },
+  getSecurityScore: async (): Promise<SecurityScore> => {
+    const { data } = await apiClient.get<SecurityScore>('/user/me/security-score');
+    return { ...data, suggestions: Array.isArray(data?.suggestions) ? data.suggestions : [] };
+  },
+  getUserStats: async (year: number): Promise<UserStats> => {
+    const { data } = await apiClient.get<UserStats>('/user/me/stats', { params: { year } });
+    return data;
+  },
+  getPreferences: async (): Promise<AppPreferences> => {
+    const { data } = await apiClient.get<AppPreferences>('/user/me/preferences');
+    return data;
+  },
+  /** Send only what changed. */
+  updatePreferences: async (patch: Partial<AppPreferences>): Promise<AppPreferences> => {
+    const { data } = await apiClient.put<AppPreferences>('/user/me/preferences', patch);
+    return data;
+  },
+  getSupportChannels: async (): Promise<SupportChannels> => {
+    const { data } = await apiClient.get<SupportChannels>('/support/channels');
+    return data;
+  },
+  requestDataExport: async (): Promise<DataExport> => {
+    const { data } = await apiClient.post<DataExport>('/user/me/export');
+    return data;
+  },
+  getDataExport: async (exportId: string): Promise<DataExport> => {
+    const { data } = await apiClient.get<DataExport>(`/user/me/export/${exportId}`);
+    return data;
   },
 
   // ── Auth ─────────────────────────────────────────────────────────────
-  login: async (payload: LoginRequest): Promise<AuthResponse> => {
-    const { data } = await apiClient.post<AuthResponse>('/auth/login', payload);
+  /** 200 -> tokens; 202 -> { nextStep: 'verify2fa', challengeId, method } (§4.2). */
+  login: async (payload: LoginRequest): Promise<LoginResult> => {
+    const res = await apiClient.post<Record<string, unknown>>('/auth/login', { ...payload, device: payload.device ?? deviceInfo() });
+    const data = res.data ?? {};
+    if (res.status === 202 || data.nextStep === 'verify2fa') {
+      return {
+        nextStep: 'verify2fa',
+        challengeId: String(data.challengeId ?? data.challenge_id ?? ''),
+        method: (data.method as TwoFactorMethod) ?? 'email',
+      };
+    }
     // Handle both camelCase and snake_case token fields from backend
-    return {
-      user: data.user,
-      accessToken: data.accessToken ?? (data as any).access_token,
-      refreshToken: data.refreshToken ?? (data as any).refresh_token,
-    };
+    return authFrom(data);
+  },
+  verifyTwoFactor: async (payload: { challengeId: string; code: string }): Promise<AuthResponse> => {
+    const { data } = await apiClient.post<Record<string, unknown>>('/auth/2fa/verify', { ...payload, device: deviceInfo() });
+    return authFrom(data);
+  },
+  enableTwoFactor: async (method: TwoFactorMethod): Promise<TwoFactorEnableResponse> => {
+    const { data } = await apiClient.post<TwoFactorEnableResponse>('/auth/2fa/enable', { method });
+    return data;
+  },
+  confirmTwoFactor: async (payload: { challengeId: string; code: string }): Promise<TwoFactorStatusResponse> => {
+    const { data } = await apiClient.post<TwoFactorStatusResponse>('/auth/2fa/confirm', payload);
+    return data;
+  },
+  disableTwoFactor: async (pin: string): Promise<TwoFactorStatusResponse> => {
+    const { data } = await apiClient.post<TwoFactorStatusResponse>('/auth/2fa/disable', { pin });
+    return data;
+  },
+  getSessions: async (): Promise<AuthSession[]> => {
+    const { data } = await apiClient.get<AuthSession[]>('/auth/sessions');
+    return Array.isArray(data) ? data : [];
+  },
+  revokeSession: async (id: string): Promise<RevokeSessionsResponse> => {
+    const { data } = await apiClient.delete<RevokeSessionsResponse>(`/auth/sessions/${id}`);
+    return data;
+  },
+  revokeOtherSessions: async (): Promise<RevokeSessionsResponse> => {
+    const { data } = await apiClient.post<RevokeSessionsResponse>('/auth/sessions/revoke-others');
+    return data;
+  },
+  /** Always 202 with a preauth token, even for unknown accounts (§4.5). */
+  startFaceLogin: async (payload: { identifier: string; purpose: FaceLoginPurpose }): Promise<FaceLoginStartResponse> => {
+    const { data } = await apiClient.post<FaceLoginStartResponse>('/auth/face-login/start', payload);
+    return data;
+  },
+  faceLogin: async (payload: { preauthToken: string; livenessSessionId: string; sessionToken: string }): Promise<FaceLoginResult> => {
+    const { data } = await apiClient.post<Record<string, unknown>>('/auth/face-login', { ...payload, device: deviceInfo() });
+    if (typeof data?.resetToken === 'string') {
+      return { resetToken: data.resetToken, expiresIn: Number(data.expiresIn ?? 300) };
+    }
+    return authFrom(data);
+  },
+  resetPin: async (payload: ResetPinRequest): Promise<OkResponse> => {
+    const { data } = await apiClient.post<OkResponse>('/auth/reset-pin', payload);
+    return data;
   },
   register: async (payload: RegisterRequest): Promise<RegisterResponse> => {
     console.log('[API] POST /auth/register', JSON.stringify(payload));
@@ -154,6 +374,8 @@ export const realApi = {
     // password_reset has no registration session — a stale in-memory token would
     // make the backend treat this as a registration verify and return 400.
     const registrationToken = payload.purpose === 'password_reset' ? null : getRegistrationToken();
+    // Registration OTPs open a session — label it (§3.2).
+    if (payload.purpose !== 'password_reset') requestPayload.device = deviceInfo();
     const config = registrationToken
       ? { headers: { Authorization: `Bearer ${registrationToken}` } }
       : undefined;
@@ -201,8 +423,11 @@ export const realApi = {
     const { data } = await apiClient.post<OkResponse>('/auth/change-pin', payload);
     return data;
   },
-  verifyPin: async (pin: string): Promise<OkResponse> => {
-    const { data } = await apiClient.post<OkResponse>('/auth/verify-pin', { pin });
+  /** Also returns a single-use reauthToken (5 min) that PUT /face needs;
+   *  it is kept in services/reauth and consumed by updateFace. */
+  verifyPin: async (pin: string): Promise<VerifyPinResponse> => {
+    const { data } = await apiClient.post<VerifyPinResponse>('/auth/verify-pin', { pin });
+    if (data?.reauthToken) setReauthToken(data.reauthToken, data.expiresIn ?? 300);
     return data;
   },
   logout: async (payload: LogoutRequest): Promise<OkResponse> => {
@@ -233,6 +458,28 @@ export const realApi = {
     const { data } = await apiClient.delete<OkResponse>(`/family/${id}`);
     return data;
   },
+  /** Returns the full member. independentCheckIn is stored, not enforced yet. */
+  updateFamilyPermissions: async (
+    personId: string,
+    patch: Partial<NonNullable<FamilyMember['permissions']>>,
+  ): Promise<FamilyMember> => {
+    const { data } = await apiClient.patch<FamilyMember>(`/family/${personId}/permissions`, patch);
+    return data;
+  },
+
+  // ── Bookings / reservations ──────────────────────────────────────────
+  createReservation: async (payload: CreateReservationRequest): Promise<Booking> => {
+    const { data } = await apiClient.post<Booking>('/bookings', payload);
+    return data;
+  },
+  updateReservation: async (id: string, patch: UpdateReservationRequest): Promise<Booking> => {
+    const { data } = await apiClient.patch<Booking>(`/bookings/${id}`, patch);
+    return data;
+  },
+  deleteReservation: async (id: string): Promise<OkResponse> => {
+    const { data } = await apiClient.delete<OkResponse>(`/bookings/${id}`);
+    return data;
+  },
 
   // ── Documents ────────────────────────────────────────────────────────
   addDocument: async (payload: AddDocumentRequest): Promise<IdentityDocument> => {
@@ -244,6 +491,34 @@ export const realApi = {
   removeDocument: async (id: string): Promise<OkResponse> => {
     const { data } = await apiClient.delete<OkResponse>(`/documents/${id}`);
     return data;
+  },
+  /** Build the "Add document" picker from this, filtered by age (§6.1). */
+  getSupportedDocumentTypes: async (): Promise<SupportedDocumentType[]> => {
+    const { data } = await apiClient.get<SupportedDocumentType[]>('/documents/types/supported');
+    return Array.isArray(data) ? data : [];
+  },
+  /** Presigned PUT URLs (15 min) — avoids 413 on large photos (§6.2). */
+  getDocumentUploadUrls: async (
+    documentId: string,
+    parts: DocumentImagePart[],
+    contentType = 'image/jpeg',
+  ): Promise<DocumentUploadUrls> => {
+    const { data } = await apiClient.post<DocumentUploadUrls>(`/documents/${documentId}/upload-urls`, { parts, contentType });
+    return data;
+  },
+  /** PUT a local image file to a presigned URL from getDocumentUploadUrls. */
+  uploadFileToUrl: async (uploadUrl: string, fileUri: string, contentType = 'image/jpeg'): Promise<void> => {
+    await putFile(uploadUrl, fileUri, contentType);
+  },
+  /** Signed, expiring URLs — refetch rather than cache; null parts = placeholder. */
+  getDocumentImages: async (documentId: string): Promise<DocumentImages> => {
+    const { data } = await apiClient.get<Partial<DocumentImages>>(`/documents/${documentId}/images`);
+    return {
+      front: data?.front ?? null,
+      back: data?.back ?? null,
+      selfie: data?.selfie ?? null,
+      portrait: data?.portrait ?? null,
+    };
   },
 
   // ── Document verification sessions ───────────────────────────────────
@@ -304,7 +579,7 @@ export const realApi = {
     const { data } = await apiClient.post<LivenessChallengeResponse>(
       '/liveness/v2/challenge',
       null,
-      { params: personId ? { personId } : undefined },
+      { params: personId ? { personId } : undefined, headers: livenessAuth() },
     );
     // session_token is a bearer credential — never log it.
     console.log('[API] /liveness/v2/challenge response:', JSON.stringify({ ...data, session_token: data.session_token ? '***' : undefined }));
@@ -331,6 +606,7 @@ export const realApi = {
       formBody.toString(),
       {
         headers: {
+          ...livenessAuth(),
           'X-Session-Token': sessionToken,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
@@ -356,6 +632,7 @@ export const realApi = {
       formData,
       {
         headers: {
+          ...livenessAuth(),
           'X-Session-Token': sessionToken,
           'Content-Type': 'multipart/form-data',
         },
@@ -369,30 +646,37 @@ export const realApi = {
     const { data } = await apiClient.post<FaceResponse>('/face/enroll', payload);
     return data;
   },
+  /** Needs the reauthToken from verifyPin (single use) — without it the
+   *  backend answers 403 REAUTH_REQUIRED and the PIN must be asked again. */
   updateFace: async (payload: FaceUpdateRequest): Promise<FaceResponse> => {
-    const { data } = await apiClient.put<FaceResponse>('/face', payload);
-    return data;
-  },
-
-  // ── Profile picture (multipart upload, presigned URL response) ────────
-  uploadProfilePicture: async (imageUri: string): Promise<ProfilePictureResponse> => {
-    const formData = new FormData();
-    const filename = imageUri.split('/').pop() || 'profile.jpg';
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : 'image/jpeg';
-    formData.append('file', { uri: imageUri, name: filename, type } as unknown as Blob);
-    const { data } = await apiClient.post<ProfilePictureResponse>('/profile/picture', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const reauth = takeReauthToken();
+    const { data } = await apiClient.put<FaceResponse>('/face', payload, {
+      headers: reauth ? { 'X-Reauth-Token': reauth } : undefined,
     });
     return data;
   },
-  getProfilePicture: async (): Promise<ProfilePictureResponse | null> => {
-    try {
-      const { data } = await apiClient.get<ProfilePictureResponse>('/profile/picture');
-      return data;
-    } catch (error: any) {
-      if (error?.response?.status === 404) return null; // no picture set
-      throw error;
-    }
+
+  // ── Profile picture (persons API, §12) ───────────────────────────────
+  /** POST /persons/{id}/profile-image/upload-url -> PUT the image -> PUT
+   *  /persons/{id}/profile-image { objectKey }. Works for family members
+   *  too; defaults to the signed-in user's own id. */
+  uploadProfilePicture: async (imageUri: string, personId?: string): Promise<ProfilePictureResponse> => {
+    const id = personId ?? (await apiClient.get<User>('/user/me')).data.id;
+    const { data: target } = await apiClient.post<{ uploadUrl: string; objectKey: string }>(
+      `/persons/${id}/profile-image/upload-url`,
+      { contentType: 'image/jpeg' },
+    );
+    await putFile(target.uploadUrl, imageUri, 'image/jpeg');
+    await apiClient.put(`/persons/${id}/profile-image`, { objectKey: target.objectKey });
+    const pic = await realApi.getProfilePicture(personId);
+    return pic ?? { url: imageUri, expires_in: 0, updated_at: new Date().toISOString() };
+  },
+  /** The signed photo URL from GET /user/me (or the family member). */
+  getProfilePicture: async (personId?: string): Promise<ProfilePictureResponse | null> => {
+    const { data } = personId
+      ? await apiClient.get<FamilyMember>(`/family/${personId}`)
+      : await apiClient.get<User>('/user/me');
+    const url = (data as { profileImageUrl?: string | null })?.profileImageUrl;
+    return url ? { url, expires_in: 3000, updated_at: null } : null;
   },
 };

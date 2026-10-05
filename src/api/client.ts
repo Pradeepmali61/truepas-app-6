@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 
+import { deviceInfo } from '@/services/deviceInfo';
 import { secureStorage } from '@/services/secureStorage';
 import type { AuthResponse } from '@/types/domain';
 
@@ -47,6 +48,19 @@ export function clearRegistrationToken(): void {
   registrationToken = null;
 }
 
+// ── Face sign-in preauth token (in-memory only) ───────────────────────
+// POST /auth/face-login/start returns a short-lived preauth token that
+// replaces the access token on the liveness routes only (backend §4.5).
+let preauthToken: string | null = null;
+
+export function setPreauthToken(token: string | null): void {
+  preauthToken = token;
+}
+
+export function getPreauthToken(): string | null {
+  return preauthToken;
+}
+
 // ── Session expiry ────────────────────────────────────────────────────
 /** The stored session can never be refreshed — the user must log in again. */
 export class SessionExpiredError extends Error {
@@ -86,7 +100,7 @@ async function refreshAccessToken(): Promise<string> {
   try {
     response = await axios.post<AuthResponse>(
       `${BFF_BASE_URL}/auth/refresh`,
-      { refreshToken },
+      { refreshToken, device: deviceInfo() },
       { timeout: 15_000 }
     );
   } catch (e) {
@@ -148,7 +162,11 @@ function createClient(baseURL: string): AxiosInstance {
     '/auth/verify-otp',
     '/auth/forgot-password',
     '/auth/reset-password',
+    '/auth/reset-pin',
     '/auth/refresh',
+    '/auth/2fa/verify',
+    '/auth/face-login/start',
+    '/auth/face-login',
   ];
 
   // Attach Bearer token to every request (unless overridden per-request)
@@ -169,7 +187,23 @@ function createClient(baseURL: string): AxiosInstance {
     (response) => response,
     async (error: AxiosError) => {
       const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
-      const isAuthEndpoint = original?.url && ['/auth/login', '/auth/register', '/auth/verify-otp', '/auth/forgot-password', '/auth/reset-password'].some((p) => original.url!.endsWith(p));
+      const isAuthEndpoint =
+        original?.url &&
+        [
+          '/auth/login',
+          '/auth/register',
+          '/auth/verify-otp',
+          '/auth/forgot-password',
+          '/auth/reset-password',
+          '/auth/reset-pin',
+          '/auth/2fa/verify',
+          '/auth/face-login/start',
+          '/auth/face-login',
+        ].some((p) => original.url!.endsWith(p));
+      // Liveness calls made with a face sign-in preauth token have no user
+      // session to refresh — let their 401 surface as-is.
+      const sentAuth = (original?.headers as Record<string, unknown> | undefined)?.Authorization;
+      if (preauthToken && sentAuth === `Bearer ${preauthToken}`) throw error;
       if (error.response?.status === 401 && original && !isAuthEndpoint && !original._retried) {
         original._retried = true;
         try {
