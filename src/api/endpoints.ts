@@ -556,6 +556,8 @@ export const realApi = {
       status: data.status, outcome: data.outcome, reasonCode: data.reasonCode,
       reasonMessage: data.reasonMessage, matchScore: data.matchScore, documentId: data.documentId,
       hasPortrait: !!data.portraitImageUrl,
+      // The backend looks a decision up by this id (with the session id).
+      sessionId, decisionId: (data as { decisionId?: string }).decisionId,
     }));
     return data;
   },
