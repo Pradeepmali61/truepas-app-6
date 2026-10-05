@@ -251,17 +251,8 @@ export function FlipCard({
   const frontRot = anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
   const backRot = anim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
 
-  // The scan side takes the scan's own shape: the frame height follows the
-  // photo's aspect ratio, so the whole scan fills it edge to edge — no
-  // cropping (cover) and no empty bars (contain), and nothing stretched.
-  const [width, setWidth] = useState(0);
-  const [ratio, setRatio] = useState<number | null>(null);
-  const scanHeight =
-    width > 0 && ratio ? Math.min(Math.max(Math.round(width / ratio), height * 0.7), height * 2) : height;
-  const frameHeight = flipped && scanUri ? scanHeight : height;
-
   return (
-    <View style={[{ height: frameHeight }, style]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={[{ height }, style]}>
       <Animated.View
         accessibilityElementsHidden={flipped}
         importantForAccessibility={flipped ? 'no-hide-descendants' : 'auto'}
@@ -292,19 +283,20 @@ export function FlipCard({
         ]}
       >
         {scanUri ? (
-          <Image
-            source={{ uri: scanUri }}
-            style={StyleSheet.absoluteFill}
-            // The frame already matches the scan's ratio (see scanHeight), so
-            // cover fills it exactly without cropping.
-            contentFit="cover"
-            onLoad={(e) => {
-              const { width: w, height: h } = e.source;
-              if (w > 0 && h > 0) setRatio(w / h);
-            }}
-            cachePolicy="memory"
-            accessibilityLabel="Document scan"
-          />
+          <>
+            {/* The frame keeps the card's height (no layout jump on flip).
+                A blurred copy of the scan fills it edge to edge and the scan
+                itself sits on top whole — nothing cropped or stretched. */}
+            <Image source={{ uri: scanUri }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={24} cachePolicy="memory" />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(1,27,39,0.18)' }]} />
+            <Image
+              source={{ uri: scanUri }}
+              style={StyleSheet.absoluteFill}
+              contentFit="contain"
+              cachePolicy="memory"
+              accessibilityLabel="Document scan"
+            />
+          </>
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <FileText size={34} color={C.ink4} strokeWidth={1.6} />
