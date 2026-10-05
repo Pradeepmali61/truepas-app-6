@@ -128,10 +128,13 @@ function authFrom(data: Record<string, unknown>): AuthResponse {
   };
 }
 
-/** PUT a local file (file:// or content:// URI) to a presigned URL. */
+/** PUT a local file (file:// or content:// URI, data: URI on web) to a presigned URL. */
 async function putFile(uploadUrl: string, fileUri: string, contentType: string): Promise<void> {
-  const blob = await (await fetch(fileUri)).blob();
-  const res = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: blob });
+  // Send bytes, not a Blob: Expo's fetch replaces Content-Type with a Blob's
+  // own type (empty for a local file), and the URL is signed for exactly
+  // this Content-Type — anything else is a 403 SignatureDoesNotMatch.
+  const bytes = new Uint8Array(await (await fetch(fileUri)).arrayBuffer());
+  const res = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: bytes });
   if (!res.ok) {
     const code = (await res.text().catch(() => '')).match(/<Code>([^<]+)<\/Code>/)?.[1];
     throw new Error(`Upload failed (${res.status}${code ? ` ${code}` : ''})`);
