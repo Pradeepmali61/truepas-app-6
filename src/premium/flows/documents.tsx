@@ -285,7 +285,10 @@ export function FlipCard({
           <Image
             source={{ uri: scanUri }}
             style={StyleSheet.absoluteFill}
-            contentFit="cover"
+            // Whole scan visible: "cover" cropped the card's top/bottom edge
+            // (document title, address) because a scan's ratio differs from
+            // this frame's.
+            contentFit="contain"
             cachePolicy="memory"
             accessibilityLabel="Document scan"
           />
