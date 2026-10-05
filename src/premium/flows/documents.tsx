@@ -250,8 +250,18 @@ export function FlipCard({
   }, [anim, flipped]);
   const frontRot = anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
   const backRot = anim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
+
+  // The scan side takes the scan's own shape: the frame height follows the
+  // photo's aspect ratio, so the whole scan fills it edge to edge — no
+  // cropping (cover) and no empty bars (contain), and nothing stretched.
+  const [width, setWidth] = useState(0);
+  const [ratio, setRatio] = useState<number | null>(null);
+  const scanHeight =
+    width > 0 && ratio ? Math.min(Math.max(Math.round(width / ratio), height * 0.7), height * 2) : height;
+  const frameHeight = flipped && scanUri ? scanHeight : height;
+
   return (
-    <View style={[{ height }, style]}>
+    <View style={[{ height: frameHeight }, style]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       <Animated.View
         accessibilityElementsHidden={flipped}
         importantForAccessibility={flipped ? 'no-hide-descendants' : 'auto'}
@@ -285,10 +295,13 @@ export function FlipCard({
           <Image
             source={{ uri: scanUri }}
             style={StyleSheet.absoluteFill}
-            // Whole scan visible: "cover" cropped the card's top/bottom edge
-            // (document title, address) because a scan's ratio differs from
-            // this frame's.
-            contentFit="contain"
+            // The frame already matches the scan's ratio (see scanHeight), so
+            // cover fills it exactly without cropping.
+            contentFit="cover"
+            onLoad={(e) => {
+              const { width: w, height: h } = e.source;
+              if (w > 0 && h > 0) setRatio(w / h);
+            }}
             cachePolicy="memory"
             accessibilityLabel="Document scan"
           />
