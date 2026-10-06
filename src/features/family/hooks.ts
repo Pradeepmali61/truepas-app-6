@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { api } from '@/api';
+import { toApiError } from '@/api/errors';
 import { accountKeys } from '@/features/account/hooks';
 import { notificationKeys } from '@/features/notifications/hooks';
 import { flowGuards } from '@/services/flowGuards';
@@ -24,11 +25,18 @@ export function useFamily() {
   return useQuery({ queryKey: familyKeys.all, queryFn: api.getFamily });
 }
 
+/** GET /family/{id}. A 4xx is final — 404 = removed from the family — so it
+ *  isn't retried and the screen shows "no longer in your family" at once. */
 export function useFamilyMember(id?: string) {
   return useQuery({
     queryKey: familyKeys.detail(id ?? ''),
     queryFn: () => api.getFamilyMember(id!),
     enabled: !!id,
+    retry: (failureCount, error) => {
+      const status = toApiError(error).status;
+      // An expired session maps to 401 too. Anything else: the app default, 2 retries.
+      return !(status != null && status >= 400 && status < 500) && failureCount < 2;
+    },
   });
 }
 

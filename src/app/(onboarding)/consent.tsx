@@ -4,6 +4,7 @@ import { Fingerprint, Info, LockKeyhole, ScanFace, type LucideIcon } from 'lucid
 import { useState } from 'react';
 import { View } from 'react-native';
 
+import { toApiError } from '@/api/errors';
 import { useBiometricConsent } from '@/features/auth/mutations';
 import { biometricConsentGiven } from '@/features/auth/slice';
 import { useLogoutFlow } from '@/features/auth/useLogoutFlow';
@@ -49,7 +50,8 @@ export default function ConsentScreen() {
       dispatch(biometricConsentGiven());
       router.push('/(onboarding)/face-scan');
     } catch (err) {
-      setError((err as { message?: string } | null)?.message ?? 'Check your connection and try again.');
+      // User-facing text, not axios's "Request failed with status code 503".
+      setError(toApiError(err).message);
     }
   };
 

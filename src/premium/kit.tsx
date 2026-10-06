@@ -9,6 +9,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Animated, Easing, Modal, Pressable, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { toApiError } from "@/api/errors";
+
 import { C, F, R, SH } from "./theme";
 import { Button, Card, Txt } from "./ui";
 
@@ -235,11 +237,13 @@ export function Async<T>({
   children: (d: T) => ReactNode;
 }) {
   if (q.isPending && q.data == null) return <>{skeleton ?? <LoadingView />}</>;
+  // User-facing text ("Cannot reach the server…"), never axios's raw
+  // "Request failed with status code 404" / "Network Error".
   if (q.isError && q.data == null)
     return (
       <ErrorView
         compact={compact}
-        body={q.error instanceof Error ? q.error.message : undefined}
+        body={q.error != null ? toApiError(q.error).message : undefined}
         onRetry={() => void q.refetch()}
       />
     );

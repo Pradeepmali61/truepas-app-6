@@ -68,14 +68,17 @@ export default function BookingDetailScreen() {
 
   if (booking.data == null) {
     const notFound = <EmptyView icon={CalendarDays} title="Booking not found" body="This booking is no longer available." />;
+    // 404 = deleted (e.g. opened from a notification after the reservation
+    // was removed): not found, not "Couldn't load". useBooking doesn't retry it.
+    const gone = !id || (booking.isError && toApiError(booking.error).status === 404);
     return (
       <Screen header={<TopBar title="Booking" />}>
-        {id ? (
+        {gone ? (
+          notFound
+        ) : (
           <Async q={booking} emptyView={notFound}>
             {() => null}
           </Async>
-        ) : (
-          notFound
         )}
       </Screen>
     );

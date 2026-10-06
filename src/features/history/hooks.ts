@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/api';
+import { toApiError } from '@/api/errors';
 import type { Booking, CreateReservationRequest, UpdateReservationRequest } from '@/types/domain';
 
 export const historyKeys = {
@@ -12,12 +13,19 @@ export function useBookings() {
   return useQuery({ queryKey: historyKeys.all, queryFn: api.getBookings });
 }
 
-/** GET /bookings/{id}. Pass null/'' to skip (e.g. no linked reservation). */
+/** GET /bookings/{id}. Pass null/'' to skip (e.g. no linked reservation).
+ *  A 4xx is final — 404 = deleted (e.g. opened from an old notification) —
+ *  so it isn't retried and the screen shows "not found" at once. */
 export function useBooking(id: string | null | undefined) {
   return useQuery({
     queryKey: historyKeys.detail(id ?? ''),
     queryFn: () => api.getBooking(id as string),
     enabled: !!id,
+    retry: (failureCount, error) => {
+      const status = toApiError(error).status;
+      // An expired session maps to 401 too. Anything else: the app default, 2 retries.
+      return !(status != null && status >= 400 && status < 500) && failureCount < 2;
+    },
   });
 }
 

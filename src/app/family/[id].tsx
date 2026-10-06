@@ -26,11 +26,13 @@ import {
   Trash2,
   UserCheck,
   Users,
+  UserX,
 } from 'lucide-react-native';
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { toApiError } from '@/api/errors';
 import { useToast } from '@/components/composite/Toast';
 import { documentKeys, useDocuments } from '@/features/documents/hooks';
 import {
@@ -229,20 +231,36 @@ export default function FamilyMemberScreen() {
   };
 
   if (!m) {
+    // 404 = removed (e.g. opened from a "member removed" notification): a
+    // friendly not-found with a way back, not "Couldn't load".
+    // useFamilyMember doesn't retry it.
+    const notFound = (
+      <EmptyView
+        icon={UserX}
+        title="No longer in your family"
+        body="This member was removed from your family, so their profile is no longer available."
+        action={<Button label="Go to Family" icon={Users} full={false} onPress={goToFamily} />}
+      />
+    );
     return (
       <Screen header={<TopBar title="Member" />} contentStyle={{ paddingTop: 4 }} refreshing={refreshing} onRefresh={onRefresh}>
-        <Async
-          q={member}
-          skeleton={
-            <View style={{ gap: 16, alignItems: 'center', paddingTop: 12 }}>
-              <Bone w={120} h={120} r={60} />
-              <Bone w="60%" h={28} />
-              <Bone w="40%" />
-              <SkeletonList rows={3} thumb={40} />
-            </View>
-          }>
-          {() => null}
-        </Async>
+        {member.isError && toApiError(member.error).status === 404 ? (
+          notFound
+        ) : (
+          <Async
+            q={member}
+            emptyView={notFound}
+            skeleton={
+              <View style={{ gap: 16, alignItems: 'center', paddingTop: 12 }}>
+                <Bone w={120} h={120} r={60} />
+                <Bone w="60%" h={28} />
+                <Bone w="40%" />
+                <SkeletonList rows={3} thumb={40} />
+              </View>
+            }>
+            {() => null}
+          </Async>
+        )}
       </Screen>
     );
   }
