@@ -14,6 +14,7 @@ import { ActivityIndicator, View } from 'react-native';
 
 import { useDocument, useDocumentImages, useRemoveDocument } from '@/features/documents/hooks';
 import { displayDocNumber } from '@/features/documents/format';
+import { ageBandFromAge, useFamily } from '@/features/family/hooks';
 import { useToast } from '@/hooks/useToast';
 import {
     DocumentCard,
@@ -58,6 +59,7 @@ export default function DocumentDetailScreen() {
   const docQuery = useDocument(id);
   // Signed, expiring URLs — refetched with the screen, never cached to disk.
   const imagesQuery = useDocumentImages(id);
+  const family = useFamily();
   const removeDocument = useRemoveDocument();
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [scanImageUri, setScanImageUri] = useState<string | null>(null);
@@ -88,9 +90,31 @@ export default function DocumentDetailScreen() {
   const removing = removeDocument.isPending;
   const doc = docQuery.data;
   const serverFront = imagesQuery.data?.front?.url ?? null;
+  // Every document carries a personId — a member's id, or the holder's own
+  // person id (not the /user/me id) — so whose it is comes from the family
+  // list. Until that loads, Verify now / Rescan wait instead of guessing.
+  const ownerKnown = !doc?.personId || family.data != null;
 
-  // Re-verify re-captures via the scan flow (design pushes `docVerify`).
-  const reverify = (d: IdentityDocument) =>
+  // Re-verify re-captures via the scan flow (design pushes `docVerify`). A
+  // member's document goes through their family flow (family/add/processing:
+  // their personId and enrolled face), never the holder's self flow.
+  const reverify = (d: IdentityDocument) => {
+    if (!ownerKnown) return;
+    const member = family.data?.find((m) => m.id === d.personId);
+    if (member) {
+      // Same params as the member's document step (family/add/document).
+      router.push({
+        pathname: '/document/scan',
+        params: {
+          type: d.type,
+          family: '1',
+          personId: member.id,
+          name: member.name.trim().split(' ')[0],
+          band: member.ageBand ?? ageBandFromAge(member.age),
+        },
+      } as never);
+      return;
+    }
     router.push({
       pathname: '/document/scan',
       params: {
@@ -99,6 +123,7 @@ export default function DocumentDetailScreen() {
         expiresAt: d.expiresAt ?? undefined,
       },
     } as never);
+  };
 
   const doRemove = () => {
     if (!id) return;
@@ -125,12 +150,15 @@ export default function DocumentDetailScreen() {
             ? () => {
                 void docQuery.refetch();
                 void imagesQuery.refetch();
+                if (!ownerKnown) void family.refetch();
               }
             : undefined
         }
         refreshing={docQuery.isRefetching}
         footer={
-          doc != null && canVerify ? <Button label="Verify now" icon={ScanLine} onPress={() => reverify(doc)} /> : undefined
+          doc != null && canVerify ? (
+            <Button label="Verify now" icon={ScanLine} disabled={!ownerKnown} onPress={() => reverify(doc)} />
+          ) : undefined
         }>
         <Async
           q={docQuery}
@@ -177,7 +205,7 @@ export default function DocumentDetailScreen() {
                         action rescans the document instead (renewed card, a
                         better photo, or a failed check). */}
                     <View style={{ flex: 1 }}>
-                      <Button label="Rescan" icon={ScanLine} size="md" onPress={() => reverify(d)} />
+                      <Button label="Rescan" icon={ScanLine} size="md" disabled={!ownerKnown} onPress={() => reverify(d)} />
                     </View>
                   </Row>
                 </View>
