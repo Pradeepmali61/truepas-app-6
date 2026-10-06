@@ -170,7 +170,8 @@ export default function IdentityScreen() {
             <ListRow
               icon={UserRoundCheck}
               tone={statusTileTone(summary.selfieMatch)}
-              title="Document face match"
+              title="Face match"
+              sub="Your document photo vs your face"
               trailing={<StatusBadge status={summary.selfieMatch} />}
               chevron={false}
             />
