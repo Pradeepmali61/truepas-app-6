@@ -32,6 +32,17 @@ const RIGHT: Item[] = [
 
 type Route = BottomTabBarProps['state']['routes'][number];
 
+/** Family and the face button PUSH a screen, so a quick double tap opened it
+ *  twice; taps within this window after an open are ignored. */
+const OPEN_GUARD_MS = 800;
+let lastOpenAt = 0;
+function openOnce(href: string) {
+  const now = Date.now();
+  if (now - lastOpenAt < OPEN_GUARD_MS) return;
+  lastOpenAt = now;
+  router.push(href as never);
+}
+
 export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name;
@@ -39,7 +50,7 @@ export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
   const press = (it: Item) => {
     tapHaptic();
     if (it.kind === 'link') {
-      router.push(it.href as never);
+      openOnce(it.href);
       return;
     }
     const route = state.routes.find((r: Route) => r.name === it.route);
@@ -101,7 +112,7 @@ export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
             <Press
               onPress={() => {
                 tapHaptic();
-                router.push('/identity' as never);
+                openOnce('/identity');
               }}
               label="Your identity"
               role="button"
