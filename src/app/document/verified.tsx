@@ -82,8 +82,12 @@ export default function DocumentVerifiedScreen() {
 
   if (!allowed) return <Redirect href="/document/select-type" />;
 
-  const portraitUri = portraitImageUrl || images.data?.portrait?.url || selfieImageUri;
-  const scanUri = images.data?.front?.url ?? frontImageUri;
+  // The fetched signed URL first: the one passed as a route param comes back
+  // decoded (%2B/%2F/%3D in its token), so S3 rejects it and the box stays blank.
+  const portraitUri = images.data?.portrait?.url || portraitImageUrl || selfieImageUri;
+  // The phone's cropped scan first: the server's front is the full camera
+  // frame sent for verification (hand and background included).
+  const scanUri = frontImageUri ?? images.data?.front?.url ?? null;
 
   return (
     <ResultView
