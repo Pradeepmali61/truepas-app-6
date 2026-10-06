@@ -47,7 +47,8 @@ export default function DocumentRejectedScreen() {
   const onAction = () => {
     switch (action) {
       case 'retake':
-        // Back to the scan screen (it sits under this one), reset to a fresh capture.
+        // Fresh capture in place of this screen — the finished scan replaced
+        // itself with processing (`retake` resets one still in the stack).
         router.dismissTo({ pathname: '/document/scan', params: { type: docType ?? 'passport', retake: String(Date.now()) } } as never);
         return;
       case 'anotherDocument':

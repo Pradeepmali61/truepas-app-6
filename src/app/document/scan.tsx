@@ -31,7 +31,9 @@ type ScanStep = 'front' | 'selfie' | 'done';
  *  camera instead.
  *  The captures go to document/processing via scanStore, which uploads them
  *  through presigned URLs (BACKEND_UPDATE_2026-10 §6.2); Regula runs
- *  server-side for OCR + authenticity + face match.
+ *  server-side for OCR + authenticity + face match. Continue replaces this
+ *  screen, so a finished capture never sits under processing or the result
+ *  screens.
  *  `retake` param (set by the result screens): reset to a fresh capture.
  *  Family mode: when `family` param is set, routes to family/add/processing
  *  after capture instead of the user document processing screen. Birth
@@ -293,7 +295,11 @@ export default function DocumentScanScreen() {
       return;
     }
 
-    router.push({
+    // Replace, like the family flow: left underneath, this "Capture complete"
+    // screen was where back from a result landed — and Continue there created
+    // a new document from the same old photo. Back now returns to whatever
+    // opened the scan (type picker or document page).
+    router.replace({
       pathname: '/document/processing',
       params: {
         type: type ?? 'passport',

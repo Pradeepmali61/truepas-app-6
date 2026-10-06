@@ -80,6 +80,10 @@ export default function DocumentProcessingScreen() {
   const createdDocRef = useRef<IdentityDocument | null>(null);
   // Retries of this screen, for the attempt log.
   const attemptRef = useRef(0);
+  // False once the user has left (back / swipe while the request runs). The
+  // request still finishes, but must not touch this screen or navigate —
+  // router.replace would swap out whichever screen they went back to.
+  const activeRef = useRef(true);
   const addDocument = useAddDocument();
   const queryClient = useQueryClient();
   const profileName = useAppSelector((state) => state.auth.user?.fullName ?? '');
@@ -99,7 +103,16 @@ export default function DocumentProcessingScreen() {
     setStatus(s);
     setStepIndex(STEP_INDEX[s]);
   };
-  const onUploadStep = (s: VerifyUploadStep) => goStep(s === 'uploading' ? 'uploading' : 'verifying');
+  const onUploadStep = (s: VerifyUploadStep) => {
+    if (activeRef.current) goStep(s === 'uploading' ? 'uploading' : 'verifying');
+  };
+
+  useEffect(() => {
+    activeRef.current = true;
+    return () => {
+      activeRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (hasStarted.current) return;
@@ -109,6 +122,13 @@ export default function DocumentProcessingScreen() {
       const scanResult = getScanResult();
       const frontImage = scanResult?.documentImageBase64 ?? '';
       const log = startDocLog({ flow: 'self', type: docType, retry: attemptRef.current++ || undefined });
+      // Left mid-request: the outcome and its cleanup stand (the wallet
+      // refreshes), but there is no screen left to update or navigate from.
+      const stillHere = () => {
+        if (activeRef.current) return true;
+        log.info('screen closed, not navigating');
+        return false;
+      };
 
       if (!frontImage) {
         log.end('error', { error: 'no scan in the store' });
@@ -181,6 +201,7 @@ export default function DocumentProcessingScreen() {
 
           log.end('approved', { document: doc.id });
           refreshAfterVerify(queryClient, doc.id);
+          if (!stillHere()) return;
           goStep('done');
           flowGuards.grant('document:verified');
           router.replace({
@@ -234,6 +255,7 @@ export default function DocumentProcessingScreen() {
           match: result.matchScore,
           next: result.reasonCode === 'PROFILE_MISMATCH' ? 'mismatch' : 'rejected',
         });
+        if (!stillHere()) return;
         if (result.reasonCode === 'PROFILE_MISMATCH') {
           // Name/DOB differ from the profile — compare them and offer to update.
           flowGuards.grant('document:mismatch');
@@ -268,6 +290,7 @@ export default function DocumentProcessingScreen() {
         // dev error overlay.
         const msg = errorText(err);
         log.end('error', { ...errorFields(err), shown: msg });
+        if (!stillHere()) return;
         setError(msg);
         setStatus('error');
       }
@@ -293,7 +316,10 @@ export default function DocumentProcessingScreen() {
       clearDocumentImages(doc.id).catch(() => {});
       createdDocRef.current = null;
     }
-    router.back();
+    // The scan replaced itself with this screen, so back is whatever opened
+    // it (type picker, or the document page for a rescan) — not the old capture.
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/documents' as never);
   };
 
   const failed = status === 'error';
