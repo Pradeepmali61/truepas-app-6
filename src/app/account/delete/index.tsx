@@ -31,7 +31,8 @@ const COMMENT_MAX = 500;
  * comment? } (backend Oct 2026 §11.2). The optional reason and comment are
  * stored without any link to the account. Removes face + documents before
  * tombstone. Type DELETE + enter PIN, then the destructive footer CTA
- * enables. Success routes through the guarded processing → success pipeline.
+ * enables. The request IS the deletion, so the button spinner is the only
+ * progress shown; on success the guarded success screen follows directly.
  */
 export default function DeleteAccountScreen() {
   const router = useRouter();
@@ -58,8 +59,8 @@ export default function DeleteAccountScreen() {
         ...(reason ? { reason } : {}),
         ...(note ? { comment: note } : {}),
       });
-      flowGuards.grant('account:deleting');
-      router.push('/account/delete/processing');
+      flowGuards.grant('account:deleted');
+      router.push('/account/delete/success');
     } catch (err: unknown) {
       // The confirmation passed client-side, so a 400/422/429 is the PIN —
       // PIN_INVALID carries the tries left, PIN_LOCKED the wait. A failed
@@ -106,7 +107,7 @@ export default function DeleteAccountScreen() {
       />
 
       <Group>
-        <ListRow icon={ScanFace} tone="red" title="Your face templates" sub="Removed from the face gallery" chevron={false} />
+        <ListRow icon={ScanFace} tone="red" title="Your face templates" sub="Deleted from our servers" chevron={false} />
         <ListRow
           icon={FileText}
           tone="red"

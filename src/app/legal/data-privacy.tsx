@@ -14,8 +14,8 @@ import { useAppSelector } from '@/store';
 
 const RETENTION = [
   { label: 'Account data', policy: 'Retained while account is active' },
-  { label: 'Document images', policy: 'Stored in S3, deleted with account' },
-  { label: 'Face template', policy: 'Face gallery, deleted with account' },
+  { label: 'Document images', policy: 'Secure encrypted storage, deleted with account' },
+  { label: 'Face template', policy: 'Dedicated encrypted storage, deleted with account' },
 ];
 
 /** Server timestamp → "29 Jul 2026" in the user's locale; raw value if unparseable. */
@@ -65,7 +65,7 @@ export default function DataPrivacyScreen() {
             {enrolled ? <Badge label="Enrolled" tone="green" dot /> : <Badge label="Not enrolled" tone="neutral" />}
           </Row>
           <Txt v="small" style={{ lineHeight: 19 }}>
-            Your encrypted face template is stored in a dedicated face gallery. It will be deleted permanently when
+            Your encrypted face template is stored in dedicated secure storage. It will be deleted permanently when
             you delete your account.
           </Txt>
         </Card>

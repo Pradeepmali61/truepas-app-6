@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useQueryClient } from '@tanstack/react-query';
 import { Redirect, useRouter } from 'expo-router';
-import { Check, Database, Image as ImageIcon, ScanFace, type LucideIcon } from 'lucide-react-native';
+import { Check, FileText, ScanFace, UserRound, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
@@ -14,13 +14,21 @@ import { flowGuards } from '@/services/flowGuards';
 import { clearAllProfileImages } from '@/services/profileImageStore';
 import { useAppDispatch } from '@/store';
 
-const SYSTEMS: { icon: LucideIcon; label: string }[] = [
-  { icon: Database, label: 'PostgreSQL' },
-  { icon: ImageIcon, label: 'S3 Images' },
-  { icon: ScanFace, label: 'Face Gallery' },
+/**
+ * What a successful DELETE /user/me did, in plain words — and no more than
+ * the backend promises: it removes face and document data for the account
+ * and its family members, then closes the account and revokes every session
+ * (CUSTOMER_APP_FRONTEND_INTEGRATION.md "Delete account"). Check-in history
+ * isn't listed because the contract doesn't say it's erased.
+ */
+const REMOVED: { icon: LucideIcon; label: string; detail: string }[] = [
+  { icon: UserRound, label: 'Your account', detail: 'You can no longer sign in with it' },
+  { icon: ScanFace, label: 'Face data', detail: "Yours and your family's" },
+  { icon: FileText, label: 'Documents', detail: "Yours and your family's, with their photos" },
 ];
 
-/** Delete account — success with all-3-systems verification (PRD). */
+/** Delete account — success. Reached straight from the confirm screen once
+ *  DELETE /user/me succeeded (only that grants the flag). */
 export default function DeleteSuccessScreen() {
   const dispatch = useAppDispatch();
   const router = useRouter();
@@ -51,7 +59,7 @@ export default function DeleteSuccessScreen() {
       over="All done"
       title="Your account is"
       accent="deleted."
-      sub="All your data has been permanently removed."
+      sub="You've been signed out on all your devices."
       primary={
         <Button
           label="Back to sign in"
@@ -62,30 +70,26 @@ export default function DeleteSuccessScreen() {
       }>
       <View style={{ gap: 10 }}>
         <Txt v="micro" style={{ marginLeft: 4 }}>
-          Deletion verified
+          What we deleted
         </Txt>
         <Card pad={0} style={{ paddingHorizontal: 18 }}>
-          {SYSTEMS.map((s, i) => (
-            <View key={s.label}>
+          {REMOVED.map((item, i) => (
+            <View key={item.label}>
               {i > 0 && <Divider />}
-              <Row between style={{ paddingVertical: 14 }}>
-                <Row gap={10}>
-                  <s.icon size={18} color={C.skyPressed} />
-                  <Txt v="bodyStrong">{s.label}</Txt>
-                </Row>
-                <Row gap={4}>
-                  <Check size={14} color={C.green} strokeWidth={3} />
-                  <Txt v="smallStrong" color={C.greenInk}>
-                    Deleted
-                  </Txt>
-                </Row>
+              <Row gap={12} style={{ paddingVertical: 14 }}>
+                <item.icon size={18} color={C.skyPressed} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Txt v="bodyStrong">{item.label}</Txt>
+                  <Txt v="small">{item.detail}</Txt>
+                </View>
+                <Check size={16} color={C.green} strokeWidth={3} />
               </Row>
             </View>
           ))}
         </Card>
       </View>
       <Txt v="small" color={C.ink4} center>
-        Changed your mind? You can create a new Truepas anytime.
+        Changed your mind? You can create a new Truepas account anytime.
       </Txt>
     </ResultView>
   );

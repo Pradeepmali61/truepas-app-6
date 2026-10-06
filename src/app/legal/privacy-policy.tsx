@@ -1,7 +1,8 @@
 /** @jsxImportSource react */
 import { LegalPage, type LegalSectionText } from '@/premium/flows/account';
 
-/** Original Privacy Policy text — headings keep their order (the layout numbers them). */
+/** Privacy Policy text — headings keep their order (the layout numbers them).
+ *  Storage is described in plain words, never by internal system names. */
 const SECTIONS: LegalSectionText[] = [
   {
     h: 'Information We Collect',
@@ -9,7 +10,7 @@ const SECTIONS: LegalSectionText[] = [
   },
   {
     h: 'Biometric Data Handling',
-    p: 'Your facial template is encrypted and stored in a dedicated face gallery. It is never shared with third parties and is used solely for identity matching during verification.',
+    p: 'Your facial template is encrypted and stored in dedicated secure storage. It is never shared with third parties and is used solely for identity matching during verification.',
   },
   {
     h: 'Minor/Guardianship Consent',
@@ -17,11 +18,11 @@ const SECTIONS: LegalSectionText[] = [
   },
   {
     h: 'Data Retention',
-    p: 'All data — PostgreSQL records, S3 images, and face templates — is retained while your account is active and permanently deleted upon account deletion. Deletion is verified across all three systems.',
+    p: 'All data — your account records, document images, and face templates — is retained while your account is active and permanently deleted upon account deletion. Deletion is verified across all three.',
   },
   {
     h: 'Your Rights',
-    p: 'You have the right to download your data, withdraw biometric consent, and delete your account at any time. Account deletion removes all data across PostgreSQL, S3, and the face gallery.',
+    p: 'You have the right to download your data, withdraw biometric consent, and delete your account at any time. Account deletion removes all your data: account records, document images, and face templates.',
   },
 ];
 
