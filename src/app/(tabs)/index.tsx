@@ -36,7 +36,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAccountActivity } from '@/features/account/hooks';
 import { useDocuments } from '@/features/documents/hooks';
-import { useFamily } from '@/features/family/hooks';
+import { useFamily, useSyncMemberPhotos } from '@/features/family/hooks';
 import { useBookings } from '@/features/history/hooks';
 import { useIdentitySummary } from '@/features/identity/hooks';
 import { useNotificationCount } from '@/features/notifications/hooks';
@@ -72,6 +72,8 @@ export default function HomeScreen() {
   const [drawer, setDrawer] = useState(false);
 
   const family = useFamily();
+  // Photos that only made it to this phone get uploaded in the background.
+  useSyncMemberPhotos(family.data);
   const bookings = useBookings();
   const unread = useNotificationCount();
   const summary = useIdentitySummary();

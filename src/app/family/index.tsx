@@ -10,7 +10,7 @@ import { useRouter } from 'expo-router';
 import { Camera, UserPlus, Users } from 'lucide-react-native';
 import { View } from 'react-native';
 
-import { useFamily, useMembersWithoutPhoto } from '@/features/family/hooks';
+import { useFamily, useMembersWithoutPhoto, useSyncMemberPhotos } from '@/features/family/hooks';
 import { MemberGrid, MemberGridSkeleton } from '@/premium/flows/family';
 import { Async, EmptyView } from '@/premium/kit';
 import { Button, Card, Heading, Screen, Tile, TopBar, Txt } from '@/premium/ui';
@@ -19,6 +19,7 @@ import type { FamilyMember } from '@/types/domain';
 export default function FamilyScreen() {
   const router = useRouter();
   const members = useFamily();
+  useSyncMemberPhotos(members.data);
   const addMember = () => router.push('/family/add' as never);
   const isEmpty = members.data?.length === 0;
 

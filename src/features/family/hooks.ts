@@ -194,9 +194,41 @@ export function useRememberMemberPhoto() {
       return; // keep initials
     }
     void uploadMemberPhoto(queryClient, personId, small).catch(() => {
-      // The phone copy still shows; the next photo change uploads again.
+      // The phone copy still shows; useSyncMemberPhotos retries the upload.
     });
   };
+}
+
+/** Members whose phone-only photo was already retried this app session. */
+const photoSyncTried = new Set<string>();
+
+/**
+ * Uploads member photos that exist only on this phone — their upload failed
+ * earlier (offline, or the S3 403 before the upload fix) — so they survive
+ * a reinstall and show on other devices. One try per member per session.
+ */
+export function useSyncMemberPhotos(members: FamilyMember[] | undefined) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const pending = (members ?? []).filter((m) => !m.profileImageUrl && !photoSyncTried.has(m.id));
+    if (pending.length === 0) return;
+    pending.forEach((m) => photoSyncTried.add(m.id));
+    void (async () => {
+      let uploaded = 0;
+      for (const m of pending) {
+        const local = await getMemberProfileImage(m.id).catch(() => null);
+        if (!local) continue;
+        try {
+          await api.uploadProfilePicture(local, m.id);
+          uploaded += 1;
+          console.log('[MemberPhoto] uploaded phone-only photo', m.id.slice(0, 8));
+        } catch (e) {
+          console.warn('[MemberPhoto] upload failed, retrying next launch', m.id.slice(0, 8), e instanceof Error ? e.message : e);
+        }
+      }
+      if (uploaded > 0) await queryClient.invalidateQueries({ queryKey: familyKeys.all });
+    })();
+  }, [members, queryClient]);
 }
 
 /** After a face was enrolled or updated (member or self): refresh the
