@@ -7,7 +7,7 @@ import { View } from 'react-native';
 
 import { api } from '@/api';
 import { toApiError } from '@/api/errors';
-import { refreshAfterVerify, useAddDocument } from '@/features/documents/hooks';
+import { documentKeys, refreshAfterVerify, useAddDocument } from '@/features/documents/hooks';
 import { errorFields, startDocLog } from '@/features/documents/verifyLog';
 import { isApproved, verifyDocumentWithUploads, type VerifyUploadStep } from '@/features/documents/verifyWithUploads';
 import { DocumentCard, docMeta, ScanHero, StepList, type FlowStepState } from '@/premium/flows/documents';
@@ -166,6 +166,12 @@ export default function DocumentProcessingScreen() {
           log.info('reusing document', { document: doc.id });
         }
 
+        // Same-type documents before verifying: an approval makes the server
+        // delete the older verified one, whose scan is still on this phone.
+        const sameTypeBefore = (queryClient.getQueryData<IdentityDocument[]>(documentKeys.all) ?? [])
+          .filter((d) => d.type === docType && d.id !== doc.id)
+          .map((d) => d.id);
+
         // Steps 2–3: presigned upload → session → verify (no base64).
         const result = await verifyDocumentWithUploads({
           documentId: doc.id,
@@ -194,6 +200,12 @@ export default function DocumentProcessingScreen() {
               } catch (e) {
                 log.warn('leftover not removed', { document: old.id, ...errorFields(e) });
               }
+            }
+            // Gone from the server (the replaced verified copy): drop its scan here too.
+            for (const id of sameTypeBefore) {
+              if ((existing ?? []).some((d) => d.id === id)) continue;
+              clearDocumentImages(id).catch(() => {});
+              log.info('cleared replaced copy', { document: id });
             }
           } catch (e) {
             log.warn('leftover lookup failed', errorFields(e));
