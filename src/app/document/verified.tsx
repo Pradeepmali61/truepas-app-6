@@ -53,9 +53,9 @@ export default function DocumentVerifiedScreen() {
   }>();
 
   const [frontImageUri, setFrontImageUri] = useState<string | null>(null);
-  // Server images (signed, expiring) — preferred over the local capture.
+  // Server images (signed, expiring): the portrait, and the scan when this
+  // phone has no local copy.
   const images = useDocumentImages(docId || undefined);
-  const [selfieImageUri, setSelfieImageUri] = useState<string | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   // Result screen — a deep link with no real verification behind it must not
   // render a fake "verified" card (ADV-001).
@@ -66,10 +66,9 @@ export default function DocumentVerifiedScreen() {
   }, [allowed]);
 
   useEffect(() => {
-    // Captured images were persisted locally (keyed by docId) before verification
+    // The captured document was persisted locally (keyed by docId) before verification
     if (docId) {
       getDocumentImageUri(docId, 'front').then(setFrontImageUri).catch(() => setFrontImageUri(null));
-      getDocumentImageUri(docId, 'selfie').then(setSelfieImageUri).catch(() => setSelfieImageUri(null));
     }
   }, [docId]);
 
@@ -84,7 +83,7 @@ export default function DocumentVerifiedScreen() {
 
   // The fetched signed URL first: the one passed as a route param comes back
   // decoded (%2B/%2F/%3D in its token), so S3 rejects it and the box stays blank.
-  const portraitUri = images.data?.portrait?.url || portraitImageUrl || selfieImageUri;
+  const portraitUri = images.data?.portrait?.url || portraitImageUrl;
   // The phone's cropped scan first: the server's front is the full camera
   // frame sent for verification (hand and background included).
   const scanUri = frontImageUri ?? images.data?.front?.url ?? null;
@@ -137,8 +136,9 @@ export default function DocumentVerifiedScreen() {
       {/* Extracted fields — portrait + captured data */}
       <Group title="Read from your document">
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 }}>
-          {/* Portrait — from backend (portraitImageUrl, extracted by server-side Regula)
-           *  → selfie fallback → icon placeholder */}
+          {/* Portrait — from backend (GET /documents/{id}/images, else the
+           *  verify response's portraitImageUrl; extracted by server-side
+           *  Regula) → icon placeholder */}
           <View
             style={{
               width: 56,

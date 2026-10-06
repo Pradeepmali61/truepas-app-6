@@ -20,24 +20,28 @@ import { C } from '@/premium/theme';
 import { back, Button, IconCircle, Row, Txt } from '@/premium/ui';
 import { setScanResult } from '@/services/scanStore';
 
-type ScanStep = 'front' | 'selfie' | 'done';
+type ScanStep = 'front' | 'done';
 
-/** Document scan — captures front of document (+ selfie for portrait documents).
- *  Document capture uses the Regula Document Reader native scanner (edge
- *  detection, auto-capture, perspective-corrected cropping) when the native
- *  modules are present, falling back to the manual expo-camera flow in Expo Go.
- *  Selfie capture always uses expo-camera. The scanner opens by itself the
- *  first time it is ready; if it fails to start, the page offers Retry or the
- *  camera instead.
- *  The captures go to document/processing via scanStore, which uploads them
+/** Document scan — captures the front of the document, then a review step
+ *  (Retake document / Continue).
+ *  No selfie step: the backend compares the document photo with the person's
+ *  ENROLLED face (BACKEND_UPDATE_2026-10 §6.4) and ignores an uploaded selfie,
+ *  so one only cost the user time. Family members get their face from the
+ *  liveness flow (family/add/face-capture); birth certificates have no face
+ *  check at all.
+ *  Capture uses the Regula Document Reader native scanner (edge detection,
+ *  auto-capture, perspective-corrected cropping) when the native modules are
+ *  present, falling back to the manual expo-camera flow in Expo Go. The
+ *  scanner opens by itself the first time it is ready; if it fails to start,
+ *  the page offers Retry or the camera instead.
+ *  The capture goes to document/processing via scanStore, which uploads it
  *  through presigned URLs (BACKEND_UPDATE_2026-10 §6.2); Regula runs
  *  server-side for OCR + authenticity + face match. Continue replaces this
  *  screen, so a finished capture never sits under processing or the result
  *  screens.
  *  `retake` param (set by the result screens): reset to a fresh capture.
  *  Family mode: when `family` param is set, routes to family/add/processing
- *  after capture instead of the user document processing screen. Birth
- *  certificates (0-4) skip the selfie step — no portrait, no face match. */
+ *  after capture instead of the user document processing screen. */
 export default function DocumentScanScreen() {
   const router = useRouter();
   const { width: winW } = useWindowDimensions();
@@ -54,11 +58,6 @@ export default function DocumentScanScreen() {
     retake?: string;
   }>();
   const isFamilyMode = family === '1';
-  const isDocOnly = type === 'birthCertificate' || band === '0-4';
-  // Family flow: the selfie step is skipped — face capture happens later via
-  // the liveness flow (family/add/face-capture), so a separate selfie here is
-  // redundant (it is never sent to the backend in family mode).
-  const skipSelfie = isFamilyMode || isDocOnly;
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [capturing, setCapturing] = useState(false);
@@ -66,7 +65,6 @@ export default function DocumentScanScreen() {
   const [frontImage, setFrontImage] = useState<string | null>(null);
   // Regula-cropped document image for display (raw frame goes to backend).
   const [frontPreview, setFrontPreview] = useState<string | null>(null);
-  const [selfieImage, setSelfieImage] = useState<string | null>(null);
   const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
   const [torch, setTorch] = useState(false);
 
@@ -77,21 +75,16 @@ export default function DocumentScanScreen() {
     setSeenRetake(retake);
     setFrontImage(null);
     setFrontPreview(null);
-    setSelfieImage(null);
     setStep('front');
   }
 
   // Frame dimensions shown on the camera overlay (manual fallback path only).
-  // The SAME objects are passed to DocScanView, which centres the frame in the
+  // The SAME object is passed to DocScanView, which centres the frame in the
   // camera view — the crop math in handleCapture depends on that. The Regula
-  // scanner crops natively and does not use these.
+  // scanner crops natively and does not use it.
   const FRONT_FRAME = useMemo<ScanFrameSize>(() => {
     const width = Math.round(Math.min(330, winW - 48));
     return { width, height: Math.round(width * (214 / 330)) };
-  }, [winW]);
-  const SELFIE_FRAME = useMemo<ScanFrameSize>(() => {
-    const size = Math.round(Math.min(280, winW - 80));
-    return { width: size, height: size, round: true };
   }, [winW]);
 
   // ── Regula native scanner state ──────────────────────────────────────────
@@ -142,8 +135,7 @@ export default function DocumentScanScreen() {
       const result = await scanDocument();
       setFrontImage(result.imageBase64);
       setFrontPreview(result.previewBase64);
-      // Doc-only + family mode: no separate selfie — face capture via liveness
-      setStep(skipSelfie ? 'done' : 'selfie');
+      setStep('done');
     } catch (e: any) {
       if (e instanceof RegulaScanCancelled) return; // user closed the scanner
       console.warn('[DocScan] Regula scan failed:', e?.message);
@@ -199,7 +191,7 @@ export default function DocumentScanScreen() {
         [photoWidth, photoHeight] = [photoHeight, photoWidth];
       }
 
-      const frame = step === 'front' ? FRONT_FRAME : SELFIE_FRAME;
+      const frame = FRONT_FRAME;
 
       // Cover transform: scale the photo so it covers the view, centered.
       const coverScale = Math.max(viewWidth / photoWidth, viewHeight / photoHeight);
@@ -217,7 +209,6 @@ export default function DocumentScanScreen() {
       const cropH = frame.height / coverScale;
 
       console.log('[Scan] crop mapping:', JSON.stringify({
-        step,
         photo: { w: photoWidth, h: photoHeight },
         view: { w: viewWidth, h: viewHeight },
         coverScale: Number(coverScale.toFixed(3)),
@@ -251,19 +242,12 @@ export default function DocumentScanScreen() {
       const base64 = manipulated.base64 ?? '';
       if (!base64) return;
 
-      if (step === 'front') {
-        setFrontImage(base64);
-        // Manual capture is already cropped to the on-screen frame.
-        setFrontPreview(base64);
-        // Doc-only + family mode: no separate selfie — face capture via liveness
-        setStep(skipSelfie ? 'done' : 'selfie');
-      } else if (step === 'selfie') {
-        setSelfieImage(base64);
-        // Display only: the backend matches the document against the
-        // enrolled face (liveness), not this photo — it is never uploaded.
-        console.log('[DocScan] selfie', imageLabel(base64), '(kept on the phone, not sent)');
-        setStep('done');
-      }
+      setFrontImage(base64);
+      // Manual capture is already cropped to the on-screen frame.
+      setFrontPreview(base64);
+      // Same line as the Regula path ('[DocScan] complete' in regulaScanner).
+      console.log('[DocScan] complete', `upload=manual-camera ${imageLabel(base64)}`);
+      setStep('done');
     } catch {
       // Ignore capture errors — let user retry
     } finally {
@@ -272,11 +256,10 @@ export default function DocumentScanScreen() {
   };
 
   const handleContinue = () => {
-    // Store captured images for processing screen
+    // Store the captured document for the processing screen
     setScanResult({
       documentImageBase64: frontImage ?? undefined,
       documentPreviewBase64: frontPreview ?? undefined,
-      selfieBase64: selfieImage ?? undefined,
     });
 
     if (isFamilyMode) {
@@ -309,22 +292,11 @@ export default function DocumentScanScreen() {
     });
   };
 
+  // Review → back to a fresh document capture.
   const handleRetake = () => {
-    if (step === 'selfie') {
-      setFrontImage(null);
-      setFrontPreview(null);
-      setStep('front');
-    } else if (step === 'done') {
-      if (skipSelfie) {
-        // No selfie step in this flow — retake the document itself
-        setFrontImage(null);
-        setFrontPreview(null);
-        setStep('front');
-      } else {
-        setSelfieImage(null);
-        setStep('selfie');
-      }
-    }
+    setFrontImage(null);
+    setFrontPreview(null);
+    setStep('front');
   };
 
   const meta = docMeta(type);
@@ -376,13 +348,13 @@ export default function DocumentScanScreen() {
       <DocScanView
         topTitle={scanTitle}
         title="Capture complete"
-        hint={`${skipSelfie ? 'Document captured successfully.' : 'Document and selfie captured successfully.'} Tap continue to proceed.`}
+        hint="Document captured successfully. Tap continue to proceed."
         onBack={close}
         topRight={null}
         footer={
           <Row gap={10}>
             <View style={{ flex: 1 }}>
-              <Button tone="glass" label={skipSelfie ? 'Retake document' : 'Retake selfie'} onPress={handleRetake} />
+              <Button tone="glass" label="Retake document" onPress={handleRetake} />
             </View>
             <View style={{ flex: 1 }}>
               <Button label="Continue" onPress={handleContinue} />
@@ -390,64 +362,37 @@ export default function DocumentScanScreen() {
           </Row>
         }>
         <View style={{ alignItems: 'center', gap: 34 }}>
-          {/* Captured previews — document crop + selfie */}
-          <View>
-            <View
-              style={{
-                width: FRONT_FRAME.width,
-                height: FRONT_FRAME.height,
-                borderRadius: 18,
-                overflow: 'hidden',
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.25)',
-                backgroundColor: 'rgba(255,255,255,0.06)',
-              }}>
-              {previewUri ? (
-                <Image
-                  source={{ uri: `data:image/jpeg;base64,${previewUri}` }}
-                  accessibilityLabel="Captured document"
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                />
-              ) : null}
-            </View>
-            {!skipSelfie && selfieImage ? (
-              <View
-                style={{
-                  position: 'absolute',
-                  right: -10,
-                  bottom: -24,
-                  width: 88,
-                  height: 88,
-                  borderRadius: 44,
-                  overflow: 'hidden',
-                  borderWidth: 3,
-                  borderColor: C.sky,
-                  backgroundColor: 'rgba(255,255,255,0.06)',
-                }}>
-                <Image
-                  source={{ uri: `data:image/jpeg;base64,${selfieImage}` }}
-                  accessibilityLabel="Captured selfie"
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                />
-              </View>
+          {/* Captured preview — the document crop */}
+          <View
+            style={{
+              width: FRONT_FRAME.width,
+              height: FRONT_FRAME.height,
+              borderRadius: 18,
+              overflow: 'hidden',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.25)',
+              backgroundColor: 'rgba(255,255,255,0.06)',
+            }}>
+            {previewUri ? (
+              <Image
+                source={{ uri: `data:image/jpeg;base64,${previewUri}` }}
+                accessibilityLabel="Captured document"
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+              />
             ) : null}
           </View>
-          <ScanPill label={skipSelfie ? 'Document captured' : 'Document + selfie captured'} tone="green" />
+          <ScanPill label="Document captured" tone="green" />
         </View>
       </DocScanView>
     );
   }
 
-  const isFront = step === 'front';
-  // Regula handles the front step with its own native scanner UI; the manual
-  // camera view is used for the selfie step and as the fallback.
-  const showRegulaUI = isFront && useRegula;
-  const facing = isFront ? 'back' : 'front';
-
-  // ── Regula native scanner UI (front step) ────────────────────────────────
-  if (showRegulaUI && regulaInitFailed) {
+  // ── Regula native scanner UI ─────────────────────────────────────────────
+  // Regula captures the document with its own native scanner UI; the manual
+  // camera view below is the fallback (no native module, or "Use camera
+  // instead").
+  if (useRegula && regulaInitFailed) {
     // The scanner didn't start (error or 20 s timeout): retry, or capture
     // with the camera instead.
     return (
@@ -470,7 +415,7 @@ export default function DocumentScanScreen() {
     );
   }
 
-  if (showRegulaUI) {
+  if (useRegula) {
     return (
       <DocScanView
         topTitle={scanTitle}
@@ -502,41 +447,37 @@ export default function DocumentScanScreen() {
     );
   }
 
-  // ── Manual expo-camera UI (selfie step + front fallback) ─────────────────
+  // ── Manual expo-camera UI (fallback document capture) ────────────────────
   return (
     <DocScanView
-      topTitle={isFront ? scanTitle : 'Selfie'}
-      title={isFront ? 'Scan front of document' : 'Capture your selfie'}
-      hint={isFront ? 'Align the document within the frame' : 'Look at the camera and hold still'}
+      topTitle={scanTitle}
+      title="Scan front of document"
+      hint="Align the document within the frame"
       onBack={close}
       camera={
         <CameraView
           ref={cameraRef}
-          facing={facing}
+          facing="back"
           active={true}
           style={{ flex: 1 }}
-          mirror={!isFront}
-          enableTorch={isFront && torch}
+          enableTorch={torch}
         />
       }
       onCameraLayout={(width, height) => setCameraLayout({ width, height })}
-      frame={isFront ? FRONT_FRAME : SELFIE_FRAME}
-      // Family mode and document-only types have no selfie step (skipSelfie).
-      status={skipSelfie ? 'Document photo' : isFront ? 'Step 1 of 2 · Document' : 'Step 2 of 2 · Selfie'}
+      frame={FRONT_FRAME}
+      status="Document photo"
       topRight={
-        isFront ? (
-          <IconCircle
-            icon={torch ? Zap : ZapOff}
-            tone={torch ? 'sky' : 'glass'}
-            label={torch ? 'Turn torch off' : 'Turn torch on'}
-            onPress={() => setTorch((t) => !t)}
-          />
-        ) : null
+        <IconCircle
+          icon={torch ? Zap : ZapOff}
+          tone={torch ? 'sky' : 'glass'}
+          label={torch ? 'Turn torch off' : 'Turn torch on'}
+          onPress={() => setTorch((t) => !t)}
+        />
       }
       gallery="soon"
       onCapture={handleCapture}
       capturing={capturing}
-      captureLabel={isFront ? 'Capture document' : 'Capture selfie'}
+      captureLabel="Capture document"
     />
   );
 }

@@ -55,7 +55,7 @@ export const DOC_META: Record<DocumentType, DocMeta> = {
   drivingLicense: { label: "Driver's License", noun: "driver's license", sub: 'Front of the card', icon: Car, colors: ['#3A4A57', '#1A252E'] },
   idCard: { label: 'ID Card', noun: 'ID card', sub: 'Government-issued identity card', icon: IdCard, colors: ['#0E5A6E', '#06303B'] },
   greenCard: { label: 'US Green Card', noun: 'green card', sub: 'Permanent resident card', icon: CreditCard, colors: ['#1C6B5A', '#0A3A30'] },
-  birthCertificate: { label: 'Birth Certificate', noun: 'birth certificate', sub: 'Document only · no selfie step', icon: ScrollText, colors: ['#5A6B78', '#34424D'] },
+  birthCertificate: { label: 'Birth Certificate', noun: 'birth certificate', sub: 'Document only · no face check', icon: ScrollText, colors: ['#5A6B78', '#34424D'] },
   usVisa: { label: 'U.S. Visa', noun: 'U.S. visa', sub: 'Visa foil in your passport', icon: Landmark, colors: ['#08B6FC', '#0574A8'] },
 };
 

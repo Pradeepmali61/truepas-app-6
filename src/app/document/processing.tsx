@@ -151,13 +151,13 @@ export default function DocumentProcessingScreen() {
           );
           createdDocRef.current = doc;
 
-          // Keep a local copy of the capture — the detail screen falls back
-          // to it when the server has no image for this document.
+          // Keep a local copy of the (cropped) capture — the document page
+          // shows it before the server's full camera frame. Removed with the
+          // document (useRemoveDocument).
           try {
             await saveDocumentImages(doc.id, {
               front: scanResult?.documentPreviewBase64 ?? frontImage,
               back: scanResult?.backImageBase64,
-              selfie: scanResult?.selfieBase64,
             });
           } catch (e) {
             log.warn('local copy not saved', errorFields(e));

@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 /**
- * Dark document viewfinder — card-shaped (or round, for selfies) frame,
+ * Dark document viewfinder — card-shaped (or round) frame,
  * corner brackets, moving scan line.
  *
  * Showcase mode (no `camera`): blurred backdrop + ghost document; the shutter
@@ -29,7 +29,7 @@ import { back, Footer, go, IconCircle, Press, Row, Steps, TopBar, Txt } from './
 export interface ScanFrameSize {
   width: number;
   height: number;
-  /** Round selfie frame (width === height). */
+  /** Round frame (width === height). */
   round?: boolean;
 }
 

@@ -6,15 +6,11 @@ import { View } from 'react-native';
 
 import { toApiError } from '@/api/errors';
 import { useUpdateProfile } from '@/features/auth/mutations';
-import { formatCountdown, useCountdown } from '@/hooks/useCountdown';
 import { useToast } from '@/hooks/useToast';
-import { Banner } from '@/premium/kit';
 import { C } from '@/premium/theme';
 import { Badge, Button, Card, Divider, Row, Txt } from '@/premium/ui';
 import { ResultView } from '@/premium/views';
 import { flowGuards } from '@/services/flowGuards';
-
-const SESSION_TTL_SECONDS = 15 * 60;
 
 /** Normalises a date to y-m-d (ISO or US MM/DD/YYYY) so equal dates in
  *  different formats compare equal; null when unrecognised. */
@@ -62,12 +58,11 @@ function Line({ k, profile, doc, same }: { k: string; profile: string; doc: stri
 }
 
 /** PROFILE_MISMATCH (§6.3) — the details read from the document differ from
- *  the profile. 15-minute session TTL (PRD). "Accept" copies the document's
- *  extracted name/DOB into the profile, then the document is scanned again;
- *  "Edit profile" opens the profile form. */
+ *  the profile. "Accept" copies the document's extracted name/DOB into the
+ *  profile, then the document is scanned again; "Edit profile" opens the
+ *  profile form. */
 export default function MismatchScreen() {
   const router = useRouter();
-  const { seconds } = useCountdown(SESSION_TTL_SECONDS);
   const updateProfile = useUpdateProfile();
   const toast = useToast();
   const params = useLocalSearchParams<{
@@ -139,12 +134,6 @@ export default function MismatchScreen() {
         <Divider />
         <Line k="Date of birth" profile={profileDob} doc={docDob} same={compare(params.profileDob, params.docDob, 'date')} />
       </Card>
-
-      <Banner
-        tone="warning"
-        title={seconds > 0 ? `Session expires in ${formatCountdown(seconds)}` : 'Session expired'}
-        body="If the session expires, you'll need to re-verify your document."
-      />
 
       {canAccept ? (
         <Row gap={8} align="flex-start" style={{ paddingHorizontal: 4 }}>
