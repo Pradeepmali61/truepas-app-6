@@ -63,7 +63,7 @@ export default function IdentityScreen() {
     : summary.document === 'missing' ? 'Add a document to finish verification.'
     : summary.document === 'pending' ? 'Verify your document to finish.'
     : summary.document === 'failed' ? 'Document verification failed — try again.'
-    : summary.selfieMatch !== 'verified' ? 'Selfie match is still pending.'
+    : summary.selfieMatch !== 'verified' ? 'Your document photo still needs to match your face.'
     : 'Finish verification to unlock check-ins.';
 
   const cta = summary.document === 'pending'
@@ -135,7 +135,9 @@ export default function IdentityScreen() {
             meta={[
               { k: 'Face', v: statusLabel(summary.face) },
               { k: 'Documents', v: documents.data ? `${verifiedDocs} verified` : '—' },
-              { k: 'Selfie', v: statusLabel(summary.selfieMatch) },
+              // selfieMatch = the document photo checked against the enrolled
+              // face (there is no separate selfie step any more).
+              { k: 'Face match', v: statusLabel(summary.selfieMatch) },
             ]}
           />
 
@@ -168,7 +170,7 @@ export default function IdentityScreen() {
             <ListRow
               icon={UserRoundCheck}
               tone={statusTileTone(summary.selfieMatch)}
-              title="Selfie match"
+              title="Document face match"
               trailing={<StatusBadge status={summary.selfieMatch} />}
               chevron={false}
             />
