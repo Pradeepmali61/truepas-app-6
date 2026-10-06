@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { useMemo } from 'react';
 
 import { api } from '@/api';
+import { toApiError } from '@/api/errors';
 import { accountKeys } from '@/features/account/hooks';
 import type { AddDocumentRequest, DocumentType, SupportedDocumentType } from '@/types/domain';
 
@@ -23,11 +24,17 @@ export function useDocuments(personId?: string) {
   });
 }
 
+/** GET /documents/{id}. A 4xx is final — 404 = removed (e.g. replaced by a
+ *  newer verified one of the same type) — so it isn't retried. */
 export function useDocument(id?: string) {
   return useQuery({
     queryKey: documentKeys.detail(id ?? ''),
     queryFn: () => api.getDocument(id!),
     enabled: !!id,
+    retry: (failureCount, error) => {
+      const status = toApiError(error).status;
+      return !(status != null && status >= 400 && status < 500) && failureCount < 2;
+    },
   });
 }
 

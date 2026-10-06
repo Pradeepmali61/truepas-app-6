@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
+import { toApiError } from '@/api/errors';
 import { useDocument, useDocumentImages, useRemoveDocument } from '@/features/documents/hooks';
 import { displayDocNumber } from '@/features/documents/format';
 import { ageBandFromAge, useFamily } from '@/features/family/hooks';
@@ -125,6 +126,22 @@ export default function DocumentDetailScreen() {
     } as never);
   };
 
+  // Gone from the account — removed, or replaced by a newer verified copy.
+  const notFound = (
+    <EmptyView
+      icon={FileText}
+      title="Document not found"
+      body="It may have been removed from your account."
+      action={
+        <Button
+          label="Go to wallet"
+          full={false}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/documents' as never))}
+        />
+      }
+    />
+  );
+
   const doRemove = () => {
     if (!id) return;
     removeDocument.mutate(id, {
@@ -160,10 +177,15 @@ export default function DocumentDetailScreen() {
             <Button label="Verify now" icon={ScanLine} disabled={!ownerKnown} onPress={() => reverify(doc)} />
           ) : undefined
         }>
+        {/* 404 = removed — e.g. after a rescan was approved, the server
+            dropped this older copy; back from the result lands here. */}
+        {docQuery.isError && toApiError(docQuery.error).status === 404 ? (
+          notFound
+        ) : (
         <Async
           q={docQuery}
           skeleton={<DetailSkeleton />}
-          emptyView={<EmptyView icon={FileText} title="Document not found" body="It may have been removed from your account." />}>
+          emptyView={notFound}>
           {(d) => {
             const meta = docMeta(d.type);
             const pct = matchPct(d.matchScore);
@@ -269,6 +291,7 @@ export default function DocumentDetailScreen() {
             );
           }}
         </Async>
+        )}
       </Screen>
 
       <ConfirmSheet
