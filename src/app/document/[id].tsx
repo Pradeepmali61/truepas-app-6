@@ -126,6 +126,10 @@ export default function DocumentDetailScreen() {
     } as never);
   };
 
+  // Opened from a link with nothing underneath (a cold deep link), there is no
+  // screen to go back to — the wallet instead.
+  const leave = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/documents' as never));
+
   // Gone from the account — removed, or replaced by a newer verified copy.
   const notFound = (
     <EmptyView
@@ -136,7 +140,7 @@ export default function DocumentDetailScreen() {
         <Button
           label="Go to wallet"
           full={false}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/documents' as never))}
+          onPress={leave}
         />
       }
     />
@@ -148,11 +152,11 @@ export default function DocumentDetailScreen() {
       onSuccess: () => {
         setConfirmRemove(false);
         toast.show('success', 'Document removed');
-        router.back();
+        leave();
       },
       onError: (e) => {
         setConfirmRemove(false);
-        toast.show('error', `Couldn't remove document${e instanceof Error ? `: ${e.message}` : ''}`);
+        toast.show('error', `Couldn't remove document: ${toApiError(e).message}`);
       },
     });
   };
@@ -160,7 +164,7 @@ export default function DocumentDetailScreen() {
   return (
     <>
       <Screen
-        header={<TopBar title={doc?.label ?? 'Document'} onBack={() => router.back()} />}
+        header={<TopBar title={doc?.label ?? 'Document'} onBack={leave} />}
         contentStyle={{ paddingTop: 8 }}
         onRefresh={
           id
