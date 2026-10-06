@@ -32,7 +32,7 @@ import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useMemberPhoto } from '@/features/family/hooks';
+import { useMemberPhoto, useMemberSetup } from '@/features/family/hooks';
 import type { FamilyMember, IdentityDocument } from '@/types/domain';
 
 import { Guilloche } from '../blocks';
@@ -106,10 +106,10 @@ function tintFor(id: string) {
 /** Portrait card — the approved "party" grid look: a full-bleed photo when
  *  the member has one (their profile photo, else the one kept on this
  *  phone), otherwise initials on a tinted card. Front shows only name,
- *  relationship, age and status; the capture details live on the member
- *  page. */
+ *  relationship, age and status (useMemberSetup — the member page's badge);
+ *  the capture details live on the member page. */
 export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPress: () => void }) {
-  const verified = member.verification === 'verified' || !!member.faceEnrolled;
+  const setup = useMemberSetup(member);
   const photoUri = useMemberPhoto(member.id, member.profileImageUrl);
   return (
     <Press onPress={onPress} label={member.name} role="button" style={[{ flex: 1, borderRadius: R.xl }, SH.md]}>
@@ -126,7 +126,7 @@ export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPr
           </>
         )}
         <View style={{ alignSelf: 'flex-end' }}>
-          {verified ? <Badge label="Verified" tone="green" dot /> : <Badge label="Face pending" tone="amber" dot />}
+          <Badge label={setup.label} tone={setup.tone} dot />
         </View>
         {!photoUri && (
           <View style={{ alignItems: 'center' }}>

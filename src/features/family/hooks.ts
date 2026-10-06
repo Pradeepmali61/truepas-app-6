@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 import { api } from '@/api';
 import { toApiError } from '@/api/errors';
 import { accountKeys } from '@/features/account/hooks';
+import { documentKeys } from '@/features/documents/hooks';
 import { notificationKeys } from '@/features/notifications/hooks';
 import { flowGuards } from '@/services/flowGuards';
 import { deleteMemberProfileImage, getMemberProfileImage, saveMemberFacePhoto } from '@/services/profileImageStore';
@@ -316,4 +317,70 @@ export function memberCaptureMode(m: Pick<FamilyMember, 'faceCaptureMode' | 'age
   if (m?.faceCaptureMode) return m.faceCaptureMode;
   const age = m?.age ?? fallbackAge;
   return age != null && Number.isFinite(age) && age < 5 ? 'photo' : 'liveness';
+}
+
+/** The backend never moves a member's `verification` to 'verified' after
+ *  face enrollment — it only flips `faceEnrolled`. Gating on 'verified'
+ *  alone left "Continue setup" showing forever after a successful scan. */
+export function isMemberFaceDone(m: Pick<FamilyMember, 'faceEnrolled' | 'verification'>): boolean {
+  return m.faceEnrolled || m.verification === 'verified';
+}
+
+export interface MemberSetup {
+  /** Face enrolled (or a legacy member already marked 'verified'). */
+  faceDone: boolean;
+  /** A verified document for them (or a legacy doc-first member past it). */
+  docDone: boolean;
+  /** Face + document: the only state that reads "Verified". */
+  setupDone: boolean;
+  /** Face done, but their documents haven't loaded yet — no verdict. */
+  checking: boolean;
+  /** Member status badge — identical wherever a member's status shows. */
+  label: string;
+  tone: 'green' | 'amber' | 'neutral';
+}
+
+/**
+ * A family member's setup status: the one rule behind the family card, the
+ * member page and any other member status badge. Setup is face first, then
+ * a document checked against it (backend §1.2/§7.1):
+ *
+ *   no face                    → "Face pending"    amber
+ *   face, documents loading    → "Checking"        neutral (never an early "Verified")
+ *   face, no verified document → "Document needed" amber
+ *   face + verified document   → "Verified"        green
+ *
+ * "Document needed" / "Verified" are statusBadge's pending_document /
+ * verified rows (premium/flows/family). Reads the member's documents from
+ * the same cache entry as useDocuments(personId), so screens agree.
+ */
+export function useMemberSetup(member: FamilyMember | null | undefined): MemberSetup {
+  const personId = member?.id ?? '';
+  // useDocuments(personId) without the self fallback: idle until there is a
+  // member, never the account owner's own documents.
+  const docs = useQuery({
+    queryKey: documentKeys.member(personId),
+    queryFn: () => api.getDocuments(personId),
+    enabled: !!personId,
+    refetchOnMount: true,
+  });
+  const faceDone = !!member && isMemberFaceDone(member);
+  // Results are approved or rejected only — a document counts once verified.
+  // 'pending_liveness' / 'verified' cover members whose document was done
+  // before this order (doc first) changed.
+  const docDone =
+    !!member &&
+    (!!docs.data?.some((d) => d.status === 'verified') ||
+      member.verification === 'pending_liveness' ||
+      member.verification === 'verified');
+  const setupDone = faceDone && docDone;
+  const checking = faceDone && !docDone && docs.isPending;
+  const badge: Pick<MemberSetup, 'label' | 'tone'> = setupDone
+    ? { label: 'Verified', tone: 'green' }
+    : !faceDone
+      ? { label: 'Face pending', tone: 'amber' }
+      : checking
+        ? { label: 'Checking', tone: 'neutral' }
+        : { label: 'Document needed', tone: 'amber' };
+  return { faceDone, docDone, setupDone, checking, ...badge };
 }

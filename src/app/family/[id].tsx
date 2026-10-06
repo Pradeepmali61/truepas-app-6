@@ -38,14 +38,16 @@ import { documentKeys, useDocuments } from '@/features/documents/hooks';
 import {
   familyKeys,
   memberCaptureMode,
+  type MemberSetup,
   useFamilyMember,
   useMemberPhoto,
+  useMemberSetup,
   useRemoveFamilyMember,
   useSetMemberPhoto,
   useUpdateFamilyPermissions,
 } from '@/features/family/hooks';
 import { Glow, Guilloche } from '@/premium/blocks';
-import { ChecklistCard, DocRow, formatDate, statusBadge, type ChecklistStep } from '@/premium/flows/family';
+import { ChecklistCard, DocRow, formatDate, type ChecklistStep } from '@/premium/flows/family';
 import { Async, Bone, ComingSoon, ConfirmSheet, EmptyView, SkeletonList } from '@/premium/kit';
 import { useHeroStatusBar } from '@/premium/statusBar';
 import { C, F, SH } from '@/premium/theme';
@@ -53,9 +55,8 @@ import { Badge, Button, Group, IconCircle, initials, ListRow, Screen, Toggle, To
 import type { FamilyMember } from '@/types/domain';
 
 /** Face → Document → Done: the document is checked against the face. */
-function stepsFor(m: FamilyMember, docDone: boolean): ChecklistStep[] {
+function stepsFor(m: FamilyMember, { faceDone, docDone, setupDone }: MemberSetup): ChecklistStep[] {
   const isPhoto = memberCaptureMode(m) === 'photo';
-  const faceDone = isFaceDone(m);
   return [
     {
       icon: isPhoto ? Camera : ScanFace,
@@ -73,16 +74,9 @@ function stepsFor(m: FamilyMember, docDone: boolean): ChecklistStep[] {
       icon: BadgeCheck,
       label: 'Done',
       sub: 'Ready for venue check-in',
-      done: docDone && faceDone,
+      done: setupDone,
     },
   ];
-}
-
-/** The backend never moves a member's `verification` to 'verified' after
- *  face enrollment — it only flips `faceEnrolled`. Gating on 'verified'
- *  alone left "Continue setup" showing forever after a successful scan. */
-function isFaceDone(m: FamilyMember): boolean {
-  return m.faceEnrolled || m.verification === 'verified';
 }
 
 export default function FamilyMemberScreen() {
@@ -147,15 +141,10 @@ export default function FamilyMemberScreen() {
 
   const first = m?.name.split(' ')[0] ?? '';
   const isPhoto = memberCaptureMode(m) === 'photo';
-  // Results are approved or rejected only — a document counts once verified.
-  // 'pending_liveness' / 'verified' cover members whose document was done
-  // before this order (doc first) changed.
-  const docDone =
-    !!memberDocs.data?.some((d) => d.status === 'verified') ||
-    m?.verification === 'pending_liveness' ||
-    m?.verification === 'verified';
-  const faceDone = !!m && isFaceDone(m);
-  const setupDone = !!m && docDone && faceDone;
+  // Face / document / done and the status badge: the same rule as the family
+  // card, over the documents memberDocs loads (one cache entry).
+  const setup = useMemberSetup(m);
+  const { faceDone, docDone, setupDone } = setup;
 
   const openDocumentStep = () =>
     m &&
@@ -265,8 +254,6 @@ export default function FamilyMemberScreen() {
     );
   }
 
-  const status = setupDone ? { label: 'Verified', tone: 'green' as const } : statusBadge(m.verification);
-
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
       <ScrollView
@@ -365,7 +352,7 @@ export default function FamilyMemberScreen() {
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               <Badge label={`${m.relationship} · ${m.age} yrs`} tone="neutral" />
-              <Badge label={status.label} tone={status.tone} dot />
+              <Badge label={setup.label} tone={setup.tone} dot />
               <Badge label={isPhoto ? 'Photo' : 'Liveness'} tone="sky" icon={isPhoto ? Camera : ScanFace} />
               {cameras ? <Badge label={cameras} tone="neutral" /> : null}
             </View>
@@ -377,7 +364,7 @@ export default function FamilyMemberScreen() {
           {setupDone && <Button label="Go to Family" icon={Users} onPress={goToFamily} />}
 
           {/* ---------- setup checklist ---------- */}
-          <ChecklistCard title="Setup checklist" steps={stepsFor(m, docDone)} />
+          <ChecklistCard title="Setup checklist" steps={stepsFor(m, setup)} />
 
           {/* ---------- profile ---------- */}
           <Group title="Profile">
