@@ -65,8 +65,9 @@ export default function DocumentDetailScreen() {
   // Sensitive extracted fields stay hidden until asked for.
   const [showExtracted, setShowExtracted] = useState(false);
 
-  // Local copy of the capture (keyed by docId, saved at scan time) — the
-  // fallback for "View scan" when the server has no front image.
+  // Local copy of the capture (keyed by docId, saved at scan time): Regula's
+  // cropped document, shown first. The server's front is the full camera
+  // frame sent for verification (desk and all), only the fallback.
   useEffect(() => {
     if (!id) return;
     let alive = true;
@@ -148,7 +149,7 @@ export default function DocumentDetailScreen() {
                   <FlipCard
                     flipped={isFlipped}
                     height={CARD_H}
-                    scanUri={serverFront ?? scanImageUri}
+                    scanUri={scanImageUri ?? serverFront}
                     front={(h) => (
                       <DocumentCard
                         type={d.type}
