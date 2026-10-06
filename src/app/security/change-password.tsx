@@ -1,6 +1,4 @@
 /** @jsxImportSource react */
-import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
 import { Check, Eye, EyeOff, Lock } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -8,12 +6,11 @@ import { Pressable, View } from 'react-native';
 import { toApiError } from '@/api/errors';
 import { useChangePassword } from '@/features/auth/mutations';
 import { newPasswordSchema } from '@/features/auth/schemas';
-import { sessionEnded } from '@/features/auth/slice';
+import { useLogoutFlow } from '@/features/auth/useLogoutFlow';
 import { useToast } from '@/hooks/useToast';
 import { Banner } from '@/premium/kit';
 import { C } from '@/premium/theme';
 import { Button, Card, Field, Heading, Row, Screen, TopBar, Txt } from '@/premium/ui';
-import { useAppDispatch } from '@/store';
 
 /** Live checklist — mirrors newPasswordSchema (the schema stays the source of truth for errors). */
 const RULES: { t: string; test: (v: string) => boolean }[] = [
@@ -26,14 +23,13 @@ const RULES: { t: string; test: (v: string) => boolean }[] = [
 
 /**
  * Change password — POST /auth/change-password { currentPassword, newPassword }.
- * Success revokes refresh sessions and the current access token, so local
- * state is cleared and the user is returned to login.
+ * Success revokes refresh sessions and the current access token, so the user
+ * is signed out through the shared logout (same local wipe as every other
+ * sign-out, incl. the on-device profile photo) and returned to login.
  * Keeps the stricter newPasswordSchema as the field-level error.
  */
 export default function ChangePasswordScreen() {
-  const router = useRouter();
-  const dispatch = useAppDispatch();
-  const queryClient = useQueryClient();
+  const { logout } = useLogoutFlow();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -63,15 +59,16 @@ export default function ChangePasswordScreen() {
     if (!canSubmit || changePassword.isPending) return;
     try {
       await changePassword.mutateAsync({ currentPassword, newPassword });
-      // Contract: success revokes refresh sessions and the current access
-      // token — clear local state and send the user back to login.
-      queryClient.clear();
-      dispatch(sessionEnded());
-      toast.show('success', 'Password updated — sign in again.');
-      router.replace('/(auth)/login');
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.show('error', toApiError(err).message || 'Could not update password. Please try again.');
+      return;
     }
+    // Contract: success revokes refresh sessions and the current access
+    // token. Sign out through the shared logout so the next account on this
+    // phone can't inherit local state (profile photo, query cache, tokens,
+    // session stashes); serverRevoked skips the now-pointless /auth/logout.
+    await logout({ serverRevoked: true });
+    toast.show('success', 'Password updated — sign in again.');
   };
 
   const passed = RULES.filter((r) => r.test(newPassword)).length;
