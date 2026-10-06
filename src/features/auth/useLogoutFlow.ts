@@ -54,7 +54,6 @@ export function useLogoutFlow() {
         }
       }
       await clearAllProfileImages().catch(() => {});
-      queryClient.clear();
       dispatch(sessionEnded());
       // Reset the whole stack, as the session-expired handler does. Login is
       // never in the stack, so dismissTo only swapped the top screen: the
@@ -62,6 +61,9 @@ export function useLogoutFlow() {
       // and refetched without a token — a 401 that showed "Session expired".
       if (router.canDismiss()) router.dismissAll();
       router.replace('/(auth)/login' as never);
+      // Clear the cache only once those screens are gone: cleared while they
+      // are still mounted, their queries rebuild and fetch with no token.
+      setTimeout(() => queryClient.clear(), 0);
     },
     [serverLogout, dispatch, router, queryClient],
   );

@@ -51,6 +51,9 @@ if (Platform.OS !== 'web') {
 // Without it the app stayed "authenticated" in Redux while every request
 // 401'd — the repeated NO_REFRESH_TOKEN / "couldn't load" error loop.
 setOnSessionExpired(() => {
+  // Already signed out (a deliberate logout): a stray 401 from a screen that
+  // was still unmounting is expected — not an expired session to announce.
+  if (store.getState().auth.status !== 'authenticated') return;
   queryClient.clear();
   store.dispatch(sessionEnded());
   // Forced logout gets the same teardown as a manual logout. Captured
