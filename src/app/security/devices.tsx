@@ -51,7 +51,7 @@ export default function DevicesScreen() {
 
   const revokeOne = async (s: AuthSession) => {
     try {
-      await revoke.mutateAsync(s.id);
+      await revoke.mutateAsync({ id: s.id, current: s.current });
       setTarget(null);
       if (s.current) {
         // This phone's own session is gone — finish signing out locally now.

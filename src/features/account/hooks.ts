@@ -47,8 +47,11 @@ export function useSessions() {
 export function useRevokeSession() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.revokeSession(id),
-    onSuccess: () => {
+    mutationFn: ({ id }: { id: string; current?: boolean }) => api.revokeSession(id),
+    onSuccess: (_data, { current }) => {
+      // This phone's own session: the caller signs out next. Refetching with
+      // the just-revoked token would 401 and show "Session expired".
+      if (current) return;
       void qc.invalidateQueries({ queryKey: accountKeys.sessions });
       void qc.invalidateQueries({ queryKey: accountKeys.securityScore });
     },
