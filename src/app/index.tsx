@@ -6,6 +6,7 @@ import { api } from '@/api';
 import { getOrRefreshAccessToken, SessionExpiredError } from '@/api/client';
 import { Spinner } from '@/components/ui';
 import { sessionStarted } from '@/features/auth/slice';
+import { clearAllProfileImages } from '@/services/profileImageStore';
 import { secureStorage } from '@/services/secureStorage';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { useThemeTokens } from '@/theme';
@@ -41,6 +42,9 @@ export default function Index() {
         // A rejected token is dead: drop it so it isn't replayed every launch.
         if (e instanceof SessionExpiredError) {
           await secureStorage.clearRefreshToken().catch(() => {});
+          // Same as a logout: the on-device profile and family photos go, so
+          // the next account on this phone can't inherit them.
+          await clearAllProfileImages().catch(() => {});
         }
       } finally {
         if (!cancelled) {

@@ -55,7 +55,9 @@ export default function DevicesScreen() {
       setTarget(null);
       if (s.current) {
         // This phone's own session is gone — finish signing out locally now.
-        await logout();
+        // The server already ended it: skip /auth/logout, whose 401 would
+        // show "Session expired" instead of a plain sign-out.
+        await logout({ serverRevoked: true });
         return;
       }
       toast.show('success', `${s.device ?? 'Device'} signed out`);
