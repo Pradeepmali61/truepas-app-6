@@ -1,5 +1,5 @@
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { router, Stack, useNavigationContainerRef, type ErrorBoundaryProps } from 'expo-router';
+import { router, Stack, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { RotateCcw, TriangleAlert } from 'lucide-react-native';
 import { useEffect } from 'react';
@@ -125,26 +125,19 @@ export default function RootLayout() {
  *  AppStatusBar here — only the static premium primitives. The error itself
  *  is never shown to the user. */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
-  const navigation = useNavigationContainerRef();
-
   useEffect(() => {
     // warn, not error: babel.config.js strips it from release builds
     // (device logs are a data-leak surface).
     console.warn('[ErrorBoundary] Unhandled render error', error);
   }, [error]);
 
-  // Back to the entry gate (`/`), which routes by session state. A root reset
-  // rather than router.replace('/'): when the crash hits a stack's first render
-  // (e.g. a cold-start deep link), the never-mounted stack's state lingers and
-  // a replace targets that dead navigator — a no-op. Swapping the host route
-  // also remounts this subtree, which clears the error.
+  // Back to the entry gate (`/`), which routes by session state — the same
+  // reset as the not-found screen. While this shows, the root state is just
+  // `__root` (the stack below is gone); replace still swaps this screen out
+  // for `/` (checked on web with a screen that throws on render).
   const goHome = () => {
-    if (!navigation.isReady()) return;
-    const root = navigation.getRootState();
-    navigation.resetRoot({
-      index: 0,
-      routes: [{ name: root.routes[root.index].name, state: { index: 0, routes: [{ name: 'index' }] } }],
-    });
+    if (router.canDismiss()) router.dismissAll();
+    router.replace('/');
   };
 
   return (
