@@ -1,14 +1,13 @@
 {
   "expo": {
-    "name": "truepas-app",
+    "name": "Truepas",
     "slug": "truepas-app",
     "version": "1.0.0",
-    "orientation": "default",
-    "icon": "./assets/images/icon.png",
+    "orientation": "portrait",
+    "icon": "./assets/images/truepas-app-icon.png",
     "scheme": "truepasapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.truepas.truepasapp",
       "infoPlist": {
         "NSCameraUsageDescription": "Camera is required for document scanning and face recognition",
@@ -18,6 +17,7 @@
     },
     "android": {
       "package": "com.truepas.truepasapp",
+      "versionCode": 2,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.INTERNET",
@@ -26,24 +26,28 @@
         "android.permission.USE_FINGERPRINT"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/images/truepas-adaptive-foreground.png",
+        "monochromeImage": "./assets/images/truepas-adaptive-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/truepas-favicon.png"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "sitemap": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/images/truepas-splash.png",
           "imageWidth": 76
         }
       ],
