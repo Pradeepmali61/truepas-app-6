@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { Redirect } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { Wordmark } from '@/premium/blocks';
@@ -17,6 +18,10 @@ export const SCREENS: { group: string; items: [string, string][] }[] = [
 ];
 
 export default function Showcase() {
+  // Design demo full of mock links — dev builds only. In release the
+  // truepasapp://showcase deep link falls through to the entry gate.
+  if (!__DEV__) return <Redirect href="/" />;
+
   const total = SCREENS.reduce((n, g) => n + g.items.length, 0);
   return (
     <Screen header={<TopBar title="Screen index" />} contentStyle={{ paddingTop: 4 }}>

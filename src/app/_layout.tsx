@@ -1,5 +1,8 @@
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useNavigationContainerRef, type ErrorBoundaryProps } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { RotateCcw, TriangleAlert } from 'lucide-react-native';
+import { useEffect } from 'react';
 import { AppState, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider } from 'react-redux';
@@ -11,6 +14,8 @@ import { clearAllProfileImages } from '@/services/profileImageStore';
 import { store } from '@/store';
 import { AppStatusBar } from '@/premium/statusBar';
 import { C } from '@/premium/theme';
+import { Button } from '@/premium/ui';
+import { ResultView } from '@/premium/views';
 import { ThemeProvider, useTruepasFonts } from '@/theme';
 
 import '@/global.css';
@@ -111,5 +116,52 @@ export default function RootLayout() {
         </SafeAreaProvider>
       </QueryClientProvider>
     </Provider>
+  );
+}
+
+/** Catches a render error from any screen (none exports its own boundary),
+ *  so a release build shows this instead of closing. expo-router renders it
+ *  IN PLACE of RootLayout: no Redux/Query/theme providers, font gate or
+ *  AppStatusBar here — only the static premium primitives. The error itself
+ *  is never shown to the user. */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const navigation = useNavigationContainerRef();
+
+  useEffect(() => {
+    // warn, not error: babel.config.js strips it from release builds
+    // (device logs are a data-leak surface).
+    console.warn('[ErrorBoundary] Unhandled render error', error);
+  }, [error]);
+
+  // Back to the entry gate (`/`), which routes by session state. A root reset
+  // rather than router.replace('/'): when the crash hits a stack's first render
+  // (e.g. a cold-start deep link), the never-mounted stack's state lingers and
+  // a replace targets that dead navigator — a no-op. Swapping the host route
+  // also remounts this subtree, which clears the error.
+  const goHome = () => {
+    if (!navigation.isReady()) return;
+    const root = navigation.getRootState();
+    navigation.resetRoot({
+      index: 0,
+      routes: [{ name: root.routes[root.index].name, state: { index: 0, routes: [{ name: 'index' }] } }],
+    });
+  };
+
+  return (
+    <>
+      {/* Always the light canvas — RootShell's AppStatusBar is unmounted. */}
+      <StatusBar style="dark" />
+      <ResultView
+        close
+        icon={TriangleAlert}
+        tone="red"
+        over="Unexpected error"
+        title="Something went"
+        accent="wrong."
+        sub="Truepas ran into a problem showing this screen. Try again, or head back to the home screen."
+        primary={<Button label="Try again" icon={RotateCcw} onPress={() => void retry()} />}
+        secondary={<Button label="Back to home" tone="ghost" onPress={goHome} />}
+      />
+    </>
   );
 }
