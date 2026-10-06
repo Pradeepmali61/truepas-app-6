@@ -415,15 +415,17 @@ export function PremiumLivenessResultStage({
             <Medallion icon={passed ? Check : ScanFace} tone={passed ? 'green' : 'amber'} size={88} />
           </View>
           {passed ? (
+            // Nothing is saved yet: the enrollment (or face update) runs when
+            // the primary button is tapped, so the copy points at it.
             <Heading
               over="Liveness confirmed"
-              title="You're"
-              accent="verified."
+              title="Almost"
+              accent="done."
               center
               sub={
                 personId
-                  ? 'Face enrollment is complete — they can check in with you.'
-                  : 'Your face is enrolled. Check in at venues with a glance — no documents needed.'
+                  ? `Tap ${primaryLabel} to save their face. It isn't set up until you do.`
+                  : `Tap ${primaryLabel} to save your face and finish.`
               }
             />
           ) : (

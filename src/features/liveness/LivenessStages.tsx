@@ -407,10 +407,11 @@ export function LivenessResultStage({
           icon: CircleCheck,
           bg: theme.colors.successSubtle,
           fg: theme.colors.onSuccessSubtle,
-          title: "You're verified",
+          // Nothing is saved yet — the primary button runs the enrollment.
+          title: 'Almost done',
           body: personId
-            ? 'Face enrollment is complete — they can check in with you.'
-            : 'Your face is enrolled. Check in at venues with a glance — no documents needed.',
+            ? `Tap ${primaryLabel} to save their face. It isn't set up until you do.`
+            : `Tap ${primaryLabel} to save your face and finish.`,
         }
       : {
           icon: CircleX,
