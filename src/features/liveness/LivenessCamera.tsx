@@ -75,6 +75,14 @@ const YAW_THRESHOLD = 12; // degrees
 // Client-side grace on top of the server's step_time_limits.max_ms — the
 // backend keeps sending 10s; we allow 2s more before failing the step.
 const STEP_GRACE_MS = 2000;
+// The finalize frame becomes the enrolled face, so it waits for a frontal,
+// still face: |yaw| within FRONTAL_YAW, eyes open, yaw moving less than
+// STILL_YAW_DELTA between samples, STEADY_SAMPLES in a row (~0.4 s at 10/s).
+// After STEADY_MAX_WAIT_MS it captures anyway.
+const FRONTAL_YAW = 8; // degrees
+const STILL_YAW_DELTA = 2.5; // degrees between samples
+const STEADY_SAMPLES = 4;
+const STEADY_MAX_WAIT_MS = 4000;
 
 /**
  * Full liveness challenge camera using react-native-vision-camera v5
@@ -137,6 +145,11 @@ export function LivenessCamera({
   const eyesWereClosed = useRef(false);
   const submittingRef = useRef(false);
   const lastSampleTs = useRef(0);
+  // Consecutive frontal, still samples (see STEADY_SAMPLES), and when
+  // finalizing started — read by the auto-finalize effect.
+  const steadyRef = useRef<{ count: number; lastYaw: number | null }>({ count: 0, lastYaw: null });
+  const finalizeStartedAt = useRef(0);
+  const finalizeTriggered = useRef(false);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Transient UX hints (too-fast action, multiple faces) shown under the dial
@@ -344,7 +357,10 @@ export function LivenessCamera({
     setMultiFace(faces.length > 1);
     const face = faces[0];
     // Ambiguous frame - don't let a second person satisfy the challenge.
-    if (!face || faces.length > 1) return;
+    if (!face || faces.length > 1) {
+      steadyRef.current = { count: 0, lastYaw: null };
+      return;
+    }
 
     // Throttle: ~10 samples/sec
     const now = Date.now();
@@ -355,6 +371,14 @@ export function LivenessCamera({
     const rightEye = face.rightEyeOpenProbability ?? 1;
     const yaw = face.yawAngle ?? 0;
     console.log(`[Liveness] Sample: leftEye=${leftEye.toFixed(2)} rightEye=${rightEye.toFixed(2)} yaw=${yaw.toFixed(1)}°`);
+
+    const steady = steadyRef.current;
+    const good =
+      Math.abs(yaw) <= FRONTAL_YAW &&
+      leftEye >= BLINK_OPEN_THRESHOLD &&
+      rightEye >= BLINK_OPEN_THRESHOLD &&
+      (steady.lastYaw === null || Math.abs(yaw - steady.lastYaw) <= STILL_YAW_DELTA);
+    steadyRef.current = { count: good ? steady.count + 1 : 0, lastYaw: yaw };
 
     onFaceSampleJS(leftEye, rightEye, yaw);
   }, [onFaceSampleJS]);
@@ -513,14 +537,34 @@ export function LivenessCamera({
     failWithCooldown,
   ]);
 
-  // Auto-finalize when phase becomes 'finalizing'
+  // Finalizing starts right after the last step — often a head turn — so the
+  // steadiness count starts over from here.
   useEffect(() => {
-    if (liveness.phase === 'finalizing' && !capturing) {
-      const timer = setTimeout(() => {
-        captureAndFinalize();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
+    if (liveness.phase !== 'finalizing') return;
+    steadyRef.current = { count: 0, lastYaw: null };
+    finalizeStartedAt.current = Date.now();
+    finalizeTriggered.current = false;
+  }, [liveness.phase]);
+
+  // Auto-finalize once the face is frontal and still (STEADY_SAMPLES): a
+  // frame taken while the head swings back from the turn makes a blurred,
+  // angled enrolled face, and documents score low against it.
+  useEffect(() => {
+    if (liveness.phase !== 'finalizing' || capturing) return;
+    const timer = setInterval(() => {
+      if (finalizeTriggered.current) return;
+      const waited = Date.now() - finalizeStartedAt.current;
+      const steady = steadyRef.current.count >= STEADY_SAMPLES;
+      if (!steady && waited < STEADY_MAX_WAIT_MS) return;
+      finalizeTriggered.current = true;
+      clearInterval(timer);
+      console.log(
+        '[FaceCapture]',
+        steady ? `face steady after ${waited}ms` : `face not steady after ${waited}ms, capturing anyway`,
+      );
+      captureAndFinalize();
+    }, 100);
+    return () => clearInterval(timer);
   }, [liveness.phase, capturing, captureAndFinalize]);
 
   // ── UI animation hooks (MUST be before any early return) ──────────────
