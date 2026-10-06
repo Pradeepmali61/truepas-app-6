@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 /**
  * Profile — account card (photo, name, face status, email, phone) plus the
- * account menu: edit profile, security & sign-in, settings (appearance),
+ * account menu: edit profile, security & sign-in, settings,
  * sign out (confirm sheet → useLogoutFlow: server revoke + full local
  * teardown) and delete account.
  *
@@ -132,7 +132,7 @@ function ProfileContent({ user }: { user: User }) {
         />
         <ListRow icon={ShieldCheck} tone="sky" title="Security & sign-in" sub="Face, PIN & password" onPress={go('/security')} />
         <ListRow icon={Bell} tone="sky" title="Notifications" onPress={go('/notification')} />
-        <ListRow icon={Settings} tone="sky" title="Settings" sub="Appearance & privacy" onPress={go('/settings')} />
+        <ListRow icon={Settings} tone="sky" title="Settings" sub="App lock, haptics & face check-in" onPress={go('/settings')} />
       </Group>
       <Group title="Support">
         <ListRow icon={CircleHelp} title="Help centre" onPress={go('/help')} />

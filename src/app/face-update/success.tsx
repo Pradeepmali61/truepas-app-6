@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ShieldCheck, Sparkles } from 'lucide-react-native';
+import { ScanFace, ShieldCheck } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
@@ -32,13 +32,15 @@ export default function FaceUpdateSuccessScreen() {
       accent={enrolled === '1' ? 'enrolled.' : 'updated.'}
       sub={
         enrolled === '1'
-          ? 'Your face is set up and ready for secure authentication.'
-          : 'Your biometric profile is updated and ready for secure authentication.'
+          ? 'Your face is set up and ready for check-in at partner venues.'
+          : 'Your face is updated and ready for check-in at partner venues.'
       }
       primary={<Button label="Done" onPress={() => router.dismissTo('/(tabs)')} />}>
+      {/* Only true claims: the template is stored encrypted (privacy policy)
+          and every path here ran a liveness check. No face sign-in yet. */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-        <Badge label="Bank-grade encryption" tone="neutral" icon={ShieldCheck} />
-        <Badge label="Instant auth enabled" tone="neutral" icon={Sparkles} />
+        <Badge label="Encrypted" tone="neutral" icon={ShieldCheck} />
+        <Badge label="Liveness checked" tone="neutral" icon={ScanFace} />
       </View>
     </ResultView>
   );

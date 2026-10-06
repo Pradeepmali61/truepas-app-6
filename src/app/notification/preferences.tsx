@@ -4,6 +4,8 @@
  * Four push categories; each toggle sends only its own key (optimistic, rolls
  * back on error). Off stops push only: the inbox still records the item.
  * `security` covers both account and identity notifications.
+ * The app doesn't receive push yet (no push token registration), so the copy
+ * says phone notifications are coming soon — the choices are stored for then.
  */
 import { CalendarClock, FileText, type LucideIcon, ShieldCheck, Users } from 'lucide-react-native';
 import { View } from 'react-native';
@@ -59,13 +61,13 @@ export default function NotificationPreferencesScreen() {
       <Heading
         title="Choose your"
         accent="alerts."
-        sub="Turning one off stops push alerts for it; you'll still see it in your inbox."
+        sub="Choose which alerts we'll send to your phone. Your inbox still shows them all."
       />
 
       <Async q={prefs} skeleton={<PrefsSkeleton />}>
         {(p) => (
           <View style={{ gap: 14 }}>
-            <Group title="Push alerts">
+            <Group title="Phone alerts">
               {ROWS.map((r) => (
                 <ListRow
                   key={r.key}
@@ -79,7 +81,7 @@ export default function NotificationPreferencesScreen() {
               ))}
             </Group>
             <Txt v="small" color={C.ink4} center>
-              Push alerts arrive once notifications are enabled on this phone.
+              Phone notifications are coming soon. Your choices will apply once they&apos;re live.
             </Txt>
           </View>
         )}

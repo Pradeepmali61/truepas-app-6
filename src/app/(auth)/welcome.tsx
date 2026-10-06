@@ -31,7 +31,7 @@ export default function WelcomeScreen() {
         style={StyleSheet.absoluteFill}
       />
       <SafeAreaView style={{ flex: 1, paddingHorizontal: 24 }}>
-        <Row between style={{ paddingTop: 10 }}>
+        <Row style={{ paddingTop: 10 }}>
           <Pressable
             onLongPress={__DEV__ ? () => router.push('/showcase' as never) : undefined}
             delayLongPress={600}
@@ -39,7 +39,6 @@ export default function WelcomeScreen() {
             accessibilityLabel="Truepas">
             <Wordmark light size={22} />
           </Pressable>
-          <Text style={{ fontFamily: F.semibold, fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>EN</Text>
         </Row>
 
         {/* Illustrative verification moment (marketing art, not account data). */}
@@ -78,11 +77,6 @@ export default function WelcomeScreen() {
           <Text style={styles.sub}>
             Contactless check-in for you and your family — hotels, flights, theme parks and cruises, verified in a glance.
           </Text>
-          <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, marginBottom: 14 }}>
-            <View style={[styles.dot, { width: 22, backgroundColor: C.sky }]} />
-            <View style={styles.dot} />
-            <View style={styles.dot} />
-          </View>
           <Button label="Create your Truepas" iconRight={ArrowRight} onPress={() => router.push('/(auth)/register')} />
           <Button label="I already have an account" tone="glass" onPress={() => router.push('/(auth)/login')} />
         </View>
@@ -115,6 +109,5 @@ const styles = StyleSheet.create({
   glassSub: { fontFamily: F.medium, fontSize: 12.5, color: 'rgba(255,255,255,0.72)' },
   over: { fontFamily: F.bold, fontSize: 11.5, letterSpacing: 1.6, color: C.skyLight },
   headline: { fontFamily: F.extrabold, fontSize: 46, lineHeight: 52, letterSpacing: -1.6, color: C.white },
-  sub: { fontFamily: F.regular, fontSize: 16, lineHeight: 24, color: 'rgba(255,255,255,0.74)', maxWidth: 330 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
+  sub: { fontFamily: F.regular, fontSize: 16, lineHeight: 24, color: 'rgba(255,255,255,0.74)', maxWidth: 330, marginBottom: 24 },
 });

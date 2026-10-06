@@ -12,7 +12,6 @@ import {
   FileText,
   Lock,
   Mail,
-  MapPin,
   MessageCircle,
   Phone,
   ScanFace,
@@ -36,13 +35,13 @@ import { Card, Divider, go, Group, ListRow, Serif, Tile, TopBar, Txt } from '@/p
 const FEATURES: { icon: LucideIcon; title: string; desc: string }[] = [
   {
     icon: Shield,
-    title: 'Bank-Grade Security',
-    desc: 'Your documents are encrypted and stored with the same security standards used by leading banks and financial institutions.',
+    title: 'Encrypted Storage',
+    desc: 'Your documents and face template are encrypted and kept in secure storage.',
   },
   {
     icon: ScanFace,
     title: 'Face Verification',
-    desc: 'Biometric face enrollment ensures that only you can access and share your identity — no one else can impersonate you.',
+    desc: "A quick liveness check sets up your face, so venue kiosks can confirm it's really you.",
   },
   {
     icon: FileText,
@@ -95,8 +94,8 @@ export default function AboutScreen() {
 
         <View style={{ padding: 20, gap: 24 }}>
           <Txt v="body" center>
-            Truepas is a secure digital identity platform that lets you store, verify, and share your identity
-            documents with businesses in seconds — no paper, no queues, no hassle.
+            Truepas verifies your identity once, then lets you check in at partner venues with just your face. It
+            keeps your documents and family in one place — no paper, no queues.
           </Txt>
 
           {/* ---------- features ---------- */}
@@ -154,7 +153,6 @@ export default function AboutScreen() {
               <ListRow icon={MessageCircle} tone="sky" title="Chat with us" onPress={() => openSupportChat(support.chatUrl as string)} />
             )}
             {!!support.hours && <ListRow icon={Clock} tone="sky" title="Support hours" sub={support.hours} chevron={false} />}
-            <ListRow icon={MapPin} tone="sky" title="San Francisco, California" chevron={false} />
             <SoonRow icon={Star} tone="sky" title="Rate Truepas" />
           </Group>
 
@@ -167,7 +165,7 @@ export default function AboutScreen() {
 
           <View style={{ alignItems: 'center', gap: 4 }}>
             <Txt v="small" color={C.ink4} center>
-              © 2025 Truepas. All rights reserved.
+              © {new Date().getFullYear()} Truepas. All rights reserved.
             </Txt>
             <Txt v="small" color={C.ink4} center>
               Made with care for your privacy.

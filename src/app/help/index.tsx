@@ -33,28 +33,28 @@ const FAQS: { value: string; topic: Topic; title: string; content: string }[] = 
     topic: 'checkin',
     title: 'How does face check-in work?',
     content:
-      'At a participating venue, open Truepas and glance at the kiosk camera. Your enrolled face proves your identity — no documents needed. Every check-in appears in your History tab.',
+      "At a partner venue, just look at the kiosk camera — you don't need your phone or any documents. Your enrolled face proves it's you. Your check-ins are listed in the Check-ins tab.",
   },
   {
     value: 'biometric',
     topic: 'privacy',
     title: 'Is my biometric data shared?',
     content:
-      'Your face template is used only to verify your identity. Check-in consent is separate from biometric consent, and you can withdraw either at any time from Settings → Privacy.',
+      "Your face template is used only to verify your identity. You can turn off face check-in at any time in Settings → Check-in. Withdrawing biometric consent (Security → Face & consent) deletes your enrolled face, and you'll need to set it up again to keep using Truepas.",
   },
   {
     value: 'doc-fail',
     topic: 'documents',
     title: 'Why did my document verification fail?',
     content:
-      'Most failures are image quality — glare, blur, or the document not filling the frame. Recapture in good light on a flat, dark surface and try again.',
+      'The result screen tells you why and what to do next. Most failures are image quality — glare, blur, or the document not filling the frame. Retake the photos in good light on a flat, dark surface and try again.',
   },
   {
     value: 'family',
     topic: 'family',
     title: 'How are family members verified?',
     content:
-      'Members under 5 need an identity document plus a clear photo. Members 5 and older need a document plus a short liveness check in the app.',
+      'Members set up their face first: one clear photo for children under 5, or a short liveness check in the app from age 5. Then add an identity document — photo IDs are checked against that face.',
   },
   {
     value: 'update-face',

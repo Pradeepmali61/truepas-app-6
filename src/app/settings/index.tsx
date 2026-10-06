@@ -8,9 +8,10 @@
  *   faceCheckInEnabled (GET/PUT /user/me/preferences). Off is enforced at the
  *   kiosk — it refuses face check-in for the account holder.
  * - Notifications: which alerts you get (/notification/preferences).
- * - Phone permissions: notifications, camera and photos open the system
- *   settings page for Truepas.
- * Then account, support and legal links. Languages stay Coming soon.
+ * - Phone permissions: camera and photos open the system settings page for
+ *   Truepas. The app never asks for notification permission (no push yet),
+ *   so phone notifications sit in "On the way" with Language.
+ * Then account, support and legal links.
  */
 import {
   Bell,
@@ -159,11 +160,11 @@ export default function SettingsScreen() {
       </Group>
 
       <Group title="Phone permissions">
-        <ListRow icon={Bell} tone="sky" title="Notifications" sub="Allow alerts in your phone settings" onPress={openPhoneSettings} />
         <ListRow icon={Camera} tone="sky" title="Camera & photos" sub="Face scans, documents and family photos" onPress={openPhoneSettings} />
       </Group>
 
       <SoonSection title="On the way">
+        <ListRow icon={Bell} title="Phone notifications" />
         <ListRow icon={Languages} title="Language" value="English" />
       </SoonSection>
 
