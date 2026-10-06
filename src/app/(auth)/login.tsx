@@ -7,6 +7,7 @@ import { View } from 'react-native';
 import { api } from '@/api';
 import { toApiError } from '@/api/errors';
 import { DEFAULT_COUNTRY_CODE } from '@/constants/countries';
+import { toLoginIdentifier } from '@/features/auth/phone';
 import { loginSchema } from '@/features/auth/schemas';
 import { sessionStarted } from '@/features/auth/slice';
 import { formatWait, lockSecondsFrom, useLockCountdown } from '@/features/auth/useLockCountdown';
@@ -60,17 +61,15 @@ export default function LoginScreen() {
     try {
       let value = identifier.trim();
       if (mode === 'phone') {
-        const digits = value.replace(/\D/g, '');
-        if (digits.length < 7 || digits.length > 15) {
+        // Shared with register (features/auth/phone): the trunk 0 is dropped,
+        // the picked code added unless already typed, +E.164 kept — so
+        // "09876543210" signs in as +919876543210, not +9109876543210.
+        const phone = toLoginIdentifier(value, countryCode);
+        if (!phone) {
           setIdentifierError('Enter a valid mobile number');
           return;
         }
-        const cc = countryCode.slice(1);
-        // A bare national number is ≤10 digits — always prepend the country
-        // code. Only treat it as already-international when it's longer AND
-        // starts with the cc digits (a 10-digit number can itself start with
-        // '91', e.g. 9198765432, and must still get the +91 prefix).
-        value = digits.startsWith(cc) && digits.length > 10 ? `+${digits}` : `${countryCode}${digits}`;
+        value = phone;
       }
 
       const result = await api.login({

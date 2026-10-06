@@ -10,6 +10,7 @@ import { toApiError } from '@/api/errors';
 import { useToast } from '@/components/composite/Toast';
 import { DEFAULT_COUNTRY_CODE } from '@/constants/countries';
 import { useRegister } from '@/features/auth/mutations';
+import { normalizePhone } from '@/features/auth/phone';
 import { PhoneForm, phoneSchema } from '@/features/auth/schemas';
 import { AuthScreen, CountryCodePicker, FlowBar, LinkRow, SIGNUP_STEPS } from '@/premium/flows/auth';
 import { Banner } from '@/premium/kit';
@@ -26,7 +27,7 @@ export default function RegisterScreen() {
   const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
   const [accountExists, setAccountExists] = useState(false);
   const register = useRegister();
-  const { control, handleSubmit } = useForm<PhoneForm>({
+  const { control, handleSubmit, setError } = useForm<PhoneForm>({
     resolver: zodResolver(phoneSchema),
     defaultValues: { phone: '' },
   });
@@ -34,7 +35,17 @@ export default function RegisterScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     if (register.isPending) return;
-    const cleanPhone = values.phone.replace(/\D/g, '');
+    // Same reading as sign-in (features/auth/phone): the backend stores
+    // countryCode + phone as E.164, so a typed trunk 0 or country code must
+    // not end up in `phone` — "09876543210" registers as +91 9876543210.
+    const parsed = normalizePhone(values.phone, countryCode);
+    if (!parsed?.national) {
+      setError('phone', {
+        message: parsed ? 'This number has a different country code — choose it from the list.' : 'Enter a valid phone number',
+      });
+      return;
+    }
+    const cleanPhone = parsed.national;
     setAccountExists(false);
     try {
       const response = await register.mutateAsync({ phone: cleanPhone, countryCode });
