@@ -521,7 +521,8 @@ export default function DocumentScanScreen() {
       }
       onCameraLayout={(width, height) => setCameraLayout({ width, height })}
       frame={isFront ? FRONT_FRAME : SELFIE_FRAME}
-      status={isDocOnly ? 'Document photo' : isFront ? 'Step 1 of 2 · Document' : 'Step 2 of 2 · Selfie'}
+      // Family mode and document-only types have no selfie step (skipSelfie).
+      status={skipSelfie ? 'Document photo' : isFront ? 'Step 1 of 2 · Document' : 'Step 2 of 2 · Selfie'}
       topRight={
         isFront ? (
           <IconCircle
