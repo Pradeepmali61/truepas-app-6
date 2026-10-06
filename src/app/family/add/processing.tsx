@@ -84,11 +84,17 @@ export default function FamilyProcessingScreen() {
     personId ? router.dismissTo({ pathname: '/family/[id]', params: { id: personId } }) : router.dismissTo('/(tabs)');
 
   /** After an approval: drop this member's earlier failed/unverified tries of
-   *  the same type (the server already removes older verified ones, §6.5). */
-  const removeLeftovers = async (keepId: string, log: DocLog) => {
+   *  the same type (the server already removes older verified ones, §6.5),
+   *  and the phone scans of any copy the server dropped (`sameTypeBefore`). */
+  const removeLeftovers = async (keepId: string, log: DocLog, sameTypeBefore: string[]) => {
     if (!personId) return;
     try {
       const docs = await api.getDocuments(personId);
+      for (const id of sameTypeBefore) {
+        if ((docs ?? []).some((d) => d.id === id)) continue;
+        clearDocumentImages(id).catch(() => {});
+        log.info('cleared replaced copy', { document: id });
+      }
       for (const d of docs ?? []) {
         if (d.id === keepId || d.type !== docType || d.status === 'verified') continue;
         try {
@@ -141,7 +147,6 @@ export default function FamilyProcessingScreen() {
         try {
           await saveDocumentImages(doc.id, {
             front: scan.documentPreviewBase64 ?? scan.documentImageBase64,
-            selfie: scan.selfieBase64,
           });
         } catch (e) {
           // Display copy only — verification doesn't need it.
@@ -150,6 +155,11 @@ export default function FamilyProcessingScreen() {
       } else {
         log.info('reusing document', { document: doc.id });
       }
+      // This member's same-type documents before verifying: an approval makes
+      // the server drop the older verified copy, whose scan is on this phone.
+      const sameTypeBefore = (queryClient.getQueryData<IdentityDocument[]>(documentKeys.member(personId)) ?? [])
+        .filter((d) => d.type === docType && d.id !== doc.id)
+        .map((d) => d.id);
       const verdict = await verifyDocumentWithUploads({
         documentId: doc.id,
         frontBase64: scan.documentImageBase64,
@@ -162,7 +172,7 @@ export default function FamilyProcessingScreen() {
       if (isApproved(verdict)) {
         log.end('approved', { document: doc.id });
         setStatus('approved');
-        void removeLeftovers(doc.id, log);
+        void removeLeftovers(doc.id, log, sameTypeBefore);
         toast({ variant: 'success', title: `${DOC_LABELS[docType]} verified` });
         memberPage();
         return;
