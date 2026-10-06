@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { api } from '@/api';
 import { toApiError } from '@/api/errors';
 import { accountKeys } from '@/features/account/hooks';
+import { clearDocumentImages } from '@/services/documentImageStore';
 import type { AddDocumentRequest, DocumentType, SupportedDocumentType } from '@/types/domain';
 
 export const documentKeys = {
@@ -60,7 +61,10 @@ export function useRemoveDocument() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.removeDocument(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      // The scan kept on this phone (unencrypted, documentImageStore) goes
+      // with the document. Best effort — never fails the removal.
+      clearDocumentImages(id).catch(() => {});
       queryClient.invalidateQueries({ queryKey: documentKeys.all });
       // Identity summary derives document state — same invalidation as add.
       queryClient.invalidateQueries({ queryKey: ['identity'] });

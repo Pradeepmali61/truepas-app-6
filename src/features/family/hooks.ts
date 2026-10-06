@@ -8,11 +8,12 @@ import { toApiError } from '@/api/errors';
 import { accountKeys } from '@/features/account/hooks';
 import { documentKeys } from '@/features/documents/hooks';
 import { notificationKeys } from '@/features/notifications/hooks';
+import { clearDocumentImages } from '@/services/documentImageStore';
 import { flowGuards } from '@/services/flowGuards';
 import { deleteMemberProfileImage, getMemberProfileImage, saveMemberFacePhoto } from '@/services/profileImageStore';
 import { hasReauthToken } from '@/services/reauth';
 import { ageFromDob } from '@/utils/age';
-import type { AddFamilyMemberRequest, FamilyAgeBand, FamilyMember } from '@/types/domain';
+import type { AddFamilyMemberRequest, FamilyAgeBand, FamilyMember, IdentityDocument } from '@/types/domain';
 
 export { ADULT_AGE, ageFromDob } from '@/utils/age';
 
@@ -72,12 +73,31 @@ export function useUpdateFamilyPermissions(personId: string) {
   });
 }
 
+/** Ids of a member's documents, read BEFORE the member is removed (their
+ *  documents go with them): the cached list the member page loads
+ *  (useDocuments(personId)), else GET /documents?personId. Best effort —
+ *  [] when neither is available. */
+async function memberDocumentIds(queryClient: QueryClient, personId: string): Promise<string[]> {
+  try {
+    const docs =
+      queryClient.getQueryData<IdentityDocument[]>(documentKeys.member(personId)) ?? (await api.getDocuments(personId));
+    return Array.isArray(docs) ? docs.map((d) => d.id) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function useRemoveFamilyMember() {
   const queryClient = useQueryClient();
   return useMutation({
+    // Before the delete: their documents, whose scans may be on this phone.
+    onMutate: async (id: string) => ({ documentIds: await memberDocumentIds(queryClient, id) }),
     mutationFn: (id: string) => api.removeFamilyMember(id),
-    onSuccess: (_data, id) => {
+    onSuccess: (_data, id, before) => {
       deleteMemberProfileImage(id).catch(() => {});
+      // Their document scans kept on this phone (unencrypted,
+      // documentImageStore) go with them. Best effort — never fails the removal.
+      for (const docId of before.documentIds) clearDocumentImages(docId).catch(() => {});
       queryClient.removeQueries({ queryKey: memberPhotoKey(id) });
       queryClient.invalidateQueries({ queryKey: familyKeys.all });
     },
