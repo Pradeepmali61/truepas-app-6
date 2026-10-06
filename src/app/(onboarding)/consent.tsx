@@ -22,7 +22,7 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: LockKeyhole,
     title: 'Encrypted face template',
-    body: 'Your scan becomes an encrypted face template, kept in a dedicated face gallery and used only to verify you.',
+    body: 'Your scan becomes an encrypted face template, kept in dedicated secure storage and used only to verify you.',
   },
   {
     icon: Info,

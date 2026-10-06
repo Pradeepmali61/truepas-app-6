@@ -219,7 +219,7 @@ export default function FamilyMemberScreen() {
       toast({
         variant: 'error',
         title: "Couldn't remove member",
-        description: e instanceof Error ? e.message : undefined,
+        description: toApiError(e).message,
       });
     }
   };

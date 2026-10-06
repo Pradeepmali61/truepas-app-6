@@ -93,7 +93,7 @@ export function FaceScanView({
             <Row gap={8} style={{ justifyContent: "center", paddingBottom: 6 }}>
               <ShieldCheck size={15} color="rgba(255,255,255,0.5)" />
               <Txt v="small" color="rgba(255,255,255,0.5)">
-                Encrypted and stored securely in your face gallery
+                Encrypted and stored securely
               </Txt>
             </Row>
           )}

@@ -155,6 +155,9 @@ export function toApiError(error: unknown): ApiError {
   };
 }
 
+/** Errors already logged in dev (see baseApiError). */
+const loggedErrors = new WeakSet<object>();
+
 function baseApiError(error: unknown): ApiError {
   // Refresh token missing/rejected — session is over, not retryable.
   if (error instanceof SessionExpiredError) {
@@ -174,8 +177,10 @@ function baseApiError(error: unknown): ApiError {
       ?? (typeof data?.error === 'string' ? data.error : undefined);
 
     // Log the full request context so 404s / unexpected failures can be
-    // diagnosed from Metro logs (method + URL + status + server body).
-    if (__DEV__) {
+    // diagnosed from Metro logs (method + URL + status + server body) —
+    // once per error: screens map the same query error on every render.
+    if (__DEV__ && !loggedErrors.has(error)) {
+      loggedErrors.add(error);
       const url = `${error.config?.baseURL ?? ''}${error.config?.url ?? ''}`;
       console.warn(
         `[API] ${error.config?.method?.toUpperCase() ?? '?'} ${url} → ${status ?? 'no-response'}`,
@@ -298,12 +303,16 @@ function baseApiError(error: unknown): ApiError {
     }
 
     // ── 404 Not Found ──────────────────────────────────────────────
-    // Common cause: registrationId expired/invalid, or endpoint path wrong.
+    // During sign-up it usually means the registration session expired;
+    // anywhere else, the item was removed.
     if (status === 404) {
+      const authFlow = (error.config?.url ?? '').includes('/auth/');
       return {
         code: 'NOT_FOUND',
         message: serverMsg
-          ?? 'The requested resource was not found. This may happen if your registration session expired — please start again.',
+          ?? (authFlow
+            ? 'Your sign-up session expired. Please start again.'
+            : "We couldn't find that. It may have been removed."),
         status,
         retryable: false,
         traceId,
@@ -335,7 +344,7 @@ function baseApiError(error: unknown): ApiError {
     }
     return {
       code: 'REQUEST',
-      message: 'Request failed. Please check your input.',
+      message: status === 403 ? "You don't have access to this." : 'Request failed. Please check your input.',
       status,
       retryable: false,
       traceId,

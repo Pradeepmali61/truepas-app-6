@@ -28,9 +28,11 @@ export default function EditReservationScreen() {
 
   const b = booking.data;
   if (b == null || (family.isPending && family.data == null)) {
+    // 404 = the reservation was deleted; useBooking doesn't retry it.
+    const gone = !id || (booking.isError && toApiError(booking.error).status === 404);
     return (
       <Screen header={<TopBar title="Edit reservation" />}>
-        {!id ? (
+        {gone ? (
           <EmptyView icon={CalendarDays} title="Booking not found" body="This booking is no longer available." />
         ) : (
           <Async
