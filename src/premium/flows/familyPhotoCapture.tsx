@@ -31,6 +31,7 @@ import { toApiError } from '@/api/errors';
 import { useToast } from '@/components/composite/Toast';
 import { useEnrollFace, useUpdateFace } from '@/features/auth/mutations';
 import { type ReauthReason, useRefreshAfterFaceChange, useRememberMemberPhoto } from '@/features/family/hooks';
+import { uprightFrame } from '@/features/liveness/frame';
 import { hasReauthToken } from '@/services/reauth';
 
 import { FaceRing } from '../blocks';
@@ -132,7 +133,19 @@ export function FamilyPhotoCapture() {
       const photoFile = await photoOutput.capturePhotoToFile({ flashMode: 'off' }, {});
       if (!photoFile) throw new Error('Failed to capture photo');
       const { File } = await import('expo-file-system');
-      const filePath = photoFile.filePath.startsWith('file://') ? photoFile.filePath : `file://${photoFile.filePath}`;
+      const rawPath = photoFile.filePath.startsWith('file://') ? photoFile.filePath : `file://${photoFile.filePath}`;
+      // This photo becomes the child's enrolled face, which their documents
+      // are matched against. CameraX (Android) stores it on its side with an
+      // EXIF rotation tag, so send it upright, as liveness does (frame.ts).
+      const frame = await uprightFrame(rawPath);
+      console.log(
+        '[FaceCapture] photo',
+        frame.before,
+        frame.after ? `→ ${frame.after}` : '',
+        `(${frame.note})`,
+        `camera=${cameraPosition} mode=${isUpdate ? 'update' : 'enroll'} member`,
+      );
+      const filePath = frame.uri;
       const selfieBase64 = await new File(filePath).base64();
       if (isUpdate) {
         // PUT /face with the PIN token — not a second POST /face/enroll.
