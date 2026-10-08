@@ -35,7 +35,7 @@ import { Button, Chip, Field, Heading, Row, Screen, Steps, TopBar, Txt } from '@
 import { useAppSelector } from '@/store';
 import type { FamilyMember } from '@/types/domain';
 
-const RELATIONSHIPS = ['Child', 'Spouse', 'Parent', 'Guardian', 'Sibling', 'Other'];
+const RELATIONSHIPS = ['Child', 'Spouse', 'Parent', 'Guardian', 'Sibling', 'Twin', 'Other'];
 
 function isoYearsAgo(years: number): string {
   const d = new Date();
@@ -82,7 +82,7 @@ export default function AddFamilyScreen() {
       if (!Number.isFinite(age)) next.dob = 'Enter a valid date';
       else if (age < 0) next.dob = 'Date of birth must be in the past';
       else {
-        const fit = relationshipAgeError(relationship, age, ownAge);
+        const fit = relationshipAgeError(relationship, age, ownAge, dob, ownDob);
         if (fit) next.dob = fit;
       }
     }
