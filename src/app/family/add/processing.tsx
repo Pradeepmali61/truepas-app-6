@@ -7,7 +7,8 @@
  * (verifyDocumentWithUploads, backend §6.2/§6.4). Photo documents are
  * compared with the member's ENROLLED face — the add flow sets the face up
  * first (§1.2/§7.1). Results are approved or rejected only:
- *  - approved → back to the member page.
+ *  - approved → back to the member page — for a twin without a check-in PIN
+ *    yet, with the PIN step on top (the last setup step).
  *  - rejected → the server's reasonMessage plus one action picked by
  *    reasonCode: FACE_NOT_ENROLLED (e.g. an older member who skipped the
  *    face) → "Set up face" opens their face capture, then the document step
@@ -34,7 +35,7 @@ import {
   REJECTION_ACTION_LABEL,
   verifyDocumentWithUploads,
 } from '@/features/documents/verifyWithUploads';
-import { familyKeys, memberCaptureMode, useFamilyMember } from '@/features/family/hooks';
+import { familyKeys, isTwin, memberCaptureMode, useFamilyMember } from '@/features/family/hooks';
 import { FaceRing, Medallion } from '@/premium/blocks';
 import { StepCard, stagedSteps } from '@/premium/flows/family';
 import { Banner } from '@/premium/kit';
@@ -175,6 +176,9 @@ export default function FamilyProcessingScreen() {
         void removeLeftovers(doc.id, log, sameTypeBefore);
         toast({ variant: 'success', title: `${DOC_LABELS[docType]} verified` });
         memberPage();
+        if (isTwin(member) && !member?.checkInPinSet) {
+          router.push({ pathname: '/family/add/set-pin', params: { personId, name: first } });
+        }
         return;
       }
       log.end('rejected', { reason: verdict.reasonCode, match: verdict.matchScore });

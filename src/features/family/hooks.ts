@@ -73,6 +73,26 @@ export function useUpdateFamilyPermissions(personId: string) {
   });
 }
 
+/** Relationship tag for a twin — twin children, adult twins or your own twin. */
+export const TWIN_RELATIONSHIP = 'Twin';
+
+/** Twins look alike, so the kiosk asks them for their own check-in PIN. */
+export function isTwin(m: Pick<FamilyMember, 'relationship'> | null | undefined): boolean {
+  return m?.relationship?.trim().toLowerCase() === TWIN_RELATIONSHIP.toLowerCase();
+}
+
+/** PUT /family/{id}/check-in-pin. `replace` sends the holder's PIN token. */
+export function useSetFamilyMemberPin(personId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pin, replace }: { pin: string; replace?: boolean }) => api.setFamilyMemberPin(personId, pin, replace),
+    onSuccess: (member) => {
+      queryClient.setQueryData(familyKeys.detail(personId), member);
+      void queryClient.invalidateQueries({ queryKey: familyKeys.all });
+    },
+  });
+}
+
 /** Ids of a member's documents, read BEFORE the member is removed (their
  *  documents go with them): the cached list the member page loads
  *  (useDocuments(personId)), else GET /documents?personId. Best effort —
@@ -351,7 +371,9 @@ export interface MemberSetup {
   faceDone: boolean;
   /** A verified document for them (or a legacy doc-first member past it). */
   docDone: boolean;
-  /** Face + document: the only state that reads "Verified". */
+  /** A twin whose check-in PIN isn't set yet — the last setup step. */
+  pinNeeded: boolean;
+  /** Face + document (+ PIN for twins): the only state that reads "Verified". */
   setupDone: boolean;
   /** Face done, but their documents haven't loaded yet — no verdict. */
   checking: boolean;
@@ -363,12 +385,14 @@ export interface MemberSetup {
 /**
  * A family member's setup status: the one rule behind the family card, the
  * member page and any other member status badge. Setup is face first, then
- * a document checked against it (backend §1.2/§7.1):
+ * a document checked against it (backend §1.2/§7.1), then — twins only —
+ * their own check-in PIN:
  *
  *   no face                    → "Face pending"    amber
  *   face, documents loading    → "Checking"        neutral (never an early "Verified")
  *   face, no verified document → "Document needed" amber
- *   face + verified document   → "Verified"        green
+ *   twin without a PIN         → "PIN needed"      amber
+ *   all done                   → "Verified"        green
  *
  * "Document needed" / "Verified" are statusBadge's pending_document /
  * verified rows (premium/flows/family). Reads the member's documents from
@@ -393,7 +417,8 @@ export function useMemberSetup(member: FamilyMember | null | undefined): MemberS
     (!!docs.data?.some((d) => d.status === 'verified') ||
       member.verification === 'pending_liveness' ||
       member.verification === 'verified');
-  const setupDone = faceDone && docDone;
+  const pinNeeded = isTwin(member) && !member?.checkInPinSet;
+  const setupDone = faceDone && docDone && !pinNeeded;
   const checking = faceDone && !docDone && docs.isPending;
   const badge: Pick<MemberSetup, 'label' | 'tone'> = setupDone
     ? { label: 'Verified', tone: 'green' }
@@ -401,6 +426,8 @@ export function useMemberSetup(member: FamilyMember | null | undefined): MemberS
       ? { label: 'Face pending', tone: 'amber' }
       : checking
         ? { label: 'Checking', tone: 'neutral' }
-        : { label: 'Document needed', tone: 'amber' };
-  return { faceDone, docDone, setupDone, checking, ...badge };
+        : !docDone
+          ? { label: 'Document needed', tone: 'amber' }
+          : { label: 'PIN needed', tone: 'amber' };
+  return { faceDone, docDone, pinNeeded, setupDone, checking, ...badge };
 }

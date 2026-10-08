@@ -114,6 +114,9 @@ export interface FamilyMember {
   faceEnrolledAt?: string | null;
   /** Signed photo URL when the member has a profile image (persons API). */
   profileImageUrl?: string | null;
+  /** Twins only: their own check-in PIN is set (PUT /family/{id}/check-in-pin).
+   *  Proposed — absent until the backend ships it. */
+  checkInPinSet?: boolean;
 }
 
 export interface FamilyPermissions {

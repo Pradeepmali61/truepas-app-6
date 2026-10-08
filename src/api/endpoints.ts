@@ -478,6 +478,19 @@ export const realApi = {
     const { data } = await apiClient.patch<FamilyMember>(`/family/${personId}/permissions`, patch);
     return data;
   },
+  /** A twin's 4-digit check-in PIN — the kiosk asks for it to tell twins
+   *  apart. Proposed (BACKEND_TWIN_PIN_REQUEST.md). Replacing a set PIN
+   *  sends the account holder's reauthToken from verifyPin. Returns the
+   *  full member. */
+  setFamilyMemberPin: async (personId: string, pin: string, replace = false): Promise<FamilyMember> => {
+    const reauth = replace ? takeReauthToken() : null;
+    const { data } = await apiClient.put<FamilyMember>(
+      `/family/${personId}/check-in-pin`,
+      { pin },
+      { headers: reauth ? { 'X-Reauth-Token': reauth } : undefined },
+    );
+    return data;
+  },
 
   // ── Bookings / reservations ──────────────────────────────────────────
   createReservation: async (payload: CreateReservationRequest): Promise<Booking> => {

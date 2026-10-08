@@ -532,6 +532,7 @@ export const mockApi = {
       permissions: { independentCheckIn: false, notifyOnCheckIn: true },
       createdAt: new Date().toISOString(),
       faceEnrolledAt: null,
+      checkInPinSet: false,
     };
     family = [...family, member];
     pushNotification(`${member.name.split(' ')[0]} added to your family`, 'Set up their face to check in together.', 'family', {
@@ -551,6 +552,14 @@ export const mockApi = {
       ...member,
       permissions: { independentCheckIn: false, notifyOnCheckIn: true, ...member.permissions, ...patch },
     };
+    family = family.map((f) => (f.id === personId ? updated : f));
+    return respond(updated);
+  },
+  setFamilyMemberPin: (personId: string, pin: string, _replace = false): Promise<FamilyMember> => {
+    const member = family.find((f) => f.id === personId);
+    if (!member) return fail('Family member not found');
+    if (!/^\d{4}$/.test(pin)) return fail('PIN must be 4 digits');
+    const updated: FamilyMember = { ...member, checkInPinSet: true };
     family = family.map((f) => (f.id === personId ? updated : f));
     return respond(updated);
   },

@@ -5,8 +5,10 @@
  * remove flow. Setup is FACE FIRST (backend §1.2/§7.1: photo documents are
  * checked against the enrolled face): "Continue setup" opens the face
  * capture (then the document step) until the face is enrolled, then the
- * document step. Once set up, "Update face" re-runs the member's capture
- * (PIN first, PUT /face) and "Add a document" adds extra documents without
+ * document step. A twin then sets their own check-in PIN (the kiosk asks for
+ * it to tell twins apart). Once set up, "Update face" re-runs the member's
+ * capture (PIN first, PUT /face), "Change check-in PIN" replaces a twin's
+ * PIN (your PIN first) and "Add a document" adds extra documents without
  * repeating the face step. Premium skin over the original (0483c76) behaviour.
  */
 import { Image } from 'expo-image';
@@ -22,6 +24,7 @@ import {
   FileText,
   History,
   Image as ImageIcon,
+  KeyRound,
   ScanFace,
   Trash2,
   UserCheck,
@@ -37,6 +40,7 @@ import { useToast } from '@/components/composite/Toast';
 import { documentKeys, useDocuments } from '@/features/documents/hooks';
 import {
   familyKeys,
+  isTwin,
   memberCaptureMode,
   type MemberSetup,
   useFamilyMember,
@@ -54,9 +58,12 @@ import { C, F, SH } from '@/premium/theme';
 import { Badge, Button, Group, IconCircle, initials, ListRow, Screen, Toggle, TopBar, Txt, VerifiedTick } from '@/premium/ui';
 import type { FamilyMember } from '@/types/domain';
 
-/** Face → Document → Done: the document is checked against the face. */
-function stepsFor(m: FamilyMember, { faceDone, docDone, setupDone }: MemberSetup): ChecklistStep[] {
+/** Face → Document (→ PIN for twins) → Done: the document is checked against the face. */
+function stepsFor(m: FamilyMember, { faceDone, docDone, pinNeeded, setupDone }: MemberSetup): ChecklistStep[] {
   const isPhoto = memberCaptureMode(m) === 'photo';
+  const pinStep: ChecklistStep[] = isTwin(m)
+    ? [{ icon: KeyRound, label: 'Check-in PIN', sub: 'Tells twins apart at venues', done: !pinNeeded }]
+    : [];
   return [
     {
       icon: isPhoto ? Camera : ScanFace,
@@ -70,6 +77,7 @@ function stepsFor(m: FamilyMember, { faceDone, docDone, setupDone }: MemberSetup
       sub: 'Checked against their face',
       done: docDone,
     },
+    ...pinStep,
     {
       icon: BadgeCheck,
       label: 'Done',
@@ -144,7 +152,8 @@ export default function FamilyMemberScreen() {
   // Face / document / done and the status badge: the same rule as the family
   // card, over the documents memberDocs loads (one cache entry).
   const setup = useMemberSetup(m);
-  const { faceDone, docDone, setupDone } = setup;
+  const { faceDone, docDone, pinNeeded, setupDone } = setup;
+  const twin = isTwin(m);
 
   const openDocumentStep = () =>
     m &&
@@ -159,12 +168,22 @@ export default function FamilyMemberScreen() {
       pathname: isPhoto ? '/family/add/photo-capture' : '/family/add/face-capture',
       params: { personId: id, name: first, age: String(m.age), ...(docDone ? {} : { next: 'document' }) },
     } as never);
-  const continueSetup = !faceDone ? openFaceStep : openDocumentStep;
+  // Twins: their own check-in PIN — the last setup step, or a change later
+  // (your PIN first).
+  const openPinStep = (change?: boolean) =>
+    router.push({
+      pathname: '/family/add/set-pin',
+      params: { personId: id, name: first, ...(change ? { mode: 'change' } : {}) },
+    } as never);
+  const continueSetup = !faceDone ? openFaceStep : !docDone ? openDocumentStep : () => openPinStep();
   const continueLabel = !faceDone
     ? isPhoto
       ? `Take ${first}'s face photo`
       : `Scan ${first}'s face`
-    : `Add ${first}'s document`;
+    : !docDone
+      ? `Add ${first}'s document`
+      : `Set ${first}'s check-in PIN`;
+  const continueIcon = !faceDone ? (isPhoto ? Camera : ScanFace) : !docDone ? FileText : KeyRound;
 
   // Extra documents any time — processing sees personId and returns here
   // without re-running face capture.
@@ -359,7 +378,7 @@ export default function FamilyMemberScreen() {
           </View>
 
           {!setupDone && (
-            <Button label={continueLabel} icon={!faceDone ? (isPhoto ? Camera : ScanFace) : FileText} onPress={continueSetup} />
+            <Button label={continueLabel} icon={continueIcon} onPress={continueSetup} />
           )}
           {setupDone && <Button label="Go to Family" icon={Users} onPress={goToFamily} />}
 
@@ -433,6 +452,15 @@ export default function FamilyMemberScreen() {
                 sub={isPhoto ? `Replace ${first}'s enrolled photo` : `New liveness check for ${first}`}
                 onPress={updateFace}
               />
+              {twin && !pinNeeded ? (
+                <ListRow
+                  icon={KeyRound}
+                  tone="sky"
+                  title="Change check-in PIN"
+                  sub={`The PIN ${first} enters at venues`}
+                  onPress={() => openPinStep(true)}
+                />
+              ) : null}
             </Group>
           )}
 

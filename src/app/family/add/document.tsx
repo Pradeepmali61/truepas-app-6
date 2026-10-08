@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { allowedDocumentTypes, useSupportedDocumentTypes } from '@/features/documents/hooks';
-import { ageBandFromAge, memberCaptureMode, useFamilyMember } from '@/features/family/hooks';
+import { ageBandFromAge, isTwin, memberCaptureMode, useFamilyMember } from '@/features/family/hooks';
 import { DOC_ICON } from '@/premium/flows/family';
 import { Banner, SkeletonList } from '@/premium/kit';
 import { C } from '@/premium/theme';
@@ -95,8 +95,9 @@ export default function FamilyDocumentScreen() {
       contentStyle={{ paddingTop: 8 }}
       footer={<Button label="Scan document" icon={ScanLine} disabled={!selected} onPress={scan} />}>
       <View style={{ gap: 10 }}>
-        <Steps total={3} current={2} />
-        <Txt v="small">Step 3 of 3 · Document</Txt>
+        {/* Twins: a check-in PIN follows (step 4). */}
+        <Steps total={isTwin(member) ? 4 : 3} current={2} />
+        <Txt v="small">{`Step 3 of ${isTwin(member) ? 4 : 3} · Document`}</Txt>
       </View>
 
       <View style={{ gap: 14 }}>

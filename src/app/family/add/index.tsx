@@ -25,6 +25,7 @@ import {
   findMatchingMember,
   isDuplicateMemberError,
   memberCaptureMode,
+  TWIN_RELATIONSHIP,
   useAddFamilyMember,
 } from '@/features/family/hooks';
 import { MAX_MEMBER_AGE, relationshipAgeError } from '@/features/family/relationshipAge';
@@ -35,7 +36,7 @@ import { Button, Chip, Field, Heading, Row, Screen, Steps, TopBar, Txt } from '@
 import { useAppSelector } from '@/store';
 import type { FamilyMember } from '@/types/domain';
 
-const RELATIONSHIPS = ['Child', 'Spouse', 'Parent', 'Guardian', 'Sibling', 'Twin', 'Other'];
+const RELATIONSHIPS = ['Child', 'Spouse', 'Parent', 'Guardian', 'Sibling', TWIN_RELATIONSHIP, 'Other'];
 
 function isoYearsAgo(years: number): string {
   const d = new Date();
@@ -82,7 +83,7 @@ export default function AddFamilyScreen() {
       if (!Number.isFinite(age)) next.dob = 'Enter a valid date';
       else if (age < 0) next.dob = 'Date of birth must be in the past';
       else {
-        const fit = relationshipAgeError(relationship, age, ownAge, dob, ownDob);
+        const fit = relationshipAgeError(relationship, age, ownAge);
         if (fit) next.dob = fit;
       }
     }
@@ -149,7 +150,8 @@ export default function AddFamilyScreen() {
           onPress={() => void submit()}
         />
       }>
-      <Steps total={3} current={0} />
+      {/* Twins add a 4th step: their own check-in PIN. */}
+      <Steps total={relationship === TWIN_RELATIONSHIP ? 4 : 3} current={0} />
       <Heading title="Who's joining" accent="you?" sub="They'll get their own profile, linked to your family." />
 
       <View style={{ gap: 10 }}>
@@ -174,6 +176,12 @@ export default function AddFamilyScreen() {
           <Txt v="small" color={C.redInk}>
             {errors.relationship}
           </Txt>
+        ) : null}
+        {relationship === TWIN_RELATIONSHIP ? (
+          <Banner
+            tone="info"
+            body="Twins look alike, so they also get their own check-in PIN. You'll set it after their face and document."
+          />
         ) : null}
       </View>
 
