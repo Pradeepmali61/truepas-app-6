@@ -17,7 +17,7 @@ const SECTIONS: LegalSectionText[] = [
   },
   {
     h: 'Family Member Onboarding',
-    p: 'You may add family members under 18 as dependents. Adults 18 and older must create their own independent TruePas account. Guardianship consent is required for all minor enrollments.',
+    p: 'You may add family members to your account, including children under 18 and adults such as a spouse, parent or twin. Adults 18 and older can also create their own TruePas account if they prefer. Guardianship consent is required for all minor enrollments.',
   },
   {
     h: 'Prohibited Uses',

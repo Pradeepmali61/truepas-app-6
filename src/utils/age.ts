@@ -1,4 +1,4 @@
-/** TruePas accounts are for adults; under-18s are enrolled as family dependents (see Terms). */
+/** Under-18s can only join as family members; adults can be members or hold their own account (see Terms). */
 export const ADULT_AGE = 18;
 
 export function ageFromDob(dob: string): number {
