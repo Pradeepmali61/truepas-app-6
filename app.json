@@ -9,6 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.truepas.truepasapp",
+      "buildNumber": "3",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "Camera is required for document scanning and face recognition",
         "NSPhotoLibraryUsageDescription": "Photo library access is needed to select documents",

@@ -1,4 +1,7 @@
 {
+  "cli": {
+    "appVersionSource": "remote"
+  },
   "build": {
     "development": {
       "developmentClient": true,
@@ -19,9 +22,19 @@
       }
     },
     "production": {
+      "autoIncrement": true,
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.dev.truepas.com/cb",
         "EXPO_PUBLIC_USE_MOCK_API": "false",
         "EXPO_PUBLIC_FALLBACK_TO_MOCK": "false"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appName": "TruePas",
+        "appleTeamId": "8B3HVD29A5"
       }
     }
   }
