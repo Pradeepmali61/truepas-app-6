@@ -19,7 +19,8 @@ import { Button, Card, Txt } from "./ui";
 /**
  * Segmented code input — premium cells over ONE invisible TextInput so paste,
  * SMS autofill and screen readers work (same approach as composite/OtpInput).
- * `dots` masks digits (PIN).
+ * `dots` masks digits (PIN). Cells are circles (TruePas look — FacePe uses
+ * squares), up to 54px and shrinking to fit 6 on small phones.
  */
 export function CodeInput({
   length = 6,
@@ -66,8 +67,8 @@ export function CodeInput({
                 {
                   flex: 1,
                   maxWidth: 54,
-                  height: 62,
-                  borderRadius: R.md,
+                  aspectRatio: 1,
+                  borderRadius: R.full,
                   backgroundColor: disabled ? C.sunken : C.surface,
                   borderWidth: 1.5,
                   borderColor: error ? C.red : active ? C.sky : ch ? C.line : C.lineSoft,
