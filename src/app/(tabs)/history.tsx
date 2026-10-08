@@ -206,15 +206,15 @@ const GUIDES: Record<Cat, { title: string; first?: boolean; steps: GuideStep[] }
     first: true,
     steps: [
       { photo: 'hotelPool', title: 'Book a partner venue', sub: 'Hotels, parks, flights and events' },
-      { photo: 'resort', title: 'Look at the kiosk camera', sub: 'No ID card, no forms to fill' },
-      { photo: 'themepark', title: 'Walk in together', sub: 'Your family checks in with you' },
+      { photo: 'kiosk', title: 'Look at the kiosk camera', sub: 'No ID card, no forms to fill' },
+      { photo: 'familyWalk', title: 'Walk in together', sub: 'Your family checks in with you' },
     ],
   },
   hotels: {
     title: 'Checking in at a hotel',
     steps: [
       { photo: 'hotelNight', title: 'Skip the front desk', sub: 'Go straight to the lobby kiosk' },
-      { photo: 'hotelDusk', title: 'Look at the kiosk camera', sub: 'Your face confirms the booking' },
+      { photo: 'kiosk', title: 'Look at the kiosk camera', sub: 'Your face confirms the booking' },
       { photo: 'room', title: 'Head to your room', sub: 'No paperwork at arrival' },
     ],
   },
@@ -222,16 +222,16 @@ const GUIDES: Record<Cat, { title: string; first?: boolean; steps: GuideStep[] }
     title: 'Checking in to travel',
     steps: [
       { photo: 'flight', title: 'Arrive at the gate', sub: 'Your verified ID is already linked' },
-      { photo: 'cruise', title: 'Face match at boarding', sub: 'Your face confirms it’s you' },
-      { photo: 'mumbai', title: 'Board with your family', sub: 'Members check in alongside you' },
+      { photo: 'kiosk', title: 'Face match at boarding', sub: 'Your face confirms it’s you' },
+      { photo: 'familyPlane', title: 'Board with your family', sub: 'Members check in alongside you' },
     ],
   },
   events: {
     title: 'Checking in at events',
     steps: [
       { photo: 'themepark', title: 'Walk up to the entry', sub: 'No tickets to dig out' },
-      { photo: 'concert', title: 'Look at the entry camera', sub: 'Your face is matched to the booking' },
-      { photo: 'stadium', title: 'Bring the kids', sub: 'Family members enter with you' },
+      { photo: 'kiosk', title: 'Look at the entry camera', sub: 'Your face is matched to the booking' },
+      { photo: 'familyWalk', title: 'Bring the kids', sub: 'Family members enter with you' },
     ],
   },
 };
