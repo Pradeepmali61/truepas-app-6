@@ -1,14 +1,14 @@
 /**
  * TRUEPAS PREMIUM — design tokens.
  *
- * One calm, confident system: cool white canvas, navy-ink type, the Truepas
+ * One calm, confident system: cool white canvas, navy-ink type, the TruePas
  * sky blue reserved for brand moments (CTAs, verification glow, active
  * state), deep navy for the identity "hero" surfaces.
  */
 import type { TextStyle, ViewStyle } from "react-native";
 
 export const C = {
-  // brand (from the Truepas palette)
+  // brand (from the TruePas palette)
   sky: "#08B6FC",
   skyPressed: "#0692CA",
   skyLight: "#84DBFE",

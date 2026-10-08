@@ -5,7 +5,7 @@
  * "incomplete". Shows the verified / almost-there card with the next-step
  * hint, the Face / Document / Selfie checks, linked documents, recent
  * activity and the next-step CTA. The header pass shows the user's face in
- * the scan ring: at Truepas venues the face is the pass, so there is no QR.
+ * the scan ring: at TruePas venues the face is the pass, so there is no QR.
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -106,7 +106,7 @@ export default function IdentityScreen() {
             <View style={[{ backgroundColor: C.white, borderRadius: R.xxl, padding: 22, alignItems: 'center', gap: 6 }, SH.lg]}>
               <Row gap={8}>
                 {verified ? <BadgeCheck size={18} color={C.sky} /> : <Hourglass size={17} color={C.amberInk} />}
-                <Txt v="smallStrong">{verified ? 'Verified by Truepas' : 'Verification in progress'}</Txt>
+                <Txt v="smallStrong">{verified ? 'Verified by TruePas' : 'Verification in progress'}</Txt>
               </Row>
               <FaceRing size={176} mode={verified ? 'success' : 'idle'} uri={avatarUri} photo={!!avatarUri}>
                 {avatarUri ? undefined : (
@@ -119,7 +119,7 @@ export default function IdentityScreen() {
                 {user?.fullName ?? ''}
               </Txt>
               <Txt v="small" center>
-                At Truepas venues, your face is your pass.
+                At TruePas venues, your face is your pass.
               </Txt>
             </View>
           </View>

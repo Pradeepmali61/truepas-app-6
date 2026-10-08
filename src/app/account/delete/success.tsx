@@ -89,7 +89,7 @@ export default function DeleteSuccessScreen() {
         </Card>
       </View>
       <Txt v="small" color={C.ink4} center>
-        Changed your mind? You can create a new Truepas account anytime.
+        Changed your mind? You can create a new TruePas account anytime.
       </Txt>
     </ResultView>
   );

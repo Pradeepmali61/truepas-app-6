@@ -65,7 +65,7 @@ export function AppChrome() {
     return (
         <AppHeader
             left={<ScanFace size={iconSize.xl} color={theme.colors.actionPrimary} />}
-            title="Truepas"
+            title="TruePas"
             actions={
                 <>
                     <NotificationCenter

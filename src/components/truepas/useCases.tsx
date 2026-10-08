@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 /**
- * UseCaseCarousel — Home-tab hero that shows what Truepas is for: hotels,
+ * UseCaseCarousel — Home-tab hero that shows what TruePas is for: hotels,
  * theme parks, cruises, attractions and family check-ins. Each slide is a
  * real photo (CC0, see assets/images/use-cases/CREDITS.md) graded toward the
  * active palette with a violet scrim, so the set reads as one on-brand series.

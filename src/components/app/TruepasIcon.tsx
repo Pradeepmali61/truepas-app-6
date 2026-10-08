@@ -17,7 +17,7 @@ export function TruepasIcon({ size = iconSize.lg, color }: { size?: number; colo
       width={size * (546 / 404)}
       height={size}
       viewBox="0 0 546 404"
-      accessibilityLabel="Truepas"
+      accessibilityLabel="TruePas"
     >
       <Path
         fill={c}

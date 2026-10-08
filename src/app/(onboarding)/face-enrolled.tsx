@@ -55,7 +55,7 @@ function Enrolled() {
             title="You're all"
             accent="set."
             center
-            sub={`${firstName ? `Welcome to Truepas, ${firstName}. ` : ''}Check in at venues with a glance — no documents needed.`}
+            sub={`${firstName ? `Welcome to TruePas, ${firstName}. ` : ''}Check in at venues with a glance — no documents needed.`}
           />
           {user != null && (
             <IdentityCard
@@ -73,7 +73,7 @@ function Enrolled() {
           )}
         </ScrollView>
         <Footer>
-          <Button label="Continue to Truepas" iconRight={ArrowRight} onPress={handleContinue} />
+          <Button label="Continue to TruePas" iconRight={ArrowRight} onPress={handleContinue} />
         </Footer>
       </SafeAreaView>
     </View>

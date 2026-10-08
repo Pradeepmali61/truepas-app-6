@@ -1,9 +1,9 @@
 /** @jsxImportSource react */
 /**
- * About Truepas — brand header (real app version from expo-constants), what
- * Truepas offers, mission, contact and legal links. Contact options come
+ * About TruePas — brand header (real app version from expo-constants), what
+ * TruePas offers, mission, contact and legal links. Contact options come
  * from GET /support/channels (null channels hidden; the default email shows
- * only while that call loads or fails). "Rate Truepas" has no store listing
+ * only while that call loads or fails). "Rate TruePas" has no store listing
  * yet → Coming soon.
  */
 import { LinearGradient } from 'expo-linear-gradient';
@@ -94,14 +94,14 @@ export default function AboutScreen() {
 
         <View style={{ padding: 20, gap: 24 }}>
           <Txt v="body" center>
-            Truepas verifies your identity once, then lets you check in at partner venues with just your face. It
+            TruePas verifies your identity once, then lets you check in at partner venues with just your face. It
             keeps your documents and family in one place — no paper, no queues.
           </Txt>
 
           {/* ---------- features ---------- */}
           <View style={{ gap: 10 }}>
             <Txt v="micro" style={{ marginLeft: 4 }}>
-              What Truepas offers
+              What TruePas offers
             </Txt>
             <Card pad={0} style={{ paddingHorizontal: 18 }}>
               {FEATURES.map((f, i) => (
@@ -153,7 +153,7 @@ export default function AboutScreen() {
               <ListRow icon={MessageCircle} tone="sky" title="Chat with us" onPress={() => openSupportChat(support.chatUrl as string)} />
             )}
             {!!support.hours && <ListRow icon={Clock} tone="sky" title="Support hours" sub={support.hours} chevron={false} />}
-            <SoonRow icon={Star} tone="sky" title="Rate Truepas" />
+            <SoonRow icon={Star} tone="sky" title="Rate TruePas" />
           </Group>
 
           {/* ---------- legal ---------- */}
@@ -165,7 +165,7 @@ export default function AboutScreen() {
 
           <View style={{ alignItems: 'center', gap: 4 }}>
             <Txt v="small" color={C.ink4} center>
-              © {new Date().getFullYear()} Truepas. All rights reserved.
+              © {new Date().getFullYear()} TruePas. All rights reserved.
             </Txt>
             <Txt v="small" color={C.ink4} center>
               Made with care for your privacy.

@@ -224,7 +224,7 @@ export default function TwoStepScreen() {
         footer={<Button label="Next: enter the code" onPress={() => setStage('code')} />}>
         <Steps total={2} current={0} />
         <Heading
-          title="Add Truepas to your"
+          title="Add TruePas to your"
           accent="app."
           sub="Scan this QR code with your authenticator app. On this phone, open the app directly instead."
         />
@@ -290,7 +290,7 @@ export default function TwoStepScreen() {
         }>
         {isTotp && <Steps total={2} current={1} />}
         {isTotp ? (
-          <Heading title="Enter the" accent="code." sub="Type the 6-digit code your authenticator app shows for Truepas." />
+          <Heading title="Enter the" accent="code." sub="Type the 6-digit code your authenticator app shows for TruePas." />
         ) : (
           <Heading
             title="Check your"

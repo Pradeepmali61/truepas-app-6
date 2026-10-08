@@ -14,7 +14,7 @@
  *
  * No upcoming bookings (every new user): the hero and carousel keep their
  * photo cards but show the user's real setup progress (face / ID / family),
- * where Truepas works and how it works, instead of disappearing.
+ * where TruePas works and how it works, instead of disappearing.
  */
 import { useRouter } from 'expo-router';
 import {
@@ -215,11 +215,11 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* ---------- no trips: where Truepas works ---------- */}
+          {/* ---------- no trips: where TruePas works ---------- */}
           {noTrips && (
             <View style={{ gap: 16 }}>
               <View style={{ paddingHorizontal: 20 }}>
-                <SectionHead title="Use Truepas at" />
+                <SectionHead title="Use TruePas at" />
               </View>
               <ScrollView
                 horizontal

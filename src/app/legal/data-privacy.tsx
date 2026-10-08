@@ -98,7 +98,7 @@ export default function DataPrivacyScreen() {
           sub={consentAt ? `Granted · ${formatTimestamp(consentAt)}` : 'Not granted'}
           onPress={go('/security')}
         />
-        <SoonRow icon={BarChart3} tone="sky" title="Share usage analytics" sub="Help improve Truepas" />
+        <SoonRow icon={BarChart3} tone="sky" title="Share usage analytics" sub="Help improve TruePas" />
       </Group>
 
       <Group title="Policies">

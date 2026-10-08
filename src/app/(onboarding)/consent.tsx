@@ -27,7 +27,7 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: Info,
     title: 'Required to continue',
-    body: "Face check-in is how Truepas works, so this step can't be skipped. Withdraw later in Settings.",
+    body: "Face check-in is how TruePas works, so this step can't be skipped. Withdraw later in Settings.",
   },
 ];
 
@@ -77,7 +77,7 @@ export default function ConsentScreen() {
         title="Your face,"
         accent="your control."
         center
-        sub="Truepas verifies it's really you at venues — one glance, no phone, no wallet."
+        sub="TruePas verifies it's really you at venues — one glance, no phone, no wallet."
       />
       {error != null && <Banner tone="error" title="Couldn't save consent" body={error} />}
       <Card pad={4} style={{ paddingHorizontal: 18 }}>

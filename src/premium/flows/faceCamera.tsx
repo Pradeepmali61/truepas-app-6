@@ -89,7 +89,7 @@ export function CameraPermissionGate({ children, topTitle }: { children: ReactNo
         />
         {permDenied && (
           <Txt v="small" color="rgba(255,255,255,0.6)" center>
-            If the prompt doesn&apos;t appear, turn on camera access for Truepas in Settings, then come back.
+            If the prompt doesn&apos;t appear, turn on camera access for TruePas in Settings, then come back.
           </Txt>
         )}
       </View>

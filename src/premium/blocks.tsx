@@ -48,7 +48,7 @@ export function Wordmark({ light, size = 20 }: { light?: boolean; size?: number 
     <Row gap={8}>
       <Logo size={size * 0.9} color={light ? C.white : C.sky} />
       <Text style={{ fontFamily: F.extrabold, fontSize: size, letterSpacing: -0.6, color: light ? C.white : C.ink }}>
-        truepas
+        TruePas
       </Text>
     </Row>
   );

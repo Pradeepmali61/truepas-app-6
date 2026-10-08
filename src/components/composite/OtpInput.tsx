@@ -3,7 +3,7 @@ import { Text, TextInput, View, type StyleProp, type ViewStyle } from "react-nat
 import { makeStyles } from "../../theme";
 
 export interface OtpInputProps {
-  /** Number of cells (default 6 — matches Truepas OTP flows) */
+  /** Number of cells (default 6 — matches TruePas OTP flows) */
   length?: number;
   value?: string;
   onChange?: (value: string) => void;

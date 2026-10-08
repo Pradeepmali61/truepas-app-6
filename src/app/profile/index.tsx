@@ -137,7 +137,7 @@ function ProfileContent({ user }: { user: User }) {
       <Group title="Support">
         <ListRow icon={CircleHelp} title="Help centre" onPress={go('/help')} />
         <ListRow icon={FileText} title="Privacy & data" onPress={go('/legal/data-privacy')} />
-        <ListRow icon={Info} title="About Truepas" value={`v${APP_VERSION}`} onPress={go('/about')} />
+        <ListRow icon={Info} title="About TruePas" value={`v${APP_VERSION}`} onPress={go('/about')} />
       </Group>
       <Group>
         <ListRow
@@ -155,7 +155,7 @@ function ProfileContent({ user }: { user: User }) {
         visible={confirmSignOut}
         icon={LogOut}
         danger
-        title="Sign out of Truepas?"
+        title="Sign out of TruePas?"
         confirmLabel="Sign out"
         onCancel={() => setConfirmSignOut(false)}
         onConfirm={() => {

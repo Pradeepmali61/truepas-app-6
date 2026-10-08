@@ -40,7 +40,7 @@ const FAQS: { value: string; topic: Topic; title: string; content: string }[] = 
     topic: 'privacy',
     title: 'Is my biometric data shared?',
     content:
-      "Your face template is used only to verify your identity. You can turn off face check-in at any time in Settings → Check-in. Withdrawing biometric consent (Security → Face & consent) deletes your enrolled face, and you'll need to set it up again to keep using Truepas.",
+      "Your face template is used only to verify your identity. You can turn off face check-in at any time in Settings → Check-in. Withdrawing biometric consent (Security → Face & consent) deletes your enrolled face, and you'll need to set it up again to keep using TruePas.",
   },
   {
     value: 'doc-fail',

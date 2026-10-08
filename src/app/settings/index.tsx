@@ -9,7 +9,7 @@
  *   kiosk — it refuses face check-in for the account holder.
  * - Notifications: which alerts you get (/notification/preferences).
  * - Phone permissions: camera and photos open the system settings page for
- *   Truepas. The app never asks for notification permission (no push yet),
+ *   TruePas. The app never asks for notification permission (no push yet),
  *   so phone notifications sit in "On the way" with Language.
  * Then account, support and legal links.
  */
@@ -106,7 +106,7 @@ export default function SettingsScreen() {
           icon={Fingerprint}
           tone="sky"
           title="App lock"
-          sub={native ? 'Unlock Truepas with your fingerprint or face' : 'Available in the mobile app'}
+          sub={native ? 'Unlock TruePas with your fingerprint or face' : 'Available in the mobile app'}
           trailing={<Toggle on={appLock} disabled={!native || busy} onChange={(v) => void toggleAppLock(v)} label="App lock" />}
           chevron={false}
         />
@@ -176,13 +176,13 @@ export default function SettingsScreen() {
 
       <Group title="Support & legal">
         <ListRow icon={CircleHelp} title="Help & FAQ" sub="Answers and contact support" onPress={go('/help')} />
-        <ListRow icon={Info} title="About Truepas" onPress={go('/about')} />
+        <ListRow icon={Info} title="About TruePas" onPress={go('/about')} />
         <ListRow icon={Lock} title="Privacy Policy" onPress={go('/legal/privacy-policy')} />
         <ListRow icon={FileText} title="Terms of Service" onPress={go('/legal/terms')} />
       </Group>
 
       <Txt v="small" color={C.ink4} center>
-        Truepas {APP_VERSION}
+        TruePas {APP_VERSION}
       </Txt>
 
       <ConfirmSheet

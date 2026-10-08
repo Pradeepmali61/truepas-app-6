@@ -5,7 +5,7 @@ import { secureStorage } from '@/services/secureStorage';
 import type { AuthResponse } from '@/types/domain';
 
 /**
- * Shared Axios infrastructure for the Truepas REST API.
+ * Shared Axios infrastructure for the TruePas REST API.
  *
  * The app calls only the BFF (customer-app-bff) at /cb/*.
  * Internal services (liveness, face, etc.) are reached through

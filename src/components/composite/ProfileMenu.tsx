@@ -56,14 +56,14 @@ export function ProfileMenu({ onNavigate }: { onNavigate?: () => void }) {
 
       <View style={styles.footerMeta}>
         <Typography variant="caption" color="muted">
-          Truepas {Constants.expoConfig?.version ?? "1.0.0"}
+          TruePas {Constants.expoConfig?.version ?? "1.0.0"}
         </Typography>
       </View>
 
       <ActionSheet
         visible={confirmSignOut}
         onClose={() => setConfirmSignOut(false)}
-        title="Sign out of Truepas?"
+        title="Sign out of TruePas?"
         items={[
           {
             key: "signout",

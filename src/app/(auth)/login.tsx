@@ -120,7 +120,7 @@ export default function LoginScreen() {
   return (
     <AuthScreen
       header={<TopBar />}
-      footer={<LinkRow prompt="New to Truepas?" label="Create an account" onPress={() => router.push('/(auth)/register')} />}>
+      footer={<LinkRow prompt="New to TruePas?" label="Create an account" onPress={() => router.push('/(auth)/register')} />}>
       <Heading title="Welcome" accent="back." sub="Sign in to your digital identity with your email or mobile number." />
 
       {reason === 'session-expired' ? (

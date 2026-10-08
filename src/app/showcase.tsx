@@ -10,7 +10,7 @@ import { Group, go, ListRow, Screen, TopBar, Txt } from '@/premium/ui';
 export const SCREENS: { group: string; items: [string, string][] }[] = [
   { group: 'Onboarding', items: [['Welcome', '/(auth)/welcome'], ['Sign in', '/(auth)/login'], ['Create account', '/(auth)/register'], ['Verify mobile', '/(auth)/verify-phone'], ['Verify email', '/(auth)/verify-email'], ['About you', '/(auth)/account-details'], ['Forgot password', '/(auth)/forgot-password']] },
   { group: 'Face setup', items: [['Biometric consent', '/(onboarding)/consent'], ['Face scan', '/(onboarding)/face-scan'], ["You're verified", '/(onboarding)/face-enrolled']] },
-  { group: 'Main', items: [['Home', '/(tabs)'], ['Check-ins', '/(tabs)/history'], ['Wallet', '/(tabs)/documents'], ['Hotel stay & digital key', '/booking/t1'], ['Theme park visit', '/booking/t2'], ['My Truepas pass', '/identity'], ['Notifications', '/notification']] },
+  { group: 'Main', items: [['Home', '/(tabs)'], ['Check-ins', '/(tabs)/history'], ['Wallet', '/(tabs)/documents'], ['Hotel stay & digital key', '/booking/t1'], ['Theme park visit', '/booking/t2'], ['My TruePas pass', '/identity'], ['Notifications', '/notification']] },
   { group: 'Face check-in', items: [['Live face check-in', '/face-update/camera'], ['Checked in', '/face-update/success'], ["Couldn't match", '/face-update/error'], ['Confirm with PIN', '/face-update/pin']] },
   { group: 'Documents', items: [['Choose document', '/document/select-type'], ['Scan document', '/document/scan'], ['Verifying', '/document/processing'], ['Verified', '/document/verified'], ['Details mismatch', '/document/mismatch'], ['Document detail', '/document/d1']] },
   { group: 'Family', items: [['Family', '/family'], ['Member', '/family/m1'], ['Member · face pending', '/family/m3'], ['Member activity', '/family/m1/activity'], ['Add member', '/family/add'], ['Member document', '/family/add/document'], ['Capture document', '/family/add/photo-capture'], ['Member face scan', '/family/add/face-capture'], ['Verifying member', '/family/add/processing'], ['Turns 18', '/notification/age-18']] },
@@ -27,7 +27,7 @@ export default function Showcase() {
     <Screen header={<TopBar title="Screen index" />} contentStyle={{ paddingTop: 4 }}>
       <View style={{ gap: 8 }}>
         <Wordmark size={24} />
-        <Text style={{ fontFamily: F.extrabold, fontSize: 30, letterSpacing: -1, color: C.ink }}>Truepas 3.0 — UI preview</Text>
+        <Text style={{ fontFamily: F.extrabold, fontSize: 30, letterSpacing: -1, color: C.ink }}>TruePas 3.0 — UI preview</Text>
         <Txt v="body">{total} screens · tap any to open</Txt>
       </View>
       {SCREENS.map((g) => (

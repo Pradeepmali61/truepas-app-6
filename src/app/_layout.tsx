@@ -154,7 +154,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         over="Unexpected error"
         title="Something went"
         accent="wrong."
-        sub="Truepas ran into a problem showing this screen. Try again, or head back to the home screen."
+        sub="TruePas ran into a problem showing this screen. Try again, or head back to the home screen."
         primary={<Button label="Try again" icon={RotateCcw} onPress={() => void retry()} />}
         secondary={<Button label="Back to home" tone="ghost" onPress={goHome} />}
       />

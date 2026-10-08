@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 /**
  * Age-18 transition notification — a dependent has turned 18 and is eligible
- * for their own Truepas account. Static content (no age-18 endpoint yet).
+ * for their own TruePas account. Static content (no age-18 endpoint yet).
  */
 import { useRouter } from 'expo-router';
 import { Cake, Clock, Plus } from 'lucide-react-native';
@@ -20,7 +20,7 @@ export default function Age18NotificationScreen() {
       over="A milestone"
       title="Max Kim is now"
       accent="18."
-      sub="They're eligible for a new Truepas account and can now manage their own identity verification."
+      sub="They're eligible for a new TruePas account and can now manage their own identity verification."
       primary={
         <Button
           label="Create their account"

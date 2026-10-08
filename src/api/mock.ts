@@ -358,7 +358,7 @@ export const mockApi = {
       ...(method === 'totp'
         ? {
             secret: 'JBSWY3DPEHPK3PXP',
-            otpauthUri: `otpauth://totp/Truepas%3A${encodeURIComponent(user.email)}?secret=JBSWY3DPEHPK3PXP&issuer=Truepas&digits=6&period=30`,
+            otpauthUri: `otpauth://totp/TruePas%3A${encodeURIComponent(user.email)}?secret=JBSWY3DPEHPK3PXP&issuer=TruePas&digits=6&period=30`,
           }
         : {}),
     });

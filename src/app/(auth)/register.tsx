@@ -100,7 +100,7 @@ export default function RegisterScreen() {
       <Steps total={SIGNUP_STEPS} current={0} />
       <Heading
         title="Create your"
-        accent="Truepas."
+        accent="TruePas."
         sub="One verified identity for every check-in. We'll text a verification code to your phone."
       />
 

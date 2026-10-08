@@ -71,7 +71,7 @@ let prompting = false;
 async function unlock() {
   if (prompting) return;
   prompting = true;
-  const ok = await confirmWithBiometrics('Unlock Truepas');
+  const ok = await confirmWithBiometrics('Unlock TruePas');
   prompting = false;
   if (ok) setSessionUnlocked(true);
 }
@@ -128,7 +128,7 @@ export function AppLock() {
         <Lock size={32} color={C.white} />
       </View>
       <Txt v="h2" color={C.white} center>
-        Truepas is locked
+        TruePas is locked
       </Txt>
       <Txt v="body" color="rgba(255,255,255,0.7)" center style={{ marginTop: 8, marginBottom: 28 }}>
         Use your fingerprint or face to continue.

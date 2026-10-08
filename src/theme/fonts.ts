@@ -55,7 +55,7 @@ export const TRUEPAS_FONT_SOURCES: Record<string, FontSource> = {
   SpaceGrotesk_700Bold,
 };
 
-/** Loads the Truepas font set. Returns [loaded, error] like expo-font. */
+/** Loads the TruePas font set. Returns [loaded, error] like expo-font. */
 export function useTruepasFonts(): [boolean, Error | null] {
   return useFonts(TRUEPAS_FONT_SOURCES);
 }

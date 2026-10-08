@@ -492,7 +492,7 @@ export function BookingHero({ b, onPress }: { b: Booking; onPress?: () => void }
 
 /* ───────────────────────── no-trips home ─────────────────────────
  * A new user has no bookings, so Today / Coming up would be empty. The same
- * photo cards carry the user's real setup progress and what Truepas is for,
+ * photo cards carry the user's real setup progress and what TruePas is for,
  * never a made-up booking. Real bookings replace them as soon as they exist. */
 
 export type ReadyStep = { label: string; done: boolean };
@@ -572,7 +572,7 @@ function GlassStep({ label, done }: ReadyStep) {
 
 export type Venue = { photo: ImgKey; icon: LucideIcon; kind: string; title: string; body: string };
 
-/** Where Truepas works — informational cards for the no-trips Home. */
+/** Where TruePas works — informational cards for the no-trips Home. */
 export const VENUES: Venue[] = [
   { photo: 'hotelPool', icon: BedDouble, kind: 'Hotels', title: 'Skip the front desk', body: 'Check in with a look, not a form.' },
   { photo: 'themepark', icon: FerrisWheel, kind: 'Theme parks', title: 'Walk through the gate', body: 'No tickets to dig out at the turnstile.' },
@@ -594,7 +594,7 @@ export function VenueCard({ v, width = 248 }: { v: Venue; width?: number }) {
         </View>
         <View style={{ padding: 14, gap: 3 }}>
           <Txt v="small" color={C.skyPressed} style={{ fontFamily: F.semibold }}>
-            With Truepas
+            With TruePas
           </Txt>
           <Txt v="h3" lines={1}>
             {v.title}
@@ -1064,7 +1064,7 @@ export function buildActivity({
     id: 'joined',
     icon: Sparkles,
     tone: 'sky',
-    title: 'Joined Truepas',
+    title: 'Joined TruePas',
     sub: firstName ? `Welcome aboard, ${firstName}` : 'Welcome aboard',
     badge: { label: 'Welcome', tone: 'sky' },
     href: '/identity',
@@ -1364,7 +1364,7 @@ export function ProfileDrawer({ visible, onClose }: { visible: boolean; onClose:
 
             <Group title="Support">
               <ListRow icon={CircleHelp} tone="sky" title="Help & FAQ" sub="Answers and contact support" onPress={() => go('/help')} />
-              <ListRow icon={Info} tone="sky" title="About Truepas" onPress={() => go('/about')} />
+              <ListRow icon={Info} tone="sky" title="About TruePas" onPress={() => go('/about')} />
             </Group>
 
             <Group title="Legal & privacy">
@@ -1379,7 +1379,7 @@ export function ProfileDrawer({ visible, onClose }: { visible: boolean; onClose:
             </Group>
 
             <Txt v="small" color={C.ink4} center>
-              Truepas {Constants.expoConfig?.version ?? '1.0.0'}
+              TruePas {Constants.expoConfig?.version ?? '1.0.0'}
             </Txt>
           </ScrollView>
         </Animated.View>
@@ -1389,7 +1389,7 @@ export function ProfileDrawer({ visible, onClose }: { visible: boolean; onClose:
         visible={confirmSignOut}
         icon={LogOut}
         danger
-        title="Sign out of Truepas?"
+        title="Sign out of TruePas?"
         confirmLabel="Sign out"
         loading={signingOut}
         onConfirm={() => void logout()}

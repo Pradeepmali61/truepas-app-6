@@ -81,7 +81,7 @@ export default function DataExportScreen() {
       if (Platform.OS === 'android') {
         if (await saveExportToFolder(uri)) toast.show('success', 'Saved');
       } else {
-        await Share.share({ url: uri, title: 'Truepas data' });
+        await Share.share({ url: uri, title: 'TruePas data' });
       }
     } catch {
       toast.show('error', "Couldn't open the share sheet.");
@@ -173,7 +173,7 @@ export default function DataExportScreen() {
           sub={until ? `A ZIP of your data. Available until ${until}.` : 'A ZIP of your data, available for 7 days.'}
         />
         {fileUri ? (
-          <Banner tone="success" title="Downloaded" body="The file is saved in Truepas on this phone." />
+          <Banner tone="success" title="Downloaded" body="The file is saved in TruePas on this phone." />
         ) : (
           <Txt v="small" color={C.ink3}>
             It contains personal details. Keep it somewhere safe.
@@ -199,7 +199,7 @@ export default function DataExportScreen() {
         />
       }>
       <Tile icon={Download} tone="sky" size={60} />
-      <Heading title="Download" accent="your data." sub="Get a copy of what Truepas holds about you as a ZIP file." />
+      <Heading title="Download" accent="your data." sub="Get a copy of what TruePas holds about you as a ZIP file." />
 
       {failed ? (
         <Banner tone="error" title="We couldn't prepare your file" body={data?.error || 'Something went wrong on our side. Please try again.'} />

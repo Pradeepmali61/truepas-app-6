@@ -5,11 +5,11 @@ import { LegalPage, type LegalSectionText } from '@/premium/flows/account';
 const SECTIONS: LegalSectionText[] = [
   {
     h: 'Acceptance of Terms',
-    p: 'By using Truepas, you agree to these Terms of Service and our Privacy Policy. Truepas is an identity verification platform that uses biometric data and government documents to verify your identity.',
+    p: 'By using TruePas, you agree to these Terms of Service and our Privacy Policy. TruePas is an identity verification platform that uses biometric data and government documents to verify your identity.',
   },
   {
     h: 'Mandatory Face Enrollment',
-    p: 'Face enrollment is a mandatory step in the registration process. You cannot proceed to document verification or use Truepas services without completing face enrollment.',
+    p: 'Face enrollment is a mandatory step in the registration process. You cannot proceed to document verification or use TruePas services without completing face enrollment.',
   },
   {
     h: 'Account Responsibilities',
@@ -17,11 +17,11 @@ const SECTIONS: LegalSectionText[] = [
   },
   {
     h: 'Family Member Onboarding',
-    p: 'You may add family members under 18 as dependents. Adults 18 and older must create their own independent Truepas account. Guardianship consent is required for all minor enrollments.',
+    p: 'You may add family members under 18 as dependents. Adults 18 and older must create their own independent TruePas account. Guardianship consent is required for all minor enrollments.',
   },
   {
     h: 'Prohibited Uses',
-    p: 'You may not use Truepas for fraudulent identity verification, unauthorized access, or sharing of biometric data with unauthorized parties.',
+    p: 'You may not use TruePas for fraudulent identity verification, unauthorized access, or sharing of biometric data with unauthorized parties.',
   },
 ];
 

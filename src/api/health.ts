@@ -4,7 +4,7 @@ import { BFF_URL } from '@/api/client';
 import type { HealthStatus } from '@/types/domain';
 
 /**
- * Lightweight health check for the Truepas dev backend.
+ * Lightweight health check for the TruePas dev backend.
  * Uses a bare `axios.get` (no auth header, short timeout) so it works
  * even before the user is logged in.
  *

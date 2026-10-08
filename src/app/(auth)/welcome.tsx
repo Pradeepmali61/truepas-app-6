@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 /**
  * Welcome — root of the signed-out stack (no back button): cinematic brand
- * hero + the two entry points. "Create your Truepas" → register, "I already
+ * hero + the two entry points. "Create your TruePas" → register, "I already
  * have an account" → login (same targets as the original WelcomeScreen).
  * Long-press on the wordmark opens the premium /showcase — dev builds only.
  */
@@ -36,7 +36,7 @@ export default function WelcomeScreen() {
             onLongPress={__DEV__ ? () => router.push('/showcase' as never) : undefined}
             delayLongPress={600}
             accessibilityRole="header"
-            accessibilityLabel="Truepas">
+            accessibilityLabel="TruePas">
             <Wordmark light size={22} />
           </Pressable>
         </Row>
@@ -77,7 +77,7 @@ export default function WelcomeScreen() {
           <Text style={styles.sub}>
             Contactless check-in for you and your family — hotels, flights, theme parks and cruises, verified in a glance.
           </Text>
-          <Button label="Create your Truepas" iconRight={ArrowRight} onPress={() => router.push('/(auth)/register')} />
+          <Button label="Create your TruePas" iconRight={ArrowRight} onPress={() => router.push('/(auth)/register')} />
           <Button label="I already have an account" tone="glass" onPress={() => router.push('/(auth)/login')} />
         </View>
       </SafeAreaView>

@@ -30,7 +30,7 @@ import {
 } from '@/components/ui';
 import { useEnrollFace, useUpdateFace } from '@/features/auth/mutations';
 import { type ReauthReason, useRefreshAfterFaceChange, useRememberMemberPhoto } from '@/features/family/hooks';
-// Premium (Truepas 3.0) stage UIs — same props as LivenessStages; camera stays mounted per AGENTS.md.
+// Premium (TruePas 3.0) stage UIs — same props as LivenessStages; camera stays mounted per AGENTS.md.
 import {
   PremiumChallengeStage as ChallengeStage,
   PremiumFinishingStage as FinishingStage,

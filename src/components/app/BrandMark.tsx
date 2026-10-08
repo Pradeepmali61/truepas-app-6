@@ -12,7 +12,7 @@ export function BrandMark({ compact }: { compact?: boolean }) {
       <View style={styles.brandIcon}>
         <TruepasIcon size={compact ? iconSize.md : iconSize.lg} color={theme.colors.onActionPrimary} />
       </View>
-      <Typography variant={compact ? "h4" : "h3"}>Truepas</Typography>
+      <Typography variant={compact ? "h4" : "h3"}>TruePas</Typography>
     </View>
   );
 }
