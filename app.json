@@ -9,7 +9,6 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.truepas.truepasapp",
-      "buildNumber": "3",
       "config": {
         "usesNonExemptEncryption": false
       },
