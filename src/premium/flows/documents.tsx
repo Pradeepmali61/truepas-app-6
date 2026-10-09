@@ -242,12 +242,15 @@ export function FlipCard({
   scanUri,
   height = 196,
   style,
+  noScan,
 }: {
   flipped: boolean;
   front: ReactNode | ((height: number) => ReactNode);
   scanUri?: string | null;
   height?: number;
   style?: StyleProp<ViewStyle>;
+  /** Back face when there's no scan (default: "Original scan not available"). */
+  noScan?: ReactNode;
 }) {
   const [width, setWidth] = useState(0);
   const [ratio, setRatio] = useState<number | null>(null);
@@ -305,12 +308,14 @@ export function FlipCard({
             }}
           />
         ) : (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <FileText size={34} color={C.ink4} strokeWidth={1.6} />
-            <Txt v="small" color={C.ink3}>
-              Original scan not available
-            </Txt>
-          </View>
+          noScan ?? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <FileText size={34} color={C.ink4} strokeWidth={1.6} />
+              <Txt v="small" color={C.ink3}>
+                Original scan not available
+              </Txt>
+            </View>
+          )
         )}
       </Animated.View>
     </View>

@@ -64,6 +64,7 @@ export default function DocumentDetailScreen() {
   const removeDocument = useRemoveDocument();
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [scanImageUri, setScanImageUri] = useState<string | null>(null);
+  const [localChecked, setLocalChecked] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
   // Sensitive extracted fields stay hidden until asked for.
   const [showExtracted, setShowExtracted] = useState(false);
@@ -80,6 +81,9 @@ export default function DocumentDetailScreen() {
       })
       .catch(() => {
         if (alive) setScanImageUri(null);
+      })
+      .finally(() => {
+        if (alive) setLocalChecked(true);
       });
     return () => {
       alive = false;
@@ -204,6 +208,23 @@ export default function DocumentDetailScreen() {
                     flipped={isFlipped}
                     height={CARD_H}
                     scanUri={scanImageUri ?? serverFront}
+                    noScan={
+                      !localChecked || imagesQuery.isPending ? (
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                          <ActivityIndicator color={C.ink3} accessibilityLabel="Loading scan" />
+                        </View>
+                      ) : (
+                        // Neither on this phone (lost on reinstall) nor on the
+                        // server (older documents were never stored there). The Rescan
+                        // button sits right below the card.
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 20 }}>
+                          <FileText size={30} color={C.ink4} strokeWidth={1.6} />
+                          <Txt v="small" color={C.ink3} center>
+                            This scan isn&apos;t saved on this phone. Tap Rescan to scan the document again.
+                          </Txt>
+                        </View>
+                      )
+                    }
                     front={(h) => (
                       <DocumentCard
                         type={d.type}
