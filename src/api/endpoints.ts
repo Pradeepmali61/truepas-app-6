@@ -31,6 +31,7 @@ import type {
     TwoFactorStatusResponse,
     UpdateReservationRequest,
     UserStats,
+    PinScope,
     VerifyPinResponse,
     AddDocumentRequest,
     AddFamilyMemberRequest,
@@ -437,8 +438,10 @@ export const realApi = {
   },
   /** Also returns a single-use reauthToken (5 min) that PUT /face needs;
    *  it is kept in services/reauth and consumed by updateFace. */
-  verifyPin: async (pin: string): Promise<VerifyPinResponse> => {
-    const { data } = await apiClient.post<VerifyPinResponse>('/auth/verify-pin', { pin });
+  verifyPin: async (pin: string, scope?: PinScope): Promise<VerifyPinResponse> => {
+    // The token only works for its scope: face_update (the default) for
+    // PUT /face, check_in_pin_update for changing a twin's check-in PIN.
+    const { data } = await apiClient.post<VerifyPinResponse>('/auth/verify-pin', scope ? { pin, scope } : { pin });
     if (data?.reauthToken) setReauthToken(data.reauthToken, data.expiresIn ?? 300);
     return data;
   },

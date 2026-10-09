@@ -21,7 +21,8 @@ import type {
     ResetPinRequest,
     UpdateProfileRequest,
     VerificationSessionRequest,
-    VerifyOtpRequest
+    VerifyOtpRequest,
+    PinScope,
 } from '@/types/domain';
 
 /** Auth + account write operations (login, register, password/PIN, profile). */
@@ -81,9 +82,9 @@ export function useChangePin() {
   });
 }
 
-export function useVerifyPin() {
+export function useVerifyPin(scope?: PinScope) {
   return useMutation({
-    mutationFn: (pin: string) => api.verifyPin(pin),
+    mutationFn: (pin: string) => api.verifyPin(pin, scope),
   });
 }
 

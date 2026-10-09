@@ -261,6 +261,9 @@ export interface FaceLoginStartResponse {
 export type FaceLoginResult = AuthResponse | { resetToken: string; expiresIn: number };
 
 /** POST /auth/verify-pin — reauthToken (5 min, single use) authorizes PUT /face. */
+/** What a verify-pin reauth token is for (POST /auth/verify-pin `scope`). */
+export type PinScope = 'face_update' | 'check_in_pin_update';
+
 export interface VerifyPinResponse {
   ok: boolean;
   reauthToken?: string;

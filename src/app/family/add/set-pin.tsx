@@ -38,7 +38,8 @@ export default function TwinPinScreen() {
   const first = (name ?? '').trim().split(' ')[0] || 'them';
   const isChange = mode === 'change';
 
-  const gate = usePinVerification();
+  // The holder's token must be scoped to the PIN change; a face_update one gets 403.
+  const gate = usePinVerification('check_in_pin_update');
   // Change mode starts on the holder's PIN; setup goes straight to the new one.
   const [holderOk, setHolderOk] = useState(!isChange);
   const [pin, setPin] = useState('');

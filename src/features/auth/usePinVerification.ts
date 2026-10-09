@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { toApiError } from '@/api/errors';
 import { useVerifyPin } from '@/features/auth/mutations';
+import type { PinScope } from '@/types/domain';
 
 export const PIN_LENGTH = 4;
 const MAX_ATTEMPTS = 5;
@@ -45,7 +46,7 @@ function lockSecondsFrom(err: unknown): number | null {
  *   server lock is actually longer, the next attempt re-locks from its
  *   response.
  */
-export function usePinVerification() {
+export function usePinVerification(scope?: PinScope) {
   const [pin, setPinState] = useState('');
   const [attemptsLeft, setAttemptsLeft] = useState(MAX_ATTEMPTS);
   // null = no error — screens test `error != null`, so '' must never be the
@@ -53,7 +54,7 @@ export function usePinVerification() {
   const [error, setError] = useState<string | null>(null);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [lockSecondsLeft, setLockSecondsLeft] = useState(0);
-  const verifyPin = useVerifyPin();
+  const verifyPin = useVerifyPin(scope);
 
   const locked = lockSecondsLeft > 0;
 
