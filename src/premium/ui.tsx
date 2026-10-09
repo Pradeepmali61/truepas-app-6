@@ -26,7 +26,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import { SafeAreaView, type Edge } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets, type Edge } from "react-native-safe-area-context";
 
 import { IMG, type ImgKey } from "./images";
 import { C, DESCENDERS, F, G, R, S, SH, T } from "./theme";
@@ -143,6 +143,10 @@ export function Screen({
   refreshing?: boolean;
   onRefresh?: () => void;
 }) {
+  // With no footer (which pads itself) and no bottom edge, the end of the
+  // page scrolled under the Android navigation bar: keep it clear.
+  const insets = useSafeAreaInsets();
+  const bottomInset = footer == null && !edges.includes("bottom") ? insets.bottom : 0;
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
       <KeyboardAvoidingView style={{ flex: 1 }} enabled={!!keyboard} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -155,7 +159,7 @@ export function Screen({
             refreshControl={
               onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={C.sky} /> : undefined
             }
-            contentContainerStyle={[{ paddingHorizontal: S.gutter, paddingBottom: 40, gap: S.section }, contentStyle]}
+            contentContainerStyle={[{ paddingHorizontal: S.gutter, paddingBottom: 40 + bottomInset, gap: S.section }, contentStyle]}
             showsVerticalScrollIndicator={false}
           >
             {children}
