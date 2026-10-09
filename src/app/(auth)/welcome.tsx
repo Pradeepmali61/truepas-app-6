@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Wordmark } from '@/premium/blocks';
 import { IMG } from '@/premium/images';
 import { useLightStatusBar } from '@/premium/statusBar';
-import { C, F, R, SH } from '@/premium/theme';
+import { C, DESCENDERS, F, R, SH } from '@/premium/theme';
 import { Button, Row, Serif, VerifiedTick } from '@/premium/ui';
 
 export default function WelcomeScreen() {
@@ -108,6 +108,6 @@ const styles = StyleSheet.create({
   glassTitle: { fontFamily: F.bold, fontSize: 14.5, color: C.white },
   glassSub: { fontFamily: F.medium, fontSize: 12.5, color: 'rgba(255,255,255,0.72)' },
   over: { fontFamily: F.bold, fontSize: 11.5, letterSpacing: 1.6, color: C.skyLight },
-  headline: { fontFamily: F.extrabold, fontSize: 46, lineHeight: 52, letterSpacing: -1.6, color: C.white },
+  headline: { fontFamily: F.extrabold, fontSize: 46, lineHeight: 52, letterSpacing: -1.6, color: C.white, ...DESCENDERS },
   sub: { fontFamily: F.regular, fontSize: 16, lineHeight: 24, color: 'rgba(255,255,255,0.74)', maxWidth: 330, marginBottom: 24 },
 });

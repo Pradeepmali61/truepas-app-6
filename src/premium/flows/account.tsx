@@ -23,7 +23,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useSupportChannels } from '@/features/account/hooks';
 
 import { ComingSoon } from '../kit';
-import { C, F, R, SH } from '../theme';
+import { C, DESCENDERS, F, R, SH } from '../theme';
 import { Button, Group, ListRow, Row, TopBar, Txt } from '../ui';
 
 /* ───────────────────────── constants ───────────────────────── */
@@ -435,7 +435,7 @@ export function LegalPage({
             <Txt v="micro" color={C.sky}>
               {updated}
             </Txt>
-            <Text style={{ fontFamily: F.extrabold, fontSize: 34, letterSpacing: -1.1, lineHeight: 40, color: C.ink }}>
+            <Text style={{ fontFamily: F.extrabold, fontSize: 34, letterSpacing: -1.1, lineHeight: 40, color: C.ink, ...DESCENDERS }}>
               {title} <Text style={{ fontFamily: F.serifItalic, fontSize: 40, color: C.sky }}>{accent}</Text>
             </Text>
             {intro != null && (

@@ -54,7 +54,7 @@ import { Glow, Guilloche } from '@/premium/blocks';
 import { ChecklistCard, DocRow, formatDate, type ChecklistStep } from '@/premium/flows/family';
 import { Async, Bone, ComingSoon, ConfirmSheet, EmptyView, SkeletonList } from '@/premium/kit';
 import { useHeroStatusBar } from '@/premium/statusBar';
-import { C, F, SH } from '@/premium/theme';
+import { C, DESCENDERS, F, SH } from '@/premium/theme';
 import { Badge, Button, Group, IconCircle, initials, ListRow, Screen, Toggle, TopBar, Txt, VerifiedTick } from '@/premium/ui';
 import type { FamilyMember } from '@/types/domain';
 
@@ -364,7 +364,7 @@ export default function FamilyMemberScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Text
                 numberOfLines={2}
-                style={{ flexShrink: 1, fontFamily: F.extrabold, fontSize: 34, lineHeight: 40, letterSpacing: -1.1, color: C.ink }}>
+                style={{ flexShrink: 1, fontFamily: F.extrabold, fontSize: 34, lineHeight: 40, letterSpacing: -1.1, color: C.ink, ...DESCENDERS }}>
                 {m.name}
               </Text>
               {setupDone && <VerifiedTick size={24} />}

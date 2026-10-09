@@ -29,7 +29,7 @@ import {
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
 import { IMG, type ImgKey } from "./images";
-import { C, F, G, R, S, SH, T } from "./theme";
+import { C, DESCENDERS, F, G, R, S, SH, T } from "./theme";
 
 /* ───────────────────────── text ───────────────────────── */
 
@@ -316,7 +316,7 @@ export function Heading({
           {over}
         </Txt>
       )}
-      <Text style={[T[size] as TextStyle, light && { color: C.white }, center && { textAlign: "center" }]}>
+      <Text style={[T[size] as TextStyle, DESCENDERS, light && { color: C.white }, center && { textAlign: "center" }]}>
         {title}
         {accent != null && (
           <>

@@ -78,6 +78,13 @@ export const T = {
   mono: { fontFamily: F.mono, fontSize: 13, letterSpacing: 0.6, color: C.ink2 },
 } satisfies Record<string, TextStyle>;
 
+/** For big type set tighter than its font (a 40px serif accent on a 40
+ *  line, display 38/42…). Android trims that line-height from the last
+ *  line's descent, cutting off the tails of g/y/p (web draws them outside
+ *  the box, so web previews don't show it). The padding gives those tails
+ *  room inside the view; the matching negative margin keeps the layout. */
+export const DESCENDERS = { paddingBottom: 6, marginBottom: -6 } satisfies TextStyle;
+
 export const R = { xs: 8, sm: 12, md: 16, lg: 20, xl: 26, xxl: 32, full: 999 } as const;
 
 export const S = { gutter: 20, section: 28, gap: 12 } as const;

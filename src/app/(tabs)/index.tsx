@@ -60,7 +60,7 @@ import {
   VenueCard,
 } from '@/premium/flows/home';
 import { Async, Bone, SkeletonList } from '@/premium/kit';
-import { C, F, R } from '@/premium/theme';
+import { C, DESCENDERS, F, R } from '@/premium/theme';
 import { Avatar, Button, Card, Divider, IconCircle, Press, Row, SectionHead, Serif, Tile, Txt } from '@/premium/ui';
 import { useAppSelector } from '@/store';
 import type { VerificationStatus } from '@/types/domain';
@@ -167,7 +167,7 @@ export default function HomeScreen() {
               <IconCircle icon={Bell} label="Notifications" dot={hasUnread} onPress={open('/notification')} />
             </Row>
 
-            <Text style={{ fontFamily: F.extrabold, fontSize: 34, lineHeight: 40, letterSpacing: -1.1, color: C.ink }}>
+            <Text style={{ fontFamily: F.extrabold, fontSize: 34, lineHeight: 40, letterSpacing: -1.1, color: C.ink, ...DESCENDERS }}>
               Where are you{'\n'}going <Serif size={40} color={C.sky}>today?</Serif>
             </Text>
 

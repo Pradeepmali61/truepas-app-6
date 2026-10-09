@@ -141,9 +141,11 @@ export function IdentityCard({
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={{ fontFamily: F.semibold, fontSize: 11, letterSpacing: 1.4, color: C.skyLight }}>DIGITAL IDENTITY</Text>
             <Text style={{ fontFamily: F.bold, fontSize: 22, letterSpacing: -0.5, color: C.white }} numberOfLines={1}>{name}</Text>
+            {/* A long email doesn't fit one line on a narrow (360dp) phone:
+                wrap to a second line before the @ instead of cutting it off. */}
             {!!idLine && (
-              <Text style={{ fontFamily: F.mono, fontSize: 13, letterSpacing: idLine.includes("@") ? 0.2 : 2, color: "rgba(255,255,255,0.66)" }} numberOfLines={1}>
-                {idLine}
+              <Text style={{ fontFamily: F.mono, fontSize: 13, letterSpacing: idLine.includes("@") ? 0.2 : 2, color: "rgba(255,255,255,0.66)" }} numberOfLines={2}>
+                {idLine.replace("@", "​@")}
               </Text>
             )}
           </View>

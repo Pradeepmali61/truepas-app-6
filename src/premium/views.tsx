@@ -12,7 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { FaceRing, Keypad, Medallion } from "./blocks";
 import type { ImgKey } from "./images";
-import { C, F, G, R } from "./theme";
+import { C, DESCENDERS, F, G, R } from "./theme";
 import { Card, CodeCells, Footer, Heading, Row, Steps, TopBar, Txt } from "./ui";
 
 /* ───────────────────────── dark biometric scanner ───────────────────────── */
@@ -306,7 +306,7 @@ export function LegalView({
             <Txt v="micro" color={C.sky}>
               Updated {updated}
             </Txt>
-            <Text style={{ fontFamily: F.extrabold, fontSize: 34, letterSpacing: -1.1, lineHeight: 40, color: C.ink }}>
+            <Text style={{ fontFamily: F.extrabold, fontSize: 34, letterSpacing: -1.1, lineHeight: 40, color: C.ink, ...DESCENDERS }}>
               {title} <Text style={{ fontFamily: F.serifItalic, fontSize: 40, color: C.sky }}>{accent}</Text>
             </Text>
             <Txt v="body" style={{ fontSize: 16, lineHeight: 25 }}>
