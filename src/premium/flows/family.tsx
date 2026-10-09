@@ -113,11 +113,11 @@ export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPr
   const photoUri = useMemberPhoto(member.id, member.profileImageUrl);
   return (
     <Press onPress={onPress} label={member.name} role="button" style={[{ flex: 1, borderRadius: R.xl }, SH.md]}>
-      <View style={{ minHeight: 228, borderRadius: R.xl, overflow: 'hidden', padding: 14, justifyContent: 'space-between', gap: 10 }}>
+      <View style={{ minHeight: 228, borderRadius: R.xl, overflow: 'hidden', padding: 14, justifyContent: 'flex-end', gap: 10 }}>
         {photoUri ? (
           <>
             <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
-            <LinearGradient colors={['rgba(1,27,39,0)', 'rgba(1,27,39,0.85)']} locations={[0.45, 1]} style={StyleSheet.absoluteFill} />
+            <LinearGradient colors={['rgba(1,27,39,0)', 'rgba(1,27,39,0.88)']} locations={[0.35, 1]} style={StyleSheet.absoluteFill} />
           </>
         ) : (
           <>
@@ -125,11 +125,8 @@ export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPr
             <Guilloche size={300} opacity={0.08} style={{ right: -150, top: -110 }} />
           </>
         )}
-        <View style={{ alignSelf: 'flex-end' }}>
-          <Badge label={setup.label} tone={setup.tone} dot />
-        </View>
         {!photoUri && (
-          <View style={{ alignItems: 'center' }}>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <View
               style={{
                 width: 76,
@@ -152,6 +149,11 @@ export function MemberPortrait({ member, onPress }: { member: FamilyMember; onPr
           <Text numberOfLines={1} style={{ fontFamily: F.medium, fontSize: 12.5, color: 'rgba(255,255,255,0.72)' }}>
             {member.relationship} · {member.age} yrs
           </Text>
+          {/* Status under the name, not on top: on a photo card the top is
+              where the face is. */}
+          <View style={{ alignSelf: 'flex-start', marginTop: 8 }}>
+            <Badge label={setup.label} tone={setup.tone} dot />
+          </View>
         </View>
       </View>
     </Press>
