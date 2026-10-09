@@ -46,6 +46,42 @@ export function useProfilePicture() {
   };
 }
 
+/** Once per app run. */
+let selfPhotoSyncTried = false;
+
+/**
+ * A photo that earlier showed "on this phone only" (the upload failed: the
+ * backend rejected the user id until Oct 2026) goes up to the profile the
+ * next time the account has none on the server. Same idea as
+ * useSyncMemberPhotos for family cards.
+ */
+export function useSyncProfilePicture() {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: PROFILE_PICTURE_KEY,
+    queryFn: () => api.getProfilePicture(),
+    staleTime: 1000 * 60 * 50,
+    retry: false,
+  });
+  const serverHasNone = query.isSuccess && !query.data?.url;
+  useEffect(() => {
+    if (!serverHasNone || selfPhotoSyncTried) return;
+    selfPhotoSyncTried = true;
+    void (async () => {
+      const local = await getLocalProfileImage().catch(() => null);
+      if (!local) return;
+      try {
+        await api.uploadProfilePicture(local);
+        console.log('[ProfilePicture] uploaded phone-only photo');
+        await queryClient.invalidateQueries({ queryKey: PROFILE_PICTURE_KEY });
+        void queryClient.invalidateQueries({ queryKey: accountKeys.me });
+      } catch (e) {
+        console.warn('[ProfilePicture] upload of phone-only photo failed, retrying next launch', e instanceof Error ? e.message : e);
+      }
+    })();
+  }, [serverHasNone, queryClient]);
+}
+
 /**
  * Upload through the persons API (upload URL → PUT the image → save the
  * object key; api.uploadProfilePicture). A copy is always kept on this device

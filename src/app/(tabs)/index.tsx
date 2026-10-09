@@ -40,7 +40,7 @@ import { useFamily, useSyncMemberPhotos } from '@/features/family/hooks';
 import { useBookings } from '@/features/history/hooks';
 import { useIdentitySummary } from '@/features/identity/hooks';
 import { useNotificationCount } from '@/features/notifications/hooks';
-import { useProfilePicture } from '@/features/profile/hooks';
+import { useProfilePicture, useSyncProfilePicture } from '@/features/profile/hooks';
 import { IdentityCard, TAB_BAR_SPACE } from '@/premium/blocks';
 import {
   ActivityRow,
@@ -74,6 +74,7 @@ export default function HomeScreen() {
   const family = useFamily();
   // Photos that only made it to this phone get uploaded in the background.
   useSyncMemberPhotos(family.data);
+  useSyncProfilePicture();
   const bookings = useBookings();
   const unread = useNotificationCount();
   const summary = useIdentitySummary();

@@ -682,7 +682,9 @@ export const realApi = {
     );
     await putFile(target.uploadUrl, imageUri, 'image/jpeg');
     await apiClient.put(`/persons/${id}/profile-image`, { objectKey: target.objectKey });
-    const pic = await realApi.getProfilePicture(personId);
+    // The photo is saved on the server now. Failing to read its new link
+    // back must not report the upload as failed ("shows on this phone only").
+    const pic = await realApi.getProfilePicture(personId).catch(() => null);
     return pic ?? { url: imageUri, expires_in: 0, updated_at: new Date().toISOString() };
   },
   /** The signed photo URL from GET /user/me (or the family member). */
